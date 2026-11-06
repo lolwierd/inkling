@@ -31,12 +31,6 @@
   },
   {
    "kind": {
-    "check": true
-   },
-   "text": "Check the start time (8:30)"
-  },
-  {
-   "kind": {
     "callout": "note"
    },
    "text": "The course has one hill, at 6 km."
@@ -51,7 +45,7 @@
    "kind": {
     "callout": "tip"
    },
-   "text": "Start 10 seconds a km slower than goal pace for the first kilometre."
+   "text": "Start 10 seconds a km slower than goal pace."
   },
   {
    "kind": {
@@ -69,25 +63,13 @@
    "kind": {
     "code": "rust"
    },
-   "text": "    let per_km = pace.min as u64 * 60 + pace.sec as u64;"
-  },
-  {
-   "kind": {
-    "code": "rust"
-   },
-   "text": "    Duration::from_secs(10 * per_km)"
+   "text": "    Duration::from_secs(10 * pace.secs_per_km() as u64)"
   },
   {
    "kind": {
     "code": "rust"
    },
    "text": "}"
-  },
-  {
-   "kind": {
-    "code": "rust"
-   },
-   "text": ""
   },
   {
    "kind": {
@@ -99,25 +81,7 @@
    "kind": {
     "code": "rust"
    },
-   "text": "fn sub_50_needs_4_55() {"
-  },
-  {
-   "kind": {
-    "code": "rust"
-   },
-   "text": "    assert_eq!(finish(Pace::new(5, 30)), mins(55));"
-  },
-  {
-   "kind": {
-    "code": "rust"
-   },
-   "text": "    assert_eq!(finish(Pace::new(4, 55)), secs(2950)); // 49:10, with 50 s to spare"
-  },
-  {
-   "kind": {
-    "code": "rust"
-   },
-   "text": "}"
+   "text": "fn sub_50() { assert_eq!(finish(Pace::new(4, 55)), secs(2950)); } // 49:10, 50 s to spare"
   },
   {
    "kind": "quote",
@@ -156,8 +120,8 @@
  "threads": [
   {
    "id": "c1",
-   "start": 692,
-   "end": 708,
+   "start": 534,
+   "end": 550,
    "quote": "Pace::new(4, 55)",
    "kind": "question",
    "status": "open",

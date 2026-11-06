@@ -8,6 +8,7 @@ from an empty notebook, which opens the first-run note ("Start here").
 - `beta`: one note titled "Beta" with an unread paragraph, for `switch: Beta`.
 - `corrupt`: a note whose thread has an impossible byte range (start after end).
 - `mind`: no notes, one custom mind "Skeptic" in minds.json.
+- `sewn-blocks`: "Race week", one of each of your blocks: inline code, a checklist, a callout of each kind, a rust code block with a question on `Pace::new(4, 55)` (thread `c1`) and a long line that wraps, and a quote; for looking at them (`scripts/dev shot --fixture sewn-blocks`); fixed id `00000000-0000-4000-8000-0000000000b1`.
 - `running-plan`: the design board's "Sub-50 10k by March" note with two open threads (a correction on "5:30", a question on the long run); fixed id `00000000-0000-4000-8000-0000000000a1`.
 - `stale`: a note whose thread quote ("alpha beta") appears twice, stored nearest the second.
 

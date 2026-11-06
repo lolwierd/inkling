@@ -47,8 +47,9 @@ pub const CALLOUT_MARGIN: f32 = 4.;
 pub const CALLOUT_PAD_TOP: f32 = 10.;
 pub const CALLOUT_LABEL: f32 = 19.;
 pub const CALLOUT_PAD_BOTTOM: f32 = 12.;
-/// Space after a patch before the next line.
-pub const CALLOUT_AFTER: f32 = 12.;
+/// Space after a patch before the next line: with the margin above the next patch,
+/// two callouts in a row sit 10 px apart.
+pub const CALLOUT_AFTER: f32 = 6.;
 /// A callout's words are inset this much from the patch's sides.
 pub const CALLOUT_INSET: f32 = 16.;
 

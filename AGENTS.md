@@ -94,7 +94,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/margin.rs` | where tags go without overlapping (`place`), and the `Measured` wrapper that reports their heights | |
 | `src/working.rs`, `src/note_page/show_working.rs` | Show its working: a correction's check (a sum from your numbers, or your words) off the wire, in words for Copy, exports and the minds, and drawn under its correction in the tag with Disagree | `from_wire`, `parts`, `place`; `working_block`, `dispute_message` |
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
-| `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open (the bundle's `.icns` is the light Initial; per-appearance bundle icons need Xcode's `actool`) | `follow` |
+| `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open, when the bundle has only the `.icns` (no Xcode at bundle time, or the bare binary); it stands down when `Info.plist` names a compiled icon (`CFBundleIconName`) | `follow` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
 | `src/between.rs` | threads between notes, the data side: an in-memory index of every searchable paragraph and the gate that picks at most three passages for `relate`; a thread's far end (`Note.elsewhere`) shown in the other note as a visiting end (`add_visitors`) and sent home on save (`save_visitors_home`); the wire shapes. The page's half is `src/note_page/between.rs` (`look_elsewhere`, after a read). Design: `design/features/threads-between-notes.md` | `Index::passages`, `searchable`, `send_home` |
 | `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
@@ -112,6 +112,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `working.test.ts` (a correction's check), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
+| `assets/` | the app icon: `Inkling.icon` (the Initial in layers, for light, dark, clear and tinted; `icon-layers.py` remakes the layers from `design/logo/03-initial/`, `scripts/bundle.sh` compiles it when Xcode is installed), `Inkling.icns` (the fallback), the Dock's images, fonts | `Inkling.icon/icon.json` |
 | `design/` | the brand, the three directions, the video; `design/directions/DESIGN.md` is the design record; `design/capabilities.md` lists every user-facing capability, which the welcome tour and the film must cover | |
 
 ## How a question gets to the margin

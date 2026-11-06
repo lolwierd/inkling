@@ -1,12 +1,25 @@
 // Gets Inkling's real words for the walkthrough film from the brain sidecar.
 // It runs brain/src/main.ts over its JSON-lines protocol (as brain/test/live.ts does),
 // with a clean environment and a throwaway data folder, so it never touches the
-// owner's notebook. Each stage appends to data/real.json; later stages read what the
-// model said earlier, the way the app would.
+// owner's notebook. Each call is saved to data/real.json (and data/real.js for the
+// page) as it returns; later stages read what the model said earlier, the way the app
+// would. Every call is sent with the context the app would send at that moment of the
+// film: the note as it stands, its brief, the thread summaries, the mind.
 //
 //   bun run design/video/tools/real.ts <scratch-dir> <stage> [<stage>...]
-//   stages: reads, draw, settle, reply, room, chat, name (the first cut)
-//           v2_first v2_ask v2_room v2_tutor v2_call v2_chat v2_reply v2_mind v2_sketch v2_learn (the re-cut)
+//   stages, in the film's order:
+//     first   the guide's first sentence (a probe, as `first_run` sends it)
+//     reads   ¶1, ¶2 (the correction), ¶3, the fix (settle), ¶4, as the writer types;
+//             only ¶2 may speak (the film shows the others read without a word)
+//     probe   Find a loose thread on ¶3
+//     ask     Ask Inkling on ¶1
+//     room    Ask the room on ¶2: Inkling, Staff engineer, Socratic tutor
+//     call    ¶5 calls the Skeptic by name
+//     sketch  Sketch it on ¶1 (sketch, then draw)
+//     chat    the brief, then the chat
+//     reply   the writer answers the probe's question (FILM_REPLY, or REPLY below)
+//     mind    a mind of your own reads ¶6
+//     learn   Inkling learns about you from a reply
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -23,27 +36,48 @@ mkdirSync(join(scratch, "brain-data"), { recursive: true });
 const MODEL = "claude-opus-5-5"; // the app's default
 const LIGHT = { model: MODEL, effort: "low" }; // the app's read-along
 const HEAVY = { model: MODEL, effort: "medium" }; // everything the writer asks for
-const NOW = "Friday 6 November 2026";
+const NOW = "Saturday 7 November 2026";
 
 // ----- the note, as the film shows it ------------------------------------------
-export const TITLE = "Sub-50 10k by March";
-const P1 = "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes.";
-const P2 = "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I’ll come in just under 50.";
-const P3 = "Sunday is the long run. I’ll add a kilometre every week until I reach 16.";
-const P4 = "Strength work twice a week, mostly calves and hips, because that’s where it fell apart last year.";
-const BRIEF = "I want a strong last 3 km this time, not just a fast first 7.";
-const PROBE_TARGET = "I’ll add a kilometre every week until I reach 16.";
-const ROOM_TARGET = "four days a week";
-const ROOM_QUESTION = "Is four days a week enough? One sentence.";
+export const TITLE = "Cold starts under two seconds";
+const P1 = "Today it takes 9 s at p99 to go from the API call to a shell in a new VM.";
+const P2 = "So we skip boot and restore each VM from a memory snapshot. A 4 GiB snapshot copies over a 25 Gbit/s link in about 160 ms, so the copy is not on the critical path.";
+// The writer's fix, after the correction: the number, and what follows from it.
+const EDIT1 = { from: "160 ms", to: "1.4 s" };
+const EDIT2 = { from: "so the copy is not on the critical path", to: "so we load pages on demand" };
+const P2_FIXED = P2.replace(EDIT1.from, EDIT1.to).replace(EDIT2.from, EDIT2.to);
+const P3 = "We try it on the staging hosts first, from Monday.";
+// snapshot_restore is inline code in the film (⌘E); the brain gets the words as they are
+const P4 = "The flag is snapshot_restore, and it stays off by default.";
+const P5 = "Skeptic, will restores hold up when a hundred VMs start at once?";
+const P6 = "We rebuild the snapshot once a week, along with the image.";
+const P7 = "Measure p99 from the API call, not from boot.";
+const BRIEF = "For a design review on Thursday. What matters is p99, not the median.";
+const FIRST = "We can get VM cold starts under two seconds by March.";
+const PROBE_TARGET = "We try it on the staging hosts first";
+const ASK_TARGET = "9 s at p99";
+const ASK_QUESTION = "Does a snapshot skip all of it?";
+const ROOM_TARGET = "restore each VM from a memory snapshot";
+const ROOM_QUESTION = "What worries you most here? One sentence.";
+const SKETCH_TARGET = "from the API call to a shell";
 const CHAT_MESSAGE = "What’s the weakest part of this plan now?";
+const LEARN_MESSAGE = "I look after the VM fleet, so p99 matters more to me than the average.";
 
 const INKLING = { name: "Inkling", description: "Thinks alongside you, and speaks up when something is worth a second look.", howItThinks: "", voice: "plain", frequency: "when_it_matters" };
-// The app's own templates (src/store.rs), seated in the room.
+// The app's own templates (src/store.rs `mind_templates`), seated in the room or called by name.
+const STAFF = { name: "Staff engineer", description: "Reads designs as if it will be on call for them.", howItThinks: "Read like a senior engineer reviewing a design doc. Probe scale, failure modes, consistency, operational cost and the edge cases. Push on hand-waving such as \"we'll just cache it\" or \"it should be fast\". Leave naming and style alone.", voice: "blunt", frequency: "when_it_matters" };
 const SKEPTIC = { name: "Skeptic", description: "Asks for the evidence.", howItThinks: "Question claims that are not supported. Ask what the evidence is, what would prove it wrong, and what else could explain it. Test confident words like always, never and obviously.", voice: "plain", frequency: "when_it_matters" };
-const TUTOR = { name: "Tutor", description: "Never gives the answer; asks the question that leads to it.", howItThinks: "The writer is learning. Find the misunderstanding underneath what they wrote and ask the smallest question that would let them discover it. Do not state the answer. Say so when they get it right.", voice: "warm", frequency: "when_it_matters" };
+const SOCRATIC = { name: "Socratic tutor", description: "Never gives the answer; asks the question that leads to it.", howItThinks: "The writer is learning. Find the misunderstanding underneath what they wrote and ask the smallest question that would let them discover it. Do not state the answer. Say so when they get it right.", voice: "warm", frequency: "when_it_matters" };
+// The mind the writer makes in chapter 5 (Settings › Minds › New mind, from Blank).
+const SECURITY = { name: "Security", description: "Looks for what an attacker would use.", howItThinks: "Read like a security reviewer. Ask what is exposed, what is shared between machines, and what goes stale. Never suggest a product.", voice: "blunt", frequency: "often" };
 
 type Json = Record<string, any>;
-const real: Json = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : { note: { title: TITLE, paras: [P1, P2, P3, P4], brief: BRIEF }, calls: {} };
+const real: Json = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : { calls: {} };
+real.note = {
+  title: TITLE, paras: [P1, P2, P3, P4, P5, P6, P7], p2Fixed: P2_FIXED, edits: [EDIT1, EDIT2], brief: BRIEF, first: FIRST,
+  probe: PROBE_TARGET, ask: { target: ASK_TARGET, question: ASK_QUESTION }, room: { target: ROOM_TARGET, question: ROOM_QUESTION, minds: ["Inkling", "Staff engineer", "Socratic tutor"] },
+  sketch: SKETCH_TARGET, chat: CHAT_MESSAGE, mind: SECURITY, learn: LEARN_MESSAGE, reply: real.note?.reply,
+};
 // real.js is the same data for the film page, which loads it with a script tag.
 const save = () => {
   writeFileSync(OUT, JSON.stringify(real, null, 2) + "\n");
@@ -53,9 +87,6 @@ const save = () => {
 function ctx(paras: string[], extra: Json = {}) {
   return { noteTitle: TITLE, noteText: paras.join("\n\n"), brief: null, mind: INKLING, aboutMe: null, threads: [], now: NOW, ...extra };
 }
-// The writer's fix: the race sentence gets the pace that works, and only two runs a
-// week are at race pace (the correction asked about both).
-const P2_FIXED = "The plan is to run four days a week, two of them at 4:55 per km, so my legs learn race pace. If I hold 4:55 for the whole race, I’ll come in just under 50.";
 
 // ----- the brain ------------------------------------------------------------------
 const env: Record<string, string> = {
@@ -115,9 +146,10 @@ async function call(name: string, settings: Json, input: Json) {
   // the words at the pace they came.
   const deltas = events.filter((x) => x.id === id && x.ev === "delta").map((x) => ({ ms: x.at - t0, text: x.text }));
   if (e.ev !== "done") throw new Error(`${name}: ${e.kind}: ${e.message}`);
+  if (real.calls[name]) real.calls[`${name}_take${Object.keys(real.calls).filter((k) => k.startsWith(`${name}_take`)).length + 1}`] = real.calls[name];
   real.calls[name] = { at: new Date(t0).toISOString(), ms: Date.now() - t0, settings, input: { ...input, ctx: input.ctx ? { ...input.ctx, noteText: `${input.ctx.noteText.length} chars` } : undefined }, output: e.data, usage: e.usage, deltas: deltas.length ? deltas : undefined };
   save();
-  console.log(`${name} (${((Date.now() - t0) / 1000).toFixed(1)} s): ${JSON.stringify(e.data).slice(0, 600)}`);
+  console.log(`${name} (${((Date.now() - t0) / 1000).toFixed(1)} s): ${JSON.stringify(e.data).slice(0, 900)}`);
   return e.data as Json;
 }
 const out = (name: string) => {
@@ -125,205 +157,152 @@ const out = (name: string) => {
   if (!c) throw new Error(`run the stage that makes ${name} first`);
   return c.output as Json;
 };
+const reply = () => process.env.FILM_REPLY || real.note.reply || REPLY;
 
-// ----- stages ---------------------------------------------------------------------
-const STAGES: Record<string, () => Promise<unknown>> = {
-  // Read-along: the writer has finished ¶2, then ¶3.
-  async reads() {
-    const r2 = await call("read_p2", LIGHT, { task: "read", ctx: ctx([P1, P2]), target: P2 });
-    const t1 = { quote: r2.quote, messages: [{ role: "mind", text: r2.text }], resolved: false };
-    await call("read_p3", LIGHT, { task: "read", ctx: ctx([P1, P2, P3], { threads: r2.speak ? [t1] : [] }), target: P3 });
-  },
-  // "Sketch it" on the correction's tag: the thread's words are the thought to draw.
-  async draw() {
-    const r2 = out("read_p2"), r3 = out("read_p3");
-    const threads = [{ quote: r2.quote, messages: [{ role: "mind", text: r2.text }], resolved: false }];
-    if (r3.speak) threads.push({ quote: r3.quote, messages: [{ role: "mind", text: r3.text }], resolved: false });
-    await call("draw", HEAVY, { task: "draw", ctx: ctx([P1, P2, P3, P4], { threads }), quote: r2.quote, thought: r2.text, request: null });
-  },
-  // Fix the words: the writer changes 5:30 to 4:55 and Inkling reads its thread again.
-  async settle() {
-    const r2 = out("read_p2"), r3 = out("read_p3");
-    // A thread keeps the words it was opened on; the edit is the writer's turn.
-    const threads = [{ quote: r2.quote, messages: [{ role: "mind", text: r2.text }], resolved: false }];
-    if (r3.speak) threads.push({ quote: r3.quote, messages: [{ role: "mind", text: r3.text }], resolved: false });
-    real.note.p2Fixed = P2_FIXED;
-    await call("settle", HEAVY, { task: "reply", ctx: ctx([P1, P2_FIXED, P3, P4], { threads }), quote: r2.quote, messages: [{ role: "mind", text: r2.text }], message: `(I edited the paragraph. It now reads: «${P2_FIXED}»)` });
-  },
-  // The read of ¶3 stayed silent, so the writer selects the long-run line and asks
-  // for a loose thread (the toolbar's "Find a loose thread", ⌘↵).
-  async probe() {
-    const r2 = out("read_p2"), s = out("settle");
-    const threads = [{ quote: r2.quote, messages: [{ role: "mind", text: r2.text }, { role: "mind", text: s.text }], resolved: s.resolved === true }];
-    real.note.probe = PROBE_TARGET;
-    await call("probe_p3", HEAVY, { task: "probe", ctx: ctx([P1, P2_FIXED, P3, P4], { threads }), target: PROBE_TARGET });
-  },
-  // The writer answers the long-run question in its tag.
-  async reply() {
-    const r2 = out("read_p2"), r3 = out("probe_p3"), s = out("settle");
-    const message = process.env.FILM_REPLY;
-    if (!message) throw new Error("set FILM_REPLY to the writer's reply");
-    const threads = [
-      { quote: r2.quote, messages: [{ role: "mind", text: r2.text }, { role: "mind", text: s.text }], resolved: true },
-      { quote: r3.quote, messages: [{ role: "mind", text: r3.text }], resolved: false },
-    ];
-    real.note.reply = message;
-    await call("reply", HEAVY, { task: "reply", ctx: ctx([P1, P2_FIXED, P3, P4], { threads }), quote: r3.quote, messages: [{ role: "mind", text: r3.text }], message });
-  },
-  // Ask the room: one question, three minds, answered side by side.
-  async room() {
-    const r2 = out("read_p2"), r3 = out("probe_p3"), s = out("settle"), rp = out("reply");
-    const threads = [
-      { quote: r2.quote, messages: [{ role: "mind", text: r2.text }, { role: "mind", text: s.text }], resolved: true },
-      { quote: r3.quote, messages: [{ role: "mind", text: r3.text }, { role: "you", text: real.note.reply }, { role: "mind", text: rp.text }], resolved: true },
-    ];
-    real.note.room = { target: ROOM_TARGET, question: ROOM_QUESTION };
-    await Promise.all([INKLING, SKEPTIC, TUTOR].map((mind) =>
-      call(`room_${mind.name.toLowerCase()}`, HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads, mind }), target: ROOM_TARGET, question: ROOM_QUESTION })));
-  },
-  // Tell Inkling a brief, then chat about the whole note.
-  async chat() {
-    const r2 = out("read_p2"), r3 = out("probe_p3"), s = out("settle"), rp = out("reply");
-    const threads: Json[] = [
-      { quote: r2.quote, messages: [{ role: "mind", text: r2.text }, { role: "mind", text: s.text }], resolved: true },
-      { quote: r3.quote, messages: [{ role: "mind", text: r3.text }, { role: "you", text: real.note.reply }, { role: "mind", text: rp.text }], resolved: true },
-    ];
-    for (const m of ["inkling", "skeptic", "tutor"]) {
-      const r = real.calls[`room_${m}`];
-      if (r) threads.push({ quote: ROOM_TARGET, messages: [{ role: "you", text: ROOM_QUESTION }, { role: "mind", text: r.output.text }], resolved: false });
-    }
-    real.note.chat = CHAT_MESSAGE;
-    await call("chat", HEAVY, { task: "chat", ctx: ctx([P1, P2_FIXED, P3, P4], { threads, brief: BRIEF }), history: [], message: CHAT_MESSAGE, near: null });
-  },
-  // Call a mind by name inside the note.
-  async name() {
-    const line = process.env.FILM_CALL;
-    if (!line) throw new Error("set FILM_CALL to the paragraph that calls a mind by name");
-    real.note.call = line;
-    await call("call_by_name", HEAVY, { task: "answer", ctx: ctx([P1, P2_FIXED, P3, P4, line], { brief: BRIEF, mind: SKEPTIC }), target: line });
-  },
-
-  // ----- the re-cut (Nov 2026): the film's new order, each call with the context the
-  // app would send at that point. Old outputs above stay; these are the `v2_` ones.
-  //   Start here: the first sentence of a new notebook (probe, as `first_run` does)
-  //   Asking: find (probe_p3, kept), ask Inkling, the room (built-in Socratic tutor), call by name, the brief, chat
-  //   Threads: the reply on the long-run thread, now with the asked threads around it
-  //   Minds: a mind of your own reads the next paragraph
-  //   Sketch it on another note; Inkling learns about you
-  async v2_first() {
-    const guide = JSON.parse(readFileSync(join(VIDEO, "data", "start-here.json"), "utf8"));
-    const blocks = guide.blocks.slice();
-    blocks[blocks.length - 1] = { kind: "paragraph", text: FIRST };
-    real.v2 = real.v2 || {};
-    real.v2.first = { sentence: FIRST };
-    await call("v2_first", HEAVY, { task: "probe", ctx: { ...ctx([]), noteTitle: guide.title, noteText: markdown(blocks), threads: guide.threads.map((t: Json) => ({ quote: t.quote, messages: t.messages, resolved: false })) }, target: FIRST });
-  },
-  async v2_ask() {
-    const threads = v2Threads(["t1", "t2"]);
-    real.v2 = real.v2 || {};
-    real.v2.ask = { target: ASK_TARGET, question: ASK_QUESTION };
-    await call("v2_ask", HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads }), target: ASK_TARGET, question: ASK_QUESTION });
-  },
-  async v2_room() {
-    const threads = v2Threads(["t1", "t2", "ask"]);
-    await Promise.all([INKLING, SKEPTIC, SOCRATIC].map((mind) =>
-      call(`v2_room_${mind.name.split(" ").pop()!.toLowerCase()}`, HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads, mind }), target: ROOM_TARGET, question: ROOM_QUESTION })));
-  },
-  async v2_call() {
-    const threads = v2Threads(["t1", "t2", "ask", "room"]);
-    await call("v2_call", HEAVY, { task: "answer", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE], { threads, mind: SKEPTIC }), target: CALL_LINE });
-  },
-  async v2_chat() {
-    const threads = v2Threads(["t1", "t2", "ask", "room", "call"]);
-    await call("v2_chat", HEAVY, { task: "chat", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE], { threads, brief: BRIEF }), history: [], message: CHAT_MESSAGE, near: null });
-  },
-  async v2_reply() {
-    const threads = v2Threads(["t1", "t2", "ask", "room", "call"]);
-    const q = out("probe_p3");
-    await call("v2_reply", HEAVY, { task: "reply", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE], { threads, brief: BRIEF }), quote: q.quote, messages: [{ role: "mind", text: q.text }], message: REPLY });
-  },
-  async v2_mind() {
-    const threads = v2Threads(["t1", "t2r", "ask", "room", "call"]);
-    real.v2 = real.v2 || {};
-    real.v2.mind = { ...COACH, line: COACH_LINE };
-    await call("v2_mind", LIGHT, { task: "read", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE, COACH_LINE], { threads, brief: BRIEF, mind: COACH }), target: COACH_LINE });
-  },
-  // a second take of the tutor's answer in the room (the first came back almost word for
-  // word the same as Inkling's); the first take stays in real.json as v2_room_tutor_take1
-  async v2_tutor() {
-    if (real.calls.v2_room_tutor && !real.calls.v2_room_tutor_take1) real.calls.v2_room_tutor_take1 = real.calls.v2_room_tutor;
-    const threads = v2Threads(["t1", "t2", "ask"]);
-    await call("v2_room_tutor", HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads, mind: SOCRATIC }), target: ROOM_TARGET, question: ROOM_QUESTION });
-  },
-  async v2_sketch() {
-    real.v2 = real.v2 || {};
-    real.v2.bread = { title: BREAD_TITLE, paras: BREAD, target: BREAD_TARGET };
-    const bctx = { ...ctx([]), noteTitle: BREAD_TITLE, noteText: BREAD.join("\n\n") };
-    const s = await call("v2_sketch", HEAVY, { task: "sketch", ctx: bctx, target: BREAD_TARGET });
-    await call("v2_draw", HEAVY, { task: "draw", ctx: { ...bctx, threads: [{ quote: s.quote, messages: [{ role: "mind", text: s.text }], resolved: false }] }, quote: s.quote, thought: s.text, request: null });
-  },
-  async v2_learn() {
-    real.v2 = real.v2 || {};
-    real.v2.learn = { message: LEARN_MESSAGE };
-    await call("v2_learn", LIGHT, { task: "learn", aboutMe: null, message: LEARN_MESSAGE });
-  },
-};
-
-// ----- the re-cut's words ------------------------------------------------------------
-const FIRST = "I can run 10 km in under 50 minutes by March.";
-const ASK_TARGET = "walked twice after the 7 km mark";
-const ASK_QUESTION = "Was that my pace or my fitness?";
-const CALL_LINE = "Skeptic, is going from 56:40 to 49:10 in one season realistic?";
-const REPLY = "From 8 km. Every fourth week is an easy one, and I taper the last two.";
-const SOCRATIC = { name: "Socratic tutor", description: "Never gives the answer; asks the question that leads to it.", howItThinks: "The writer is learning. Find the misunderstanding underneath what they wrote and ask the smallest question that would let them discover it. Do not state the answer. Say so when they get it right.", voice: "warm", frequency: "when_it_matters" };
-const COACH = { name: "Coach", description: "Has trained a lot of first-time racers.", howItThinks: "Read training plans like a running coach. Ask about easy days, recovery, and what the last weeks before the race look like. Never prescribe paces.", voice: "blunt", frequency: "often" };
-const COACH_LINE = "The last two weeks, I’ll add a fifth run to sharpen up.";
-const BREAD_TITLE = "Why the bread didn’t rise";
-const BREAD = [
-  "I fed the starter at nine and mixed the dough at noon, the same as last week.",
-  "By noon the starter had already risen and fallen back, so there was little left to lift the dough.",
-];
-const BREAD_TARGET = "the starter had already risen and fallen back";
-const LEARN_MESSAGE = "I work night shifts, so my runs have to fit in before noon.";
-
-/** The note's threads at a point in the re-cut, as the app sends them (dismissed ones never). */
-function v2Threads(which: string[]): Json[] {
-  const r2 = out("read_p2"), s = out("settle"), q = out("probe_p3");
+/** The note's threads at a point in the film, as the app sends them (a dismissed thread
+ *  is put back with ⌥⌘Z, so none is missing). */
+function threads(which: string[]): Json[] {
   const all: Record<string, () => Json[]> = {
-    t1: () => [{ quote: r2.quote, messages: [{ role: "mind", text: r2.text }, { role: "mind", text: s.text }], resolved: true }],
-    t2: () => [{ quote: q.quote, messages: [{ role: "mind", text: q.text }], resolved: false }],
-    t2r: () => [{ quote: q.quote, messages: [{ role: "mind", text: q.text }, { role: "you", text: REPLY }, { role: "mind", text: out("v2_reply").text }], resolved: true }],
-    ask: () => [{ quote: ASK_TARGET, messages: [{ role: "you", text: ASK_QUESTION }, { role: "mind", text: out("v2_ask").text }], resolved: false }],
-    room: () => ["inkling", "skeptic", "tutor"].map((m) => ({ quote: ROOM_TARGET, messages: [{ role: "you", text: ROOM_QUESTION }, { role: "mind", text: out(`v2_room_${m}`).text }], resolved: false })),
-    call: () => [{ quote: CALL_LINE, messages: [{ role: "mind", text: out("v2_call").text }], resolved: false }],
+    t1: () => { const r = out("read_p2"), s = out("settle"); return [{ quote: r.quote, messages: [{ role: "mind", text: r.text }, { role: "mind", text: s.text }], resolved: s.resolved === true }]; },
+    t1open: () => { const r = out("read_p2"); return [{ quote: r.quote, messages: [{ role: "mind", text: r.text }], resolved: false }]; },
+    t2: () => { const q = out("probe_p3"); return [{ quote: q.quote, messages: [{ role: "mind", text: q.text }], resolved: false }]; },
+    t2r: () => { const q = out("probe_p3"), r = out("reply"); return [{ quote: q.quote, messages: [{ role: "mind", text: q.text }, { role: "you", text: reply() }, { role: "mind", text: r.text }], resolved: true }]; },
+    ask: () => [{ quote: ASK_TARGET, messages: [{ role: "you", text: ASK_QUESTION }, { role: "mind", text: out("ask").text }], resolved: false }],
+    room: () => ["inkling", "staff", "tutor"].map((m) => ({ quote: ROOM_TARGET, messages: [{ role: "you", text: ROOM_QUESTION }, { role: "mind", text: out(`room_${m}`).text }], resolved: false })),
+    call: () => [{ quote: P5, messages: [{ role: "mind", text: out("call").text }], resolved: false }],
+    sketch: () => { const s = out("sketch"); return [{ quote: s.quote, messages: [{ role: "mind", text: s.text }], resolved: false }]; },
   };
   return which.flatMap((w) => all[w]());
 }
+const BODY = [P1, P2_FIXED, P3, P4];
 
-/** The note's text as the app sends it (store.rs `plain_text_of`: Markdown, title left out). */
+// ----- stages ---------------------------------------------------------------------
+const STAGES: Record<string, () => Promise<unknown>> = {
+  // A new notebook: the writer's first sentence under the guide, probed as `first_run`
+  // does, with the guide's own Markdown and threads (data/start-here.json, from the app).
+  async first() {
+    const guide = JSON.parse(readFileSync(join(VIDEO, "data", "start-here.json"), "utf8"));
+    const blocks = guide.blocks.slice();
+    blocks[blocks.length - 1] = { kind: "paragraph", text: FIRST };
+    const noteText = markdown(blocks);
+    if (process.env.FIRST_REQUEST) {
+      // the app's own request, captured from a run with the fake brain: the text must match
+      const app = JSON.parse(readFileSync(process.env.FIRST_REQUEST, "utf8")).input.ctx.noteText;
+      if (app !== noteText) throw new Error(`the guide's Markdown differs from the app's:\n${app}\n---\n${noteText}`);
+    }
+    await call("first", LIGHT, { task: "probe", ctx: { ...ctx([]), noteTitle: guide.title, noteText, threads: guide.threads.map((t: Json) => ({ quote: t.quote, messages: t.messages, resolved: false })) }, target: FIRST });
+  },
+  // Reading along: each paragraph is read when the writer pauses after it.
+  async reads() {
+    await call("read_p1", LIGHT, { task: "read", ctx: ctx([P1]), target: P1 });
+    const r2 = await call("read_p2", LIGHT, { task: "read", ctx: ctx([P1, P2]), target: P2 });
+    if (!r2.speak) throw new Error("¶2 was read without a word; the film needs its correction");
+    await call("read_p3", LIGHT, { task: "read", ctx: ctx([P1, P2, P3], { threads: threads(["t1open"]) }), target: P3 });
+    // Fix the words: the thread keeps the words it was opened on; the edit is the writer's turn.
+    await call("settle", HEAVY, { task: "reply", ctx: ctx([P1, P2_FIXED, P3], { threads: threads(["t1open"]) }), quote: r2.quote, messages: [{ role: "mind", text: r2.text }], message: `(I edited the paragraph. It now reads: «${P2_FIXED}»)` });
+    await call("read_p4", LIGHT, { task: "read", ctx: ctx(BODY, { threads: threads(["t1"]) }), target: P4 });
+  },
+  // Find a loose thread (⌘↵) on words of ¶3, which was read without a word.
+  async probe() {
+    await call("probe_p3", HEAVY, { task: "probe", ctx: ctx(BODY, { threads: threads(["t1"]) }), target: PROBE_TARGET });
+  },
+  async ask() {
+    await call("ask", HEAVY, { task: "ask", ctx: ctx(BODY, { threads: threads(["t1", "t2"]) }), target: ASK_TARGET, question: ASK_QUESTION });
+  },
+  // Ask the room: one question, three minds, answered side by side.
+  async room() {
+    const th = threads(["t1", "t2", "ask"]);
+    await Promise.all(([["inkling", INKLING], ["staff", STAFF], ["tutor", SOCRATIC]] as const).map(([key, mind]) =>
+      call(`room_${key}`, HEAVY, { task: "ask", ctx: ctx(BODY, { threads: th, mind }), target: ROOM_TARGET, question: ROOM_QUESTION })));
+  },
+  async call() {
+    await call("call", HEAVY, { task: "answer", ctx: ctx([...BODY, P5], { threads: threads(["t1", "t2", "ask", "room"]), mind: SKEPTIC }), target: P5 });
+  },
+  async sketch() {
+    const base = ctx([...BODY, P5], { threads: threads(["t1", "t2", "ask", "room", "call"]) });
+    const s = await call("sketch", HEAVY, { task: "sketch", ctx: base, target: SKETCH_TARGET });
+    await call("draw", HEAVY, { task: "draw", ctx: { ...base, threads: [...base.threads, { quote: s.quote, messages: [{ role: "mind", text: s.text }], resolved: false }] }, quote: s.quote, thought: s.text, request: null });
+  },
+  async chat() {
+    await call("chat", HEAVY, { task: "chat", ctx: ctx([...BODY, P5], { threads: threads(["t1", "t2", "ask", "room", "call", "sketch"]), brief: BRIEF }), history: [], message: CHAT_MESSAGE, near: null });
+  },
+  async reply() {
+    const q = out("probe_p3");
+    real.note.reply = reply();
+    await call("reply", HEAVY, { task: "reply", ctx: ctx([...BODY, P5], { threads: threads(["t1", "t2", "ask", "room", "call", "sketch"]), brief: BRIEF }), quote: q.quote, messages: [{ role: "mind", text: q.text }], message: reply() });
+  },
+  // The note's mind is now the writer's own; it reads the next paragraph.
+  async mind() {
+    await call("mind", LIGHT, { task: "read", ctx: ctx([...BODY, P5, P6], { threads: threads(["t1", "t2r", "ask", "room", "call", "sketch"]), brief: BRIEF, mind: SECURITY }), target: P6 });
+  },
+  async learn() {
+    await call("learn", LIGHT, { task: "learn", aboutMe: null, message: LEARN_MESSAGE });
+  },
+};
+
+// The writer's answer to the probe's question, written after reading it.
+const REPLY = "Our three worst-burst days, replayed at production density with the background traffic. Pass: p99 under 2 s inside the bursts alone.";
+
+/** The note's text as the app sends it (store.rs `markdown_blocks`, title left out). */
 function markdown(blocks: Json[]): string {
-  let s = "", n = 0, list: string | null = null;
-  for (const b of blocks.slice(1)) {
+  const family = (k: string) => (k === "bullet" || k === "check" || k === "check-done" ? 0 : k === "numbered" ? 1 : null);
+  const run = (k: string) => k.startsWith("callout") || k.startsWith("code");
+  let s = "", n = 0, list: number | null = null;
+  for (let i = 1; i < blocks.length; ) {
+    const b = blocks[i];
+    if (run(b.kind)) {
+      let end = i + 1;
+      while (end < blocks.length && blocks[end].kind === b.kind) end++;
+      const shown = blocks.slice(i, end).filter((x: Json) => x.text.trim());
+      if (shown.length) {
+        if (list != null) { s += "\n"; list = null; }
+        n = 0;
+        if (b.kind.startsWith("callout")) {
+          s += `> [!${b.kind.split("-")[1]}]\n` + shown.map((x: Json) => `> ${x.text}\n`).join(">\n");
+        } else {
+          const lines = blocks.slice(i, end);
+          let a = 0; while (!lines[a].text.trim()) a++;
+          let z = lines.length - 1; while (!lines[z].text.trim()) z--;
+          const longest = Math.max(0, ...lines.map((x: Json) => Math.max(0, ...(x.text.match(/`+/g) || [""]).map((r: string) => r.length))));
+          const fence = "`".repeat(Math.max(longest, 2) + 1);
+          s += `${fence}${b.kind.slice(5)}\n` + lines.slice(a, z + 1).map((x: Json) => x.text + "\n").join("") + fence + "\n";
+        }
+        s += "\n";
+      }
+      i = end;
+      continue;
+    }
+    i++;
     if (!b.text.trim()) continue;
-    if (list && list !== b.kind) s += "\n";
+    if (list != null && list !== family(b.kind)) s += "\n";
     if (b.kind !== "numbered") n = 0;
     if (b.kind === "h1") s += `# ${b.text}\n\n`;
     else if (b.kind === "h2") s += `## ${b.text}\n\n`;
     else if (b.kind === "h3") s += `### ${b.text}\n\n`;
     else if (b.kind === "bullet") s += `- ${b.text}\n`;
+    else if (b.kind === "check" || b.kind === "check-done") s += `- [${b.kind === "check-done" ? "x" : " "}] ${b.text}\n`;
     else if (b.kind === "numbered") s += `${++n}. ${b.text}\n`;
     else if (b.kind === "quote") s += `> ${b.text}\n\n`;
     else s += `${b.text}\n\n`;
-    list = b.kind === "bullet" || b.kind === "numbered" ? b.kind : null;
+    list = family(b.kind);
   }
   return s.trimEnd();
 }
 
 try {
-  await waitFor((e) => e.ev === "ready", 15_000);
-  for (const s of stages) {
-    if (!STAGES[s]) throw new Error(`unknown stage ${s}`);
-    await STAGES[s]();
+  if (stages.includes("markdown")) {
+    // check the guide's Markdown against a captured app request without calling the model
+    const guide = JSON.parse(readFileSync(join(VIDEO, "data", "start-here.json"), "utf8"));
+    const blocks = guide.blocks.slice();
+    blocks[blocks.length - 1] = { kind: "paragraph", text: FIRST };
+    const app = JSON.parse(readFileSync(process.env.FIRST_REQUEST!, "utf8")).input.ctx.noteText;
+    console.log(app === markdown(blocks) ? "the guide's Markdown matches the app's" : `differs:\n${app}\n---\n${markdown(blocks)}`);
+  } else {
+    await waitFor((e) => e.ev === "ready", 15_000);
+    for (const s of stages) {
+      if (!STAGES[s]) throw new Error(`unknown stage ${s}`);
+      await STAGES[s]();
+    }
   }
 } catch (e) {
   console.error(String(e));

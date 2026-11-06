@@ -6,6 +6,7 @@
 # fixture: running-plan
 # env: FAKE_READ_DEFAULT=silent
 wait: 1500
+set: appearance=light
 stand: 2
 edit: add a kilometre every week until I reach 16 => build up slowly
 settle

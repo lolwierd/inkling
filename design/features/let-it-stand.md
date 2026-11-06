@@ -436,6 +436,7 @@ open). It also takes shots of the open tag in linen and in lamplight.
 # point on its words again.
 # fixture: running-plan
 wait: 1500
+set: appearance=light
 edit: hold 5:30 for the whole race => hold 4:55 for the whole race
 settle
 resolve: 1

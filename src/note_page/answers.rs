@@ -360,11 +360,11 @@ impl NotePage {
             }
             BrainMsg::Error { kind, message } => {
                 page.reading = None;
-                // never checked: a later pause may try it again
+                // never checked: a later pause may try it again. A note that waits to be asked
+                // says nothing on its own, not even that a check it did not ask for failed
+                // (and a pass of Read it through keeps its own words about a failure).
                 page.answer_checks.remove(&hash);
-                if kind != "cancelled" {
-                    page.report(&kind, &message, cx);
-                }
+                log::info!("answers-only read failed ({kind}): {message}");
                 page.later(cx, |page, cx| page.after_read(cx));
             }
             BrainMsg::Delta(_) => {}

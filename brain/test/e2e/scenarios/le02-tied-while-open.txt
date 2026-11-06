@@ -13,8 +13,8 @@ dump: tied
 expect: d.statuses.includes("t1:Resolved:Inkling")   // the recheck tied it off behind the card
 expect: d.loose_ends.open && d.loose_ends.rows.map(r => r.thread + ":" + r.state).join() === "t1:tied off,t2:open"   // the row stays and says so
 expect: d.loose_ends.selected === 0
-shot: tied-while-open
 key: enter
+settle
 dump: went-tied
 expect: d.active === "t1" && !d.loose_ends.open
 expect: d.slots.some(s => s.id === "t1")   // its tag is open, tied off
@@ -26,6 +26,5 @@ resolve: 2
 open: loose
 dump: none
 expect: d.loose_ends.open && d.loose_ends.rows.length === 0 && d.loose_ends.count === 0 && d.loose_ends.selected === null
-shot: none
 expect: tasks.join() === "reply"   // the recheck, and nothing else
 quit

@@ -4,6 +4,13 @@
 
 use super::*;
 
+/// A thread being gone to: its words are brought into view once the note is laid out
+/// (`scrolled`), then its reply box gets the keyboard on the next frame, and it is done.
+pub(super) struct Goto {
+    id: String,
+    scrolled: bool,
+}
+
 /// Words whose top is closer than this to the window's top, or than `GOTO_ROOM` to its
 /// bottom, are brought to a third of the way down: room above for the header, and below
 /// for the tag that drops open level with them.
@@ -44,20 +51,22 @@ impl NotePage {
         // is laid out, and a reply box that is not drawn loses the keyboard. `finish_goto`
         // hands it to the reply box once the tag is there.
         self.editor.update(cx, |e, cx| e.focus(window, cx));
-        self.goto = Some(id.to_string());
+        self.goto = Some(Goto { id: id.to_string(), scrolled: false });
         cx.notify();
     }
 
     /// From `render`: once the note is laid out, bring the words of the thread gone to into
     /// view, and after this frame (which draws its tag) give its reply box the keyboard.
-    /// Until the note is laid out, ask for another frame.
+    /// Until the note is laid out, ask for another frame. While a thread is being gone to
+    /// the page is not settled (a script's `settle` waits for it).
     pub(super) fn finish_goto(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.goto.clone() else { return };
+        let Some(goto) = self.goto.as_mut().filter(|g| !g.scrolled) else { return };
         let Some(caret) = self.editor.read(cx).cursor_window_rect() else {
             window.request_animation_frame();
             return;
         };
-        self.goto = None;
+        goto.scrolled = true;
+        let id = goto.id.clone();
         self.hold_scroll = false;
         let offset = self.scroll.offset();
         let height = window.viewport_size().height.as_f32();
@@ -66,6 +75,7 @@ impl NotePage {
             cx.notify();
         }
         cx.on_next_frame(window, move |this, window, cx| {
+            this.goto = None;
             // (unless something else was opened or the keyboard moved on meanwhile)
             if this.active.as_deref() != Some(id.as_str()) || !this.editor.read(cx).is_focused(window) {
                 return;
@@ -73,7 +83,9 @@ impl NotePage {
             if let Some(input) = this.replies.get(&id).cloned() {
                 input.update(cx, |i, cx| i.focus(window, cx));
             }
+            cx.notify();
         });
+        window.request_animation_frame();
     }
 }
 

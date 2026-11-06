@@ -1,6 +1,6 @@
 # Hundreds of open threads (forty notes in four folders, 200 open): the list draws only the
 # rows in view, Page Down reaches the last row, typing two words narrows to one, Return goes
-# there; Linen and Lamplight.
+# there. (Screenshots: design/features/shots/loose-ends-*.jpg, taken with scripts/dev shot.)
 # fixture: loose-ends-many
 # tags: loose-ends
 wait: 1500
@@ -10,17 +10,11 @@ dump: many
 expect: d.loose_ends.count === 200 && d.loose_ends.rows.length === 200
 expect: d.loose_ends.rows[0].thread === "m00-0" && d.loose_ends.rows[199].thread === "m39-4"   // oldest first
 expect: d.loose_ends.rows.every(r => r.state === "open")
-shot: many
 key: pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown
 key: pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown
 key: pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown pagedown
 dump: paged
 expect: d.loose_ends.selected === 199
-shot: many-end
-set: appearance=dark
-wait: 300
-shot: many-end-dark
-set: appearance=light
 key: pageup up
 dump: back-up
 expect: d.loose_ends.selected === 191
@@ -28,6 +22,7 @@ key: s k e p t i c space w e e k space 3 9
 dump: narrowed
 expect: d.loose_ends.query === "skeptic week 39" && d.loose_ends.rows.length === 1 && d.loose_ends.rows[0].thread === "m38-3"
 key: enter
+settle
 dump: went
 expect: d.note.title === "Reading notes, week 39" && d.active === "m38-3" && d.focus === "reply"
 quit

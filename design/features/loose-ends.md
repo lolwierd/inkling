@@ -256,9 +256,9 @@ defaults do not clash.
 
 | Scenario | Fixture | What it proves |
 |---|---|---|
-| `le01-loose-ends` | `loose-ends`: four notes, two in folders (Work folded), one waiting to be asked, one untitled, threads open, tied off and dismissed, the id `t2` in two notes | ⇧⌘K opens it with the keyboard in the search box; rows `b1@Q3 budget, t1, t2@Sub-50…, t2@Untitled`, open only; folder, mind, mark and "This note"; Return goes to the waiting note's thread with the keyboard in the reply box; reopening starts on the next row; ↓ Return goes to another note; typing "kilo" narrows to one; ⌘K and ⇧⌘K carry "kilo" across; Escape gives the keyboard back to the note; `tasks.length === 0`. Shots in Linen and Lamplight. |
+| `le01-loose-ends` | `loose-ends`: four notes, two in folders (Work folded), one waiting to be asked, one untitled, threads open, tied off and dismissed, the id `t2` in two notes | ⇧⌘K opens it with the keyboard in the search box; rows `b1@Q3 budget, t1, t2@Sub-50…, t2@Untitled`, open only; folder, mind, mark and "This note"; Return goes to the waiting note's thread with the keyboard in the reply box; reopening starts on the next row; ↓ Return goes to another note; typing "kilo" narrows to one; ⌘K and ⇧⌘K carry "kilo" across; Escape gives the keyboard back to the note; `tasks.length === 0`. |
 | `le02-tied-while-open` | `running-plan` | Fixing "5:30" with the card open: after the recheck the rows read `t1:tied off, t2:open`, still in place; Return opens `t1`'s tied-off tag; reopened, only `t2`; with both tied off, the list is empty and says so; the brain saw one `reply`. |
-| `le03-hundreds` | `loose-ends-many`: 40 notes, 200 open threads | 200 rows oldest first; thirty Page Downs end on row 199; Page Up and ↑ come back to 191; "skeptic week 39" narrows to one; Return goes there. Shots in Linen and Lamplight. |
+| `le03-hundreds` | `loose-ends-many`: 40 notes, 200 open threads | 200 rows oldest first; thirty Page Downs end on row 199; Page Up and ↑ come back to 191; "skeptic week 39" narrows to one; Return goes there. |
 | `le04-hidden-marks-far` | `hard-content` | With threads hidden, going to one shows them; in Marks only, just its tag opens; "paragraph 30" in the sixty-paragraph note scrolls the page down to the words, with the keyboard in the reply box. |
 
 The dump gains `loose_ends`: `open`, `query`, `selected`, `count`, and `rows` (each `note`,
@@ -305,7 +305,9 @@ owner.
 
 ## Screens
 
-In `design/features/shots/`, taken with `scripts/dev shot` from the fixtures above:
+In `design/features/shots/`, taken with `scripts/dev shot` from the fixtures above (for example
+`scripts/dev shot --fixture loose-ends --appearance dark --step "open: loose"`). The scenarios
+take none: a screenshot the machine cannot capture would fail a run whose expects all passed.
 
 | Shot | Linen | Lamplight |
 |---|---|---|

@@ -19,7 +19,7 @@
 //!
 //! `wait: ms` waits on the clock. `settle` waits until the page has nothing scheduled
 //! or in flight (no pause pending, no read, no thread or chat request, not typing, no
-//! `import:` still reading its vault), up
+//! `import:` still reading its vault, no thread being gone to from Loose ends), up
 //! to `settle: ms` (default 20000); prefer it after typing or asking, so a run does not
 //! depend on how busy the machine is.
 //!

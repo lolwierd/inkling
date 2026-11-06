@@ -492,7 +492,7 @@ pub struct NotePage {
     _subs: Vec<Subscription>,
     /// A thread gone to from Loose ends, whose words are brought into view once the note
     /// is laid out (`goto.rs`).
-    goto: Option<String>,
+    goto: Option<goto::Goto>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -944,11 +944,12 @@ impl NotePage {
     }
 
     /// Nothing is scheduled or in flight, so the page will not change on its own: no
-    /// pause pending, no read, no thread or chat request, not typing. A script's `settle`
+    /// pause pending, no read, no thread or chat request, not typing, no thread being gone
+    /// to from Loose ends (its words scrolled in, its reply box given the keyboard). A script's `settle`
     /// waits for this. Learning about the writer runs untracked, and saves wait 600 ms
     /// (quitting flushes them); neither shows on the page.
     pub(crate) fn settled(&self) -> bool {
-        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently()
+        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
     }
 
     /// The words of an open thread were edited: look at them again at the next pause.

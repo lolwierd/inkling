@@ -15,21 +15,17 @@ expect: d.loose_ends.count === 4 && d.loose_ends.rows.every(r => r.state === "op
 expect: d.loose_ends.rows[0].folder === "Work" && d.loose_ends.rows[0].mind === "Skeptic" && !d.loose_ends.rows[0].here
 expect: d.loose_ends.rows[1].here && d.loose_ends.rows[1].mark === "×" && d.loose_ends.rows[2].mark === "?"
 expect: d.loose_ends.rows[3].folder === null && d.loose_ends.rows[3].mind === "Editor"
-shot: opened
-set: appearance=dark
-wait: 300
-shot: opened-dark
-set: appearance=light
 key: enter
+settle
 dump: went-budget
 expect: d.note.title === "Q3 budget" && d.note.mode === "WhenYouAsk" && d.active === "b1" && d.focus === "reply"
 expect: !d.loose_ends.open
-shot: went-budget
 key: shift-cmd-k
 dump: walked
 expect: d.loose_ends.selected === 1   // the row after the one gone to
 expect: d.loose_ends.rows[0].here && !d.loose_ends.rows[1].here   // "This note" follows the page
 key: down enter
+settle
 dump: went-plan
 expect: d.note.title === "Sub-50 10k by March" && d.active === "t2" && d.focus === "reply"
 key: shift-cmd-k

@@ -1,0 +1,10 @@
+[
+ {
+  "id": "skeptic",
+  "name": "Skeptic",
+  "description": "Asks for the evidence.",
+  "how_it_thinks": "Question claims.",
+  "voice": "plain",
+  "frequency": "when_it_matters"
+ }
+]

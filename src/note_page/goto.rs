@@ -37,23 +37,22 @@ impl NotePage {
         self.editor.update(cx, |e, cx| e.move_cursor_to(start, cx));
         if thread.status == ThreadStatus::Dismissed {
             self.close_thread(cx);
-            self.editor.update(cx, |e, cx| e.focus(window, cx));
         } else {
             self.activate(Some(id.to_string()), window, cx);
-            if let Some(input) = self.replies.get(id).cloned() {
-                input.update(cx, |i, cx| i.focus(window, cx));
-            }
         }
+        // The keyboard waits in the note: a note opened a moment ago draws no tag until it
+        // is laid out, and a reply box that is not drawn loses the keyboard. `finish_goto`
+        // hands it to the reply box once the tag is there.
+        self.editor.update(cx, |e, cx| e.focus(window, cx));
         self.goto = Some(id.to_string());
         cx.notify();
     }
 
     /// From `render`: once the note is laid out, bring the words of the thread gone to into
-    /// view. Until then, ask for another frame.
+    /// view, and after this frame (which draws its tag) give its reply box the keyboard.
+    /// Until the note is laid out, ask for another frame.
     pub(super) fn finish_goto(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.goto.is_none() {
-            return;
-        }
+        let Some(id) = self.goto.clone() else { return };
         let Some(caret) = self.editor.read(cx).cursor_window_rect() else {
             window.request_animation_frame();
             return;
@@ -66,6 +65,15 @@ impl NotePage {
             self.scroll.set_offset(point(offset.x, px(y)));
             cx.notify();
         }
+        cx.on_next_frame(window, move |this, window, cx| {
+            // (unless something else was opened or the keyboard moved on meanwhile)
+            if this.active.as_deref() != Some(id.as_str()) || !this.editor.read(cx).is_focused(window) {
+                return;
+            }
+            if let Some(input) = this.replies.get(&id).cloned() {
+                input.update(cx, |i, cx| i.focus(window, cx));
+            }
+        });
     }
 }
 

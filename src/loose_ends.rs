@@ -441,38 +441,44 @@ impl Card {
                 .child(div().flex_none().max_w(px(140.)).truncate().font_weight(FontWeight::MEDIUM).text_color(if open { color } else { p.faint }).child(r.mind.clone()))
                 .when_some(tail, |d, words| d.child(dot()).child(div().flex_none().text_color(p.faint).child(words)));
             out.push(
+                // A row in a uniform list is laid out on its own: it takes the list's whole
+                // width, so long words are cut inside the card, not by its edge.
                 div()
                     .id(("loose-row", ix))
-                    .mx(px(6.))
-                    .px(px(10.))
-                    .py(px(6.))
-                    .rounded(px(7.))
-                    .when(on, |d| d.bg(p.hover))
-                    .when(!on, |d| d.hover(move |s| s.bg(p.hover.opacity(0.5))))
+                    .w_full()
+                    .px(px(6.))
                     .cursor_pointer()
-                    .flex()
-                    .flex_row()
-                    .items_start()
-                    .gap(px(8.))
-                    .child(div().flex_none().w(px(14.)).h(px(20.)).flex().items_center().justify_center().child(mark_el))
                     .child(
                         div()
-                            .flex_1()
-                            .min_w(px(0.))
-                            // your words, set as on the page
+                            .px(px(10.))
+                            .py(px(6.))
+                            .rounded(px(7.))
+                            .when(on, |d| d.bg(p.hover))
+                            .when(!on, |d| d.hover(move |s| s.bg(p.hover.opacity(0.5))))
+                            .flex()
+                            .flex_row()
+                            .items_start()
+                            .gap(px(8.))
+                            .child(div().flex_none().w(px(14.)).h(px(20.)).flex().items_center().justify_center().child(mark_el))
                             .child(
                                 div()
-                                    .h(px(20.))
-                                    .flex()
-                                    .items_center()
-                                    .font_family(SERIF)
-                                    .text_size(px(ts::BODY))
-                                    .text_color(if open { p.ink } else { p.faint })
-                                    .child(div().min_w(px(0.)).truncate().child(r.quote.clone())),
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    // your words, set as on the page
+                                    .child(
+                                        div()
+                                            .h(px(20.))
+                                            .flex()
+                                            .items_center()
+                                            .font_family(SERIF)
+                                            .text_size(px(ts::BODY))
+                                            .text_color(if open { p.ink } else { p.faint })
+                                            .child(div().min_w(px(0.)).truncate().child(r.quote.clone())),
+                                    )
+                                    .child(meta),
                             )
-                            .child(meta),
+                            .when(on && r.state != State::Gone, |d| d.child(div().flex_none().h(px(20.)).flex().items_center().child(ui::key_hint("\u{21a9}", &t)))),
                     )
-                    .when(on && r.state != State::Gone, |d| d.child(div().flex_none().h(px(20.)).flex().items_center().child(ui::key_hint("\u{21a9}", &t))))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected = ix;
                         this.choose(cx);
@@ -509,10 +515,13 @@ impl Render for Card {
                 )
                 .into_any_element()
         };
-        let count = match (total, self.query.trim().is_empty()) {
+        // what is still open: a row tied off while the card is open stays, but is not counted
+        let open = |i: &usize| self.rows[*i].state == State::Open;
+        let (all_open, shown_open) = ((0..total).filter(open).count(), self.shown.iter().filter(|i| open(i)).count());
+        let count = match (all_open, self.query.trim().is_empty()) {
             (0, _) => None,
-            (_, true) => Some(format!("{total} open, oldest first")),
-            (_, false) => Some(format!("{} of {total} open", self.shown.len())),
+            (_, true) => Some(format!("{all_open} open, oldest first")),
+            (_, false) => Some(format!("{shown_open} of {all_open} open")),
         };
         div()
             .absolute()

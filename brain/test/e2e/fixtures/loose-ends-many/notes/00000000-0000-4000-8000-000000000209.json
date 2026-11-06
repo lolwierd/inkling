@@ -1,0 +1,157 @@
+{
+ "id": "00000000-0000-4000-8000-000000000209",
+ "title": "Work notes, week 10",
+ "folder": "f-work",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Work notes, week 10"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The migration is safe because every write goes to both databases, in week 10 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Notes in the margin help me remember more of what I read, in week 10 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Watering in the evening loses less to the sun than the morning does, in week 10 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The long run moves to Saturday so Sunday can be a rest day, in week 10 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "We will cache the search results for an hour and nobody will notice, in week 10 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Reading twenty pages a night gets me through a book a fortnight, in week 10 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "m09-0",
+   "start": 20,
+   "end": 108,
+   "quote": "The migration is safe because every write goes to both databases, in week 10 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-03-02T15:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-03-02T15:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m09-1",
+   "start": 110,
+   "end": 190,
+   "quote": "Notes in the margin help me remember more of what I read, in week 10 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-03-03T16:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-03-03T16:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m09-2",
+   "start": 192,
+   "end": 283,
+   "quote": "Watering in the evening loses less to the sun than the morning does, in week 10 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-03-04T17:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-03-04T17:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m09-3",
+   "start": 285,
+   "end": 367,
+   "quote": "The long run moves to Saturday so Sunday can be a rest day, in week 10 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-03-05T18:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-03-05T18:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m09-4",
+   "start": 369,
+   "end": 460,
+   "quote": "We will cache the search results for an hour and nobody will notice, in week 10 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-03-06T19:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-03-06T19:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m09-5",
+   "start": 462,
+   "end": 549,
+   "quote": "Reading twenty pages a night gets me through a book a fortnight, in week 10 of the plan",
+   "kind": "correction",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-03-07T20:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-03-07T20:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-01-14T09:00:00Z",
+ "updated_at": "2026-01-14T09:00:00Z"
+}

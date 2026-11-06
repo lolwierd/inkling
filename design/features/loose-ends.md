@@ -93,7 +93,7 @@ Settings). A row and the tag it opens never disagree.
 thread looks exactly like a new one apart from those words: no colour, no "overdue".
 
 **Order:** the oldest thread first, by when it was opened. Threads opened in the same
-instant (the welcome guide's, a fixture's) follow the note's reading order, then the note.
+instant (the welcome guide's, a fixture's) go by the older note, then reading order.
 
 **Typing narrows** the list to rows where every word you type appears somewhere in the
 quote, the note's title, its folder or the mind's name, ignoring case. "skeptic budget"
@@ -166,9 +166,12 @@ reads every note file at launch (`load_notes`), and the sidebar and ⌘K's full-
 already run over `Store.notes`. Building the list is a walk over those notes' threads,
 keeping the open ones, and one sort; it reads no file.
 
-| Notebook | Threads | Open | Build and sort the list | Narrow it by one word |
-|---|---|---|---|---|
-| 1,000 notes | 20,000 | 2,000 | measured in `loose_ends::tests::a_thousand_notes`; see the build notes below | |
+| Notebook | Threads | Open | Build and sort the list | Narrow it by two words | Read every row's state again |
+|---|---|---|---|---|---|
+| 1,000 notes | 20,000 | 2,000 | 1.1 ms | 18 µs | 0.12 ms |
+
+Measured by `loose_ends::tests::a_thousand_notes_build_and_narrow_quickly` in the debug
+build (opt-level 1) on this Mac, 7 Nov 2026. A frame is 16 ms.
 
 An index was considered and rejected:
 
@@ -178,7 +181,8 @@ An index was considered and rejected:
   that is, which is the failure this list exists to prevent.
 - **It would save nothing.** The cost of a big notebook is reading its files at launch, and
   the app does that anyway. An index would not remove it.
-- **The walk is cheap.** Thousands of threads take well under a frame; see the measurement.
+- **The walk is cheap.** Two thousand open threads out of twenty thousand take about a
+  millisecond, a fifteenth of a frame.
 
 The list is built once when the card opens; each keystroke narrows that snapshot (a
 lowercase `contains` per row), and drawing builds only the rows in view.
@@ -224,7 +228,7 @@ without a change here.
 
 **Unit tests** in `src/loose_ends.rs`:
 
-- Only open threads are listed, oldest first; ties go by reading order, then by note.
+- Only open threads are listed, oldest first; ties go by the older note, then reading order.
 - The page's copy of the open note wins over the store's: a thread tied off on the page is
   gone before the save, a thread opened a moment ago is there.
 - The same thread id in two notes makes two rows, each going to its own note.
@@ -247,46 +251,15 @@ its top.
 `src/shortcuts.rs`'s own tests cover the new key: every binding has a labelled row, and the
 defaults do not clash.
 
-**Scenarios**, with the fake brain (`brain/test/e2e/scenarios/le*.txt`, tag `loose-ends`):
+**Scenarios**, with the fake brain (`brain/test/e2e/scenarios/le*.txt`, tag `loose-ends`;
+`scripts/dev e2e loose-ends` runs them):
 
-`le01-loose-ends` (fixture `loose-ends`: four notes, two in folders, one waiting to be
-asked, one untitled, threads open, tied off and dismissed, the same thread id twice):
-
-```
-key: shift-cmd-k
-dump: opened
-expect: d.loose_ends.open && d.loose_ends.focused           // the search box has the keyboard
-expect: d.loose_ends.rows.map(r => r.thread).join() === "b1,t1,t2,u1"   // oldest first, open only
-expect: d.loose_ends.rows.find(r => r.thread === "b1").folder === "Work"
-key: down enter
-dump: went
-expect: d.note.title === "Sub-50 10k by March" && d.active === "t1" && d.focus === "reply"
-expect: !d.loose_ends.open
-key: shift-cmd-k
-dump: walked
-expect: d.loose_ends.selected === 2                          // the row after the one we went to
-key: k i l o
-dump: narrowed
-expect: d.loose_ends.rows.length === 1
-key: escape
-dump: closed
-expect: !d.loose_ends.open && d.focus === "note"
-expect: tasks.length === 0                                   // nothing went to the brain
-```
-
-(Sketched here; the files in `brain/test/e2e/scenarios/` are the real ones.)
-
-`le02-tied-while-open` (fixture `running-plan`): fix "5:30" to "4:55" with `[[resolved]]`,
-open the list before the pause ends, wait for the recheck; the row is still there and reads
-"tied off"; Return goes to the words with the tied-off tag open; reopened, the list no
-longer has it.
-
-`le03-hundreds` (fixture `loose-ends-many`: 40 notes in folders, 200 open threads):
-Page Down to the end, the highlight is on the last row and the list scrolled with it;
-typing narrows to one; screenshots in Linen and Lamplight.
-
-`le04-waiting-and-hidden`: going to a thread in a note that waits to be asked sends no
-request; going with threads hidden shows them; going in Marks only opens the tag.
+| Scenario | Fixture | What it proves |
+|---|---|---|
+| `le01-loose-ends` | `loose-ends`: four notes, two in folders (Work folded), one waiting to be asked, one untitled, threads open, tied off and dismissed, the id `t2` in two notes | ⇧⌘K opens it with the keyboard in the search box; rows `b1@Q3 budget, t1, t2@Sub-50…, t2@Untitled`, open only; folder, mind, mark and "This note"; Return goes to the waiting note's thread with the keyboard in the reply box; reopening starts on the next row; ↓ Return goes to another note; typing "kilo" narrows to one; ⌘K and ⇧⌘K carry "kilo" across; Escape gives the keyboard back to the note; `tasks.length === 0`. Shots in Linen and Lamplight. |
+| `le02-tied-while-open` | `running-plan` | Fixing "5:30" with the card open: after the recheck the rows read `t1:tied off, t2:open`, still in place; Return opens `t1`'s tied-off tag; reopened, only `t2`; with both tied off, the list is empty and says so; the brain saw one `reply`. |
+| `le03-hundreds` | `loose-ends-many`: 40 notes, 200 open threads | 200 rows oldest first; thirty Page Downs end on row 199; Page Up and ↑ come back to 191; "skeptic week 39" narrows to one; Return goes there. Shots in Linen and Lamplight. |
+| `le04-hidden-marks-far` | `hard-content` | With threads hidden, going to one shows them; in Marks only, just its tag opens; "paragraph 30" in the sixty-paragraph note scrolls the page down to the words, with the keyboard in the reply box. |
 
 The dump gains `loose_ends`: `open`, `query`, `selected`, `count`, and `rows` (each `note`,
 `folder`, `thread`, `quote`, `mind`, `mark`, `state`, `here`, `age`). With the card closed,
@@ -301,7 +274,7 @@ New:
 | `src/loose_ends.rs` | The list: `collect` (rows from the store and the page's note), `narrow`, `age_words`, `who`, `start_at` (walking), `refresh` (each row's state), `describe` (the dump); the `LooseEnds` view (the card, its keys, `uniform_list` rows) and its `LooseEndsEvent` (`Go`, `Notes`, `Dismiss`). |
 | `src/app/goto.rs` | `AppView::open_loose_ends`, its events, `go_to_thread` (open the note, then the page's `go_to_thread`), switching between ⌘K and Loose ends with the typed words. |
 | `src/note_page/goto.rs` | `NotePage::go_to_thread` (show threads, caret, tag, reply box) and `finish_goto` (the scroll, once the note is laid out), `goto_offset` (the pure scroll rule). |
-| `brain/test/e2e/fixtures/loose-ends`, `loose-ends-many` | The notebooks above. |
+| `brain/test/e2e/fixtures/loose-ends`, `loose-ends-many` | The notebooks above, written by `design/tools/loose_ends_notebook.py`. |
 | `brain/test/e2e/scenarios/le01…le04` | The scenarios above. |
 
 Small hooks in shared files, each a few lines, new struct fields last:
@@ -329,6 +302,19 @@ owner.
    note are enough to recognise a thread, and its question is one Return away. Built that
    way; showing it is a one-line change if you want it.
 
-## Build notes
+## Build notes (7 Nov 2026)
 
-Filled in as the feature is built.
+Built as designed, on `feat-loose-ends`. What the build taught:
+
+- **The reply box waits for the tag.** A note opened a moment ago has no layout on its
+  first frame, so it draws no tag, and a reply box that is not drawn loses the keyboard
+  (the window then gives it back to the note). Going to a thread therefore leaves the
+  keyboard in the note until the note is laid out, scrolls, and hands the keyboard to the
+  reply box on the next frame, once the tag is drawn.
+- **The dump cannot read the page.** The page builds its dump while it is being updated,
+  so `loose_ends::describe` takes the page's note as an argument instead of reading the
+  page (a read there panics).
+- **`set_value` sends no Change.** The card narrows its rows itself when it opens with
+  words carried over from ⌘K.
+- **Scenario names.** Other agents number new scenarios `u12`, `u13`, …; these are `le01`
+  to `le04` (tag `loose-ends`) so the names cannot collide.

@@ -1,0 +1,157 @@
+{
+ "id": "00000000-0000-4000-8000-000000000220",
+ "title": "Running notes, week 21",
+ "folder": "f-run",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Running notes, week 21"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Two easy runs a week are enough to keep the base mileage up, in week 21 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The migration is safe because every write goes to both databases, in week 21 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Notes in the margin help me remember more of what I read, in week 21 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Watering in the evening loses less to the sun than the morning does, in week 21 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The long run moves to Saturday so Sunday can be a rest day, in week 21 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "We will cache the search results for an hour and nobody will notice, in week 21 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "m20-0",
+   "start": 23,
+   "end": 106,
+   "quote": "Two easy runs a week are enough to keep the base mileage up, in week 21 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-05-10T09:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-10T09:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m20-1",
+   "start": 108,
+   "end": 196,
+   "quote": "The migration is safe because every write goes to both databases, in week 21 of the plan",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-05-11T10:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-11T10:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m20-2",
+   "start": 198,
+   "end": 278,
+   "quote": "Notes in the margin help me remember more of what I read, in week 21 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-05-12T11:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-12T11:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m20-3",
+   "start": 280,
+   "end": 371,
+   "quote": "Watering in the evening loses less to the sun than the morning does, in week 21 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-05-13T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-13T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m20-4",
+   "start": 373,
+   "end": 455,
+   "quote": "The long run moves to Saturday so Sunday can be a rest day, in week 21 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-05-14T13:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-14T13:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m20-5",
+   "start": 457,
+   "end": 548,
+   "quote": "We will cache the search results for an hour and nobody will notice, in week 21 of the plan",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-05-15T14:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-15T14:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-01-25T09:00:00Z",
+ "updated_at": "2026-01-25T09:00:00Z"
+}

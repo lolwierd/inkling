@@ -1,0 +1,157 @@
+{
+ "id": "00000000-0000-4000-8000-000000000223",
+ "title": "Home notes, week 24",
+ "folder": "f-home",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Home notes, week 24"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Watering in the evening loses less to the sun than the morning does, in week 24 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The long run moves to Saturday so Sunday can be a rest day, in week 24 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "We will cache the search results for an hour and nobody will notice, in week 24 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Reading twenty pages a night gets me through a book a fortnight, in week 24 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The tomatoes go in the bed by the fence, where it is warmest, in week 24 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Interval sessions at 4:40 per km build the speed for race day, in week 24 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "m23-0",
+   "start": 20,
+   "end": 111,
+   "quote": "Watering in the evening loses less to the sun than the morning does, in week 24 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-05-29T03:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-29T03:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m23-1",
+   "start": 113,
+   "end": 195,
+   "quote": "The long run moves to Saturday so Sunday can be a rest day, in week 24 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-05-30T04:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-30T04:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m23-2",
+   "start": 197,
+   "end": 288,
+   "quote": "We will cache the search results for an hour and nobody will notice, in week 24 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-05-31T05:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-31T05:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m23-3",
+   "start": 290,
+   "end": 377,
+   "quote": "Reading twenty pages a night gets me through a book a fortnight, in week 24 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-06-01T06:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-01T06:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m23-4",
+   "start": 379,
+   "end": 463,
+   "quote": "The tomatoes go in the bed by the fence, where it is warmest, in week 24 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-06-02T07:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-02T07:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m23-5",
+   "start": 465,
+   "end": 550,
+   "quote": "Interval sessions at 4:40 per km build the speed for race day, in week 24 of the plan",
+   "kind": "correction",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-06-03T08:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-03T08:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-01-28T09:00:00Z",
+ "updated_at": "2026-01-28T09:00:00Z"
+}

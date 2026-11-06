@@ -1,0 +1,157 @@
+{
+ "id": "00000000-0000-4000-8000-000000000226",
+ "title": "Reading notes, week 27",
+ "folder": "f-read",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Reading notes, week 27"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Reading twenty pages a night gets me through a book a fortnight, in week 27 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The tomatoes go in the bed by the fence, where it is warmest, in week 27 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Interval sessions at 4:40 per km build the speed for race day, in week 27 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Moving the build to bigger machines halves the wait for everyone, in week 27 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "A weekly review on Friday afternoon keeps the inbox at zero, in week 27 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The kitchen shelves can hold the cookbooks if we drop the top one, in week 27 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "m26-0",
+   "start": 23,
+   "end": 110,
+   "quote": "Reading twenty pages a night gets me through a book a fortnight, in week 27 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-06-16T21:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-16T21:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m26-1",
+   "start": 112,
+   "end": 196,
+   "quote": "The tomatoes go in the bed by the fence, where it is warmest, in week 27 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-06-17T22:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-17T22:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m26-2",
+   "start": 198,
+   "end": 283,
+   "quote": "Interval sessions at 4:40 per km build the speed for race day, in week 27 of the plan",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-06-18T23:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-18T23:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m26-3",
+   "start": 285,
+   "end": 373,
+   "quote": "Moving the build to bigger machines halves the wait for everyone, in week 27 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-06-20T00:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-20T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m26-4",
+   "start": 375,
+   "end": 458,
+   "quote": "A weekly review on Friday afternoon keeps the inbox at zero, in week 27 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-06-21T01:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-21T01:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m26-5",
+   "start": 460,
+   "end": 549,
+   "quote": "The kitchen shelves can hold the cookbooks if we drop the top one, in week 27 of the plan",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-06-22T02:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-22T02:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-01-31T09:00:00Z",
+ "updated_at": "2026-01-31T09:00:00Z"
+}

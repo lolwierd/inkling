@@ -32,6 +32,8 @@ impl NotePage {
     /// asked for one; a thread that was dismissed has no tag, so only the caret goes to it.
     pub fn go_to_thread(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(thread) = self.note.threads.iter().find(|t| t.id == id).cloned() else { return };
+        // from the back of the note, the thread is on its front
+        self.leave_back(cx);
         if self.just_my_words {
             self.set_hidden(false, cx);
         }

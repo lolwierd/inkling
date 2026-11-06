@@ -488,9 +488,9 @@ does.
 `u14-turn-over-edges.txt`, from `running-plan` with silent reads: on the back, keys, ⌘↩ and
 ⇧⌘⌫ never reach the note or its open tag; Tab reaches the back's controls, Return opens the
 reason box, Esc leaves the reason as it was and Esc again turns back with the caret where it
-was; a point whose words were edited away offers no Reopen; Show on the page opens the tag;
-hiding threads turns the note to its front; an untitled note with no threads has the empty
-back. The fixture `every-ending` (one thread that ended each way) is for looking at the back.
+was; a point whose words were edited away offers no Reopen; Show on the page, and going to
+the thread from Loose ends, open the tag on the front; hiding threads turns the note to its
+front; an untitled note with no threads has the empty back. The fixture `every-ending` (one thread that ended each way) is for looking at the back.
 
 ## 7. Files and functions, and size
 
@@ -554,6 +554,8 @@ back. The fixture `every-ending` (one thread that ended each way) is for looking
   writes it under the message, as Copy does.
 - While a reason's box is open, its Add a reason or Change the reason steps aside: Return and
   Esc are the box's controls.
+- Going to a thread from Loose ends while the back shows turns the note to its front first
+  (one line in `note_page/goto.rs`).
 - The Markdown's heading date is when the thread was opened, as on the entry's top row;
   every message is copied, the folded ones too.
 - Shots: `design/features/shots/turn-it-over-{light,dark}.jpg` (the fixture `every-ending`),

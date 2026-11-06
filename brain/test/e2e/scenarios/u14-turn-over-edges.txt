@@ -1,8 +1,9 @@
 # Turn it over, the edges. On the back nothing reaches the note: not keys, not ⌘↩, not ⇧⌘⌫
 # on the open tag. Tab reaches the back's controls, Return opens the reason box, Esc leaves
 # the reason as it was, and Esc again turns back with the caret where it was. A point whose
-# words are gone offers no Reopen. Show on the page opens the thread's tag. Hiding threads
-# turns the note to its front. A note with no threads has an empty back.
+# words are gone offers no Reopen. Show on the page, and going to the thread from Loose
+# ends, open its tag on the front. Hiding threads turns the note to its front. A note with
+# no threads has an empty back.
 # fixture: running-plan
 # env: FAKE_READ_DEFAULT=silent
 wait: 1500
@@ -35,6 +36,12 @@ turn
 back-show: 1
 dump: shown
 expect: d.turned === false && d.active === "t1" && d.focus === "reply"
+turn
+open: loose
+key: enter
+settle
+dump: gone-to
+expect: d.turned === false && d.active === "t1" && d.focus === "reply"   // Loose ends goes to the front
 turn
 open: jmw
 dump: hidden

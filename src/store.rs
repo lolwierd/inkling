@@ -183,6 +183,10 @@ pub struct Note {
     /// Hashes of paragraphs already read along, so reopening a note stays quiet.
     #[serde(default)]
     pub read_hashes: Vec<u64>,
+    /// Paragraphs Inkling leaves alone without having read them: text that came with
+    /// the app, such as the welcome guide. They get no read mark in the gutter.
+    #[serde(default)]
+    pub left_alone: Vec<u64>,
     /// The first note of a new notebook: the first sentence written in it is always
     /// asked about, so the first question Inkling asks is about your own words.
     #[serde(default)]
@@ -215,6 +219,7 @@ impl Note {
             threads: vec![],
             chat: vec![],
             read_hashes: vec![],
+            left_alone: vec![],
             first_run: false,
             created_at: now,
             updated_at: now,

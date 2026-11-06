@@ -371,6 +371,8 @@ pub struct NotePage {
     last_dismissed: Option<(String, Range<usize>, std::time::Instant)>,
     /// The last keystroke in the note.
     last_typed: Option<std::time::Instant>,
+    /// Skip the next scroll to the caret (opening the welcome guide at its top).
+    hold_scroll: bool,
     /// Questions that arrived while you were typing: they wait, folded, until you pause.
     arrived: HashMap<String, std::time::Instant>,
     /// Open threads whose words you edited, with the words as they were before: looked
@@ -459,6 +461,7 @@ impl NotePage {
             numbers: HashMap::new(),
             last_dismissed: None,
             last_typed: None,
+            hold_scroll: false,
             chrome: Rc::new(std::cell::Cell::new(1.)),
             arrived: HashMap::new(),
             rechecks: HashMap::new(),
@@ -563,6 +566,8 @@ impl NotePage {
 
     pub fn focus_editor_at_end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let empty_title = self.editor.read(cx).title().is_empty();
+        // the welcome guide is read from the top, though its caret waits at the end
+        self.hold_scroll = self.note.first_run;
         self.editor.update(cx, |e, cx| {
             let target = if empty_title { 0 } else { e.text().len() };
             e.move_cursor_to(target, cx);
@@ -668,6 +673,9 @@ impl NotePage {
     }
 
     fn keep_cursor_visible(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.hold_scroll) {
+            return;
+        }
         let Some(rect) = self.editor.read(cx).cursor_window_rect() else { return };
         let view = window.viewport_size();
         let offset = self.scroll.offset();
@@ -879,7 +887,7 @@ impl NotePage {
             let verdict = judge(
                 &text,
                 line == cursor_line,
-                self.note.read_hashes.contains(&hash),
+                self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash),
                 self.calls_mind(&text),
                 self.note.mode == Mode::ThinksWithYou,
                 self.reading.is_some(),
@@ -2136,6 +2144,9 @@ impl NotePage {
             })).collect::<Vec<_>>(),
             "anchors": ed.anchors().iter().map(|a| json!({"id": short(&a.id), "range": [a.range.start, a.range.end], "open": a.open})).collect::<Vec<_>>(),
             "read_hashes": self.note.read_hashes.len(),
+            "left_alone": self.note.left_alone.len(),
+            // how far the page is scrolled down, in pixels (0 = at the top)
+            "scrolled": -self.scroll.offset().y.as_f32(),
             "waiting_tags": if self.typing_recently() { self.arrived.keys().map(|id| short(id)).collect::<Vec<_>>() } else { vec![] },
             "typing": self.typing_recently(),
             "rechecking": self.rechecking.iter().map(|id| short(id)).collect::<Vec<_>>(),

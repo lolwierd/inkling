@@ -34,6 +34,7 @@ gpui_kit::actions!(
         DismissThread,
         UndoDismiss,
         CloseOverlay,
+        ShowWelcome,
     ]
 );
 
@@ -86,6 +87,11 @@ pub fn init(cx: &mut App) {
                 MenuItem::action("Chat", ToggleChat),
                 MenuItem::action("Hide Threads", JustMyWords),
             ],
+            disabled: false,
+        },
+        Menu {
+            name: "Help".into(),
+            items: vec![MenuItem::action("Welcome Guide", ShowWelcome)],
             disabled: false,
         },
     ]);
@@ -476,6 +482,7 @@ impl AppView {
                 "about" => self.open_settings(Tab::AboutYou, window, cx),
                 "export" => self.open_export(window, cx),
                 "jmw" => self.toggle_jmw(cx),
+                "welcome" => self.show_welcome(window, cx),
                 _ => {}
             },
             Step::Close => {
@@ -725,6 +732,22 @@ impl AppView {
             store.save_note(&note);
             store.notes.insert(0, note);
         }
+        self.open_note(id, window, cx);
+    }
+
+    /// Help > Welcome Guide: the "Start here" note, or a fresh one if it was deleted.
+    fn show_welcome(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.page.update(cx, |p, cx| p.flush(cx));
+        let existing = cx.global::<Store>().notes.iter().find(|n| n.title == "Start here").map(|n| n.id.clone());
+        let id = existing.unwrap_or_else(|| {
+            let mode = cx.global::<Store>().settings.default_mode;
+            let note = crate::welcome::first_run_note(mode);
+            let id = note.id.clone();
+            let store = cx.global_mut::<Store>();
+            store.save_note(&note);
+            store.notes.insert(0, note);
+            id
+        });
         self.open_note(id, window, cx);
     }
 
@@ -1404,6 +1427,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &PrevThread, window, cx| this.page.update(cx, |p, cx| p.jump_to_open(false, window, cx))))
             .on_action(cx.listener(|this, _: &DismissThread, _, cx| this.page.update(cx, |p, cx| p.dismiss_active(cx))))
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
+            .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_mouse_move(cx.listener(Self::on_pointer))
             .child(div().flex_1().min_h(px(0.)).child(self.page.clone()))

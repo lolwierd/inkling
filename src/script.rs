@@ -14,7 +14,7 @@
 //! activate: 1
 //! reply: Fair, what's the cheapest fix?
 //! chat: What have we figured out so far?
-//! open: settings
+//! open: settings          # or sidebar, palette, minds, model, export, jmw, welcome
 //! ```
 //!
 //! Steps that type or move like a person, for the reading loop:

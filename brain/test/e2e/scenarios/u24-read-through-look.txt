@@ -13,7 +13,9 @@ expect: d.note.mode === "WhenYouAsk" && d.read_hashes === 0 && d.threads.length 
 shot: read-through-before
 wait: 2500
 caret: end
-key: shift-tab shift-tab shift-tab
+# from the left of the header, which other features do not grow: ⌃Tab leaves the note for
+# Chat, Tab goes round to ☰, then the mind, Tell Inkling and the mode
+key: ctrl-tab tab tab tab tab
 key: enter
 key: down
 dump: menu

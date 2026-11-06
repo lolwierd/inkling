@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "6 Nov 2026, 22:05 IST"
+UPDATED = "6 Nov 2026, 22:15 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -38,7 +38,7 @@ RUNNING = [
      "Nine small findings, a stitched focus ring with a Tab order, and toasts as one quiet stack in the thread look, "
      "with Undo and errors in the same place."),
     ("A README for people",
-     "Written last, with the film in it."),
+     "Written, with the film at the top; it gets a last pass when the two branches above land."),
     ("A fresh UI critique, last of all",
      "Once everything above has landed: a new pair of eyes on every screen, for consistency, overflows, borders and polish."),
 ]

@@ -39,12 +39,12 @@ What an `expect:` can see:
 
 | Name | What |
 |---|---|
-| `d` | the nearest `dump:` above this line (the page: `note`, `reading`, `waiting`, `pending`, `chat_pending`, `active`, `error`, `threads`, `anchors`, `slots`, `metrics`, `statuses`, ...; `debug_state` in `src/note_page.rs` builds it) |
+| `d` | the nearest `dump:` above this line (the page: `note`, `reading`, `waiting`, `pending`, `chat_pending`, `active`, `error`, `threads`, `anchors`, `slots`, `metrics`, `statuses`, `kinds` (each line's block kind: `paragraph`, `check:done`, `callout:tip`, `code:rust`), ...; `debug_state` in `src/note_page.rs` builds it) |
 | `dumps` | every dump by label |
 | `notes`, `settings`, `minds`, `folders`, `note(title)` | the notebook files after the app quit |
 | `requests`, `tasks` | what the app sent the brain (`{id, settings, input}`) and the task names, in order |
 | `events` | what the brain sent back (`done`, `error`, `status`, ...; streamed deltas are not logged) |
-| `log`, `warnings`, `exit` | app log records, script warnings, the exit code |
+| `log`, `warnings`, `exit` | app log records, script warnings, the exit code (`export: md` logs what Export would write, as `script export md: "…"`) |
 | `textOf(note)`, `rangeText(note, thread)`, `blockOf(note, thread or quote)` | a note's text as the app indexes it (blocks joined by `\n`), the text a thread's byte range covers, the block a thread starts in (0 is the title) |
 | `overlaps(d)` | how many margin tags in the dump overlap a neighbour on their side |
 

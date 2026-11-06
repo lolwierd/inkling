@@ -993,8 +993,8 @@ impl NotePage {
                     true
                 })
                 .map(|u| {
-                    let code = u.len() > 1 || ed.line_kind(u.start).is_code();
-                    let alone = code && (u.clone()).map(|l| ed.line_text(l)).filter(|t| !t.trim().is_empty()).all(|t| self.note.left_alone.contains(&hash_text(&t)));
+                    let code = ed.line_kind(u.start).is_code();
+                    let alone = code && u.clone().map(|l| ed.line_text(l)).filter(|t| !t.trim().is_empty()).all(|t| self.note.left_alone.contains(&hash_text(&t)));
                     (u.start, ed.lines_text(u.clone()).trim().to_string(), code && u.start == cursor_unit.start, alone)
                 })
                 .collect();

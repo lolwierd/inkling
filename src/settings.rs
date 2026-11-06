@@ -752,7 +752,14 @@ impl SettingsView {
             .child(section("Text size", Some("Your words, in Fraunces".into()), &t))
             .child(sizes)
             .child(section("Inkling’s lettering", None, &t))
-            .child(div().flex().gap(px(10.)).child(lettering("let-own", SANS, Lettering::Own, cx)).child(lettering("let-notes", SERIF, Lettering::LikeNotes, cx)))
+            .child(Lettering::ALL.iter().fold(div().flex().gap(px(10.)), |row, &l| {
+                // every lettering choice, as the other rows list theirs, in the face it means
+                let id = match l {
+                    Lettering::Own => "let-own",
+                    Lettering::LikeNotes => "let-notes",
+                };
+                row.child(lettering(id, crate::theme::lettering_face(l), l, cx))
+            }))
             .child(section("Inkling’s thread", None, &t))
             .child(group(
                 vec![

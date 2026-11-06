@@ -274,6 +274,12 @@ const SLACK: f32 = 0.08;
 const MAX_SLACK: f32 = 30.;
 /// Fixed simulation step; frames run one or more of these.
 const DT: f32 = 1. / 120.;
+/// Settling stops once the thread has been this still for [`QUIET_STEPS`] steps in a row:
+/// the most any point moved in a step, in pixels.
+const QUIET: f32 = 0.02;
+const QUIET_STEPS: usize = 12;
+/// ...and never runs longer than this, whatever the thread does.
+const SETTLE_MAX: usize = 480;
 
 /// One loose thread from the hole it comes up through (`a`) to the tag's loop (`b`).
 #[derive(Clone, Debug)]
@@ -302,7 +308,7 @@ impl Rope {
         let (a, b) = (p32(a), p32(b));
         let mut r = Rope { pts: vec![], prev: vec![], a, b, slack: 1., slack_to: 1., pinned_b: true, moving: false };
         r.lay_out();
-        r.settle(360);
+        r.settle();
         r
     }
 
@@ -344,29 +350,28 @@ impl Rope {
             return;
         }
         let far = dist(a, self.a) > 160. || dist(b, self.b) > 160.;
+        let shift = point(a.x - self.a.x, a.y - self.a.y);
+        // Both ends moved together (the words above reflowed, the page moved): the thread
+        // keeps its shape and goes with them, nothing to solve.
+        let together = self.pinned_b && (b.x - self.b.x - shift.x).abs() < 0.01 && (b.y - self.b.y - shift.y).abs() < 0.01;
         self.a = a;
         if self.pinned_b {
             self.b = b;
         }
-        if animate && !far {
+        if together {
+            for p in self.pts.iter_mut().chain(self.prev.iter_mut()) {
+                p.x += shift.x;
+                p.y += shift.y;
+            }
+        } else if animate && !far {
             // mid-animation (a tag folding while its thread ties off): let it follow
             self.moving = true;
         } else {
             // Re-hang it from a fresh sag. Letting the solver drag a settled thread to
             // ends that jumped can leave it zig-zagged; a fresh sag always settles smooth.
             self.lay_out();
-            self.settle(480);
+            self.settle();
         }
-    }
-
-    /// A light touch: the thread sways and settles (hovering its tag).
-    pub fn nudge(&mut self, strength: f32) {
-        for i in 1..POINTS - 1 {
-            let t = i as f32 / (POINTS - 1) as f32;
-            self.prev[i].x += strength * 0.6 * (PI * t).sin();
-            self.prev[i].y += strength * (PI * t).sin();
-        }
-        self.moving = true;
     }
 
     /// Tie off: pull the slack out over about 320 ms.
@@ -391,10 +396,6 @@ impl Rope {
         self.moving = true;
     }
 
-    pub fn is_cut(&self) -> bool {
-        !self.pinned_b
-    }
-
     /// Advance by `seconds` of simulated time.
     pub fn advance(&mut self, seconds: f32) {
         let steps = ((seconds / DT).round() as usize).clamp(1, 8);
@@ -403,15 +404,26 @@ impl Rope {
         }
     }
 
-    fn settle(&mut self, steps: usize) {
-        for _ in 0..steps {
-            self.step();
+    /// Run the thread to rest: until no point has moved more than [`QUIET`] for
+    /// [`QUIET_STEPS`] steps running, or [`SETTLE_MAX`] steps. Returns the steps it took.
+    fn settle(&mut self) -> usize {
+        let mut quiet = 0;
+        let mut steps = 0;
+        while steps < SETTLE_MAX {
+            let motion = self.step();
+            steps += 1;
+            quiet = if motion < QUIET { quiet + 1 } else { 0 };
+            if quiet >= QUIET_STEPS {
+                break;
+            }
         }
         self.prev = self.pts.clone();
         self.moving = false;
+        steps
     }
 
-    fn step(&mut self) {
+    /// One step of the simulation; returns the most any point moved, in pixels.
+    fn step(&mut self) -> f32 {
         // ease the slack toward its target (tie-off takes about 0.32 s)
         if self.slack != self.slack_to {
             let rate = DT / 0.32;
@@ -493,7 +505,8 @@ impl Rope {
             self.pts[last] = self.b;
         }
         let slack_moving = (self.slack - self.slack_to).abs() > 0.001;
-        self.moving = slack_moving || motion > 0.02 || !self.pinned_b;
+        self.moving = slack_moving || motion > QUIET || !self.pinned_b;
+        motion
     }
 
     /// The thread as drawn: the simulated points, smoothed twice with a 1-2-1 filter
@@ -516,6 +529,7 @@ impl Rope {
     }
 
     /// The lowest point a cut thread has fallen to, relative to where it hangs from.
+    #[cfg(test)]
     pub fn drop_depth(&self) -> f32 {
         self.pts[POINTS - 1].y - self.a.y
     }
@@ -650,6 +664,37 @@ mod tests {
             r.advance(1. / 60.);
         }
         assert!(r.drop_depth() > before + 40., "fell from {before} to {}", r.drop_depth());
+    }
+
+    #[std::prelude::v1::test]
+    fn settling_stops_once_the_thread_is_still_and_lands_where_the_long_run_would() {
+        let mut r = Rope::new(point(px(0.), px(0.)), point(px(220.), px(-30.)));
+        r.lay_out();
+        let steps = r.settle();
+        assert!(steps < SETTLE_MAX / 2, "{steps} steps to rest");
+        let early = r.pts.clone();
+        r.lay_out();
+        for _ in 0..SETTLE_MAX {
+            r.step();
+        }
+        for (e, l) in early.iter().zip(&r.pts) {
+            assert!(dist(*e, *l) < 0.5, "early {e:?} vs long {l:?}");
+        }
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_whose_ends_move_together_keeps_its_shape() {
+        let mut r = Rope::new(point(px(10.), px(20.)), point(px(200.), px(60.)));
+        let before = r.pts.clone();
+        r.set_ends(point(px(10.), px(44.)), point(px(200.), px(84.)), false);
+        assert!(!r.moving);
+        for (b, p) in before.iter().zip(&r.pts) {
+            assert!((p.x - b.x).abs() < 1e-4 && (p.y - b.y - 24.).abs() < 1e-4, "{b:?} -> {p:?}");
+        }
+        // one end alone moving is a new hang, not a shift
+        let before = r.pts.clone();
+        r.set_ends(point(px(10.), px(44.)), point(px(240.), px(84.)), false);
+        assert!(before.iter().zip(&r.pts).any(|(b, p)| dist(*b, *p) > 1.));
     }
 
     #[std::prelude::v1::test]

@@ -13,6 +13,7 @@ mod loose_ends;
 mod margin;
 mod note_page;
 mod palette;
+mod perf;
 mod script;
 mod settings;
 mod sewn;

@@ -1,8 +1,7 @@
 //! Margin layout: where each thread card goes so it sits beside its words without
-//! overlapping its neighbours, plus the faint tethers that connect them.
+//! overlapping its neighbours.
 
 use gpui_kit::*;
-use gpui_kit::prelude::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::store::Side;
@@ -153,17 +152,6 @@ pub fn place(mut items: Vec<(String, Side, Pixels)>, heights: &HashMap<String, P
         out.extend(slots);
     }
     out
-}
-
-/// A soft curve from `from` to `to`, leaving and arriving horizontally.
-pub fn tether(window: &mut Window, from: Point<Pixels>, to: Point<Pixels>, color: Hsla, width: Pixels) {
-    let dx = (to.x - from.x) * 0.5;
-    let mut b = PathBuilder::stroke(width);
-    b.move_to(from);
-    b.cubic_bezier_to(to, point(from.x + dx, from.y), point(to.x - dx, to.y));
-    if let Ok(path) = b.build() {
-        window.paint_path(path, color);
-    }
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, HashSet},
     ops::Range,
     rc::Rc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::brain::{Brain, BrainMsg};
@@ -98,6 +98,100 @@ struct TagDrag {
     tab: Option<Bounds<Pixels>>,
 }
 
+/// Where the pointer is in relation to a tag, and since when: what decides whether the
+/// tag drops open on its own.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+enum Hover {
+    /// Not on it.
+    #[default]
+    Away,
+    /// On its tab, its open panel, or both, since `since`: when it came onto the first part.
+    Over { tab: bool, panel: bool, since: Instant },
+    /// It left an open tag at `at` (which had rested since `since`): the tag stays open a
+    /// moment, in case the pointer is on its way from the tab onto the panel, and coming
+    /// back within that moment is the same rest.
+    Left { at: Instant, since: Instant },
+}
+
+impl Hover {
+    /// The pointer came onto (`on`) or left the tag's tab (`tab`), else its panel; `open`
+    /// is whether the tag had rested open. Leaving an open tag starts the grace period;
+    /// leaving one that had not opened yet ends the rest.
+    fn part(self, tab: bool, on: bool, now: Instant, open: bool) -> Hover {
+        match (self, on) {
+            (Hover::Over { tab: t, panel: p, since }, true) => Hover::Over { tab: t || tab, panel: p || !tab, since },
+            (Hover::Left { at, since }, true) if now.duration_since(at) < FOLD_DELAY => Hover::Over { tab, panel: !tab, since },
+            (_, true) => Hover::Over { tab, panel: !tab, since: now },
+            (Hover::Over { tab: t, panel: p, since }, false) => {
+                let (t, p) = if tab { (false, p) } else { (t, false) };
+                if t || p {
+                    Hover::Over { tab: t, panel: p, since }
+                } else if open {
+                    Hover::Left { at: now, since }
+                } else {
+                    Hover::Away
+                }
+            }
+            (other, false) => other,
+        }
+    }
+
+    /// The pointer has rested on the tag for [`HOVER_REST`], and nothing was typed since it
+    /// came to rest (a key in the note folds a tag).
+    fn rested(&self, now: Instant, last_typed: Option<Instant>) -> bool {
+        match self {
+            Hover::Over { since, .. } => now.duration_since(*since) >= HOVER_REST && last_typed.is_none_or(|k| k < *since),
+            _ => false,
+        }
+    }
+
+    /// The pointer just left: the tag stays open for [`FOLD_DELAY`].
+    fn lingering(&self, now: Instant) -> bool {
+        matches!(self, Hover::Left { at, .. } if now.duration_since(*at) < FOLD_DELAY)
+    }
+
+    /// About to change on its own (a rest about to pass, a grace period running), so the
+    /// page needs a frame without an event to bring it.
+    fn settling(&self, now: Instant) -> bool {
+        match self {
+            Hover::Over { since, .. } => now.duration_since(*since) < HOVER_REST,
+            Hover::Left { at, .. } => now.duration_since(*at) < FOLD_DELAY,
+            Hover::Away => false,
+        }
+    }
+}
+
+/// A tag between frames: where the pointer is, and how far it has dropped open (0 folded,
+/// 1 open) with its spring's speed.
+#[derive(Clone, Copy, Debug, Default)]
+struct Tag {
+    hover: Hover,
+    unfold: f32,
+    unfold_v: f32,
+}
+
+impl Tag {
+    /// One frame of the drop spring toward `target`, `dt` seconds long: whether it still moves.
+    /// A tag opens on a spring that overshoots about 4% and settles, and folds on a stiffer
+    /// one that does not bounce ([`DROP_OPEN`], [`DROP_CLOSE`]).
+    fn step(&mut self, target: f32, dt: f32) -> bool {
+        if (self.unfold - target).abs() < 0.002 && self.unfold_v.abs() < 0.02 {
+            self.unfold = target;
+            self.unfold_v = 0.;
+            return false;
+        }
+        let (k, c) = if target > 0.5 { DROP_OPEN } else { DROP_CLOSE };
+        // small steps, so a slow frame does not throw the spring
+        let steps = (dt * 240.).ceil().max(1.);
+        let h = dt / steps;
+        for _ in 0..steps as usize {
+            self.unfold_v += (k * (target - self.unfold) - c * self.unfold_v) * h;
+            self.unfold += self.unfold_v * h;
+        }
+        true
+    }
+}
+
 /// A thread's colour. The note's own mind wears the thread you chose; every other mind
 /// has its own, the same one every time, so you can see at a glance who asked what.
 pub(crate) fn mind_thread(mind_name: &str, own: &str, chosen: crate::store::InkColor, t: &Theme) -> Hsla {
@@ -173,6 +267,32 @@ fn panel_fit(right: bool, width: f32, out: f32, back: f32, dragged: bool) -> (f3
     }
 }
 
+/// How far past the point where [`panel_fit`] would change sides a held tag has to be
+/// dragged before its open panel does: a tag dragged back and forth across that point
+/// keeps its side instead of flipping every frame.
+const PANEL_HYSTERESIS: f32 = 24.;
+
+/// [`panel_fit`] for a tag being dragged, knowing the side its panel opened on last frame
+/// (`was_right`). The side changes only once the room outward is [`PANEL_HYSTERESIS`]
+/// past the floor that decides it: back across the words only when even the narrowest
+/// panel is that far from fitting outward (and the room back is as clearly more), and
+/// outward again only when the room outward is that far over the floor. In between, the
+/// panel keeps its side at the width that side allows.
+fn panel_fit_held(was_right: bool, right: bool, width: f32, out: f32, back: f32) -> (f32, bool) {
+    let (w, side) = panel_fit(right, width, out, back, true);
+    if side == was_right {
+        (w, side)
+    } else if side != right {
+        // it would open back across the words: only once clearly short of room outward
+        if out + PANEL_HYSTERESIS < PANEL_FLOOR && back > out + PANEL_HYSTERESIS { (w, side) } else { (PANEL_FLOOR, right) }
+    } else if out >= PANEL_FLOOR + PANEL_HYSTERESIS || back <= out {
+        // it would open outward again: only once clearly back in room
+        (w, side)
+    } else {
+        (width.min(back).max(PANEL_FLOOR), was_right)
+    }
+}
+
 /// A tooltip for a key in the selection menu: what it makes, and its keys if it has
 /// any, as the keymap has them now (Settings › Shortcuts can change them).
 fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
@@ -219,6 +339,18 @@ const TASK_TIMEOUT: Duration = Duration::from_secs(600);
 /// Lines kept for a second look (left behind by the caret, or finished while a
 /// read was in flight).
 const MAX_WAITING: usize = 16;
+/// How long after the last keystroke a paragraph is looked at, on each pace.
+const PAUSE_REGULAR: Duration = Duration::from_millis(2200);
+const PAUSE_SLOW: Duration = Duration::from_millis(4600);
+/// Edits wait this long before they are written (quitting and switching notes flush).
+const SAVE_DEBOUNCE: Duration = Duration::from_millis(600);
+/// A press on a menu's own button this soon after a press outside closed it does not
+/// open it again.
+const MENU_RECLOSE: Duration = Duration::from_millis(400);
+/// A press on a tag that moves less than this is a click, not a drag.
+const DRAG_START: f32 = 4.;
+/// A click this soon after a drag ended is the drag's own release, not a click.
+const CLICK_AFTER_DRAG: Duration = Duration::from_millis(150);
 
 /// Page geometry for the current window width: the writing column in the
 /// middle and a margin on each side, sized about 4:2 column to
@@ -415,7 +547,6 @@ impl EventEmitter<PageEvent> for NotePage {}
 enum Menu {
     Mind,
     Mode,
-    Thread,
 }
 
 #[derive(Clone, Debug)]
@@ -431,6 +562,31 @@ struct Asking {
     /// The minds that will answer, side by side (Ask the room); at least one.
     room: Vec<Mind>,
     _sub: Subscription,
+}
+
+/// The chat's answer: none on its way, one streaming in, or why the last one never came
+/// (shown under the question, with Try again). An answer on its way and a reason none
+/// came never show at once.
+#[derive(Clone, Debug, PartialEq)]
+enum ChatReply {
+    None,
+    Streaming { req: String, partial: String },
+    Failed(String),
+}
+
+impl ChatReply {
+    fn streaming(&self) -> bool {
+        matches!(self, ChatReply::Streaming { .. })
+    }
+
+    /// Stop waiting for an answer, and forget a failure: the request to cancel, if one was
+    /// on its way.
+    fn take_request(&mut self) -> Option<String> {
+        match std::mem::replace(self, ChatReply::None) {
+            ChatReply::Streaming { req, .. } => Some(req),
+            _ => None,
+        }
+    }
 }
 
 /// The read in flight: its request, the line it reads, and that line's hash.
@@ -470,18 +626,15 @@ pub struct NotePage {
     menu_focus: FocusHandle,
     menu_pick: usize,
     menu_return: Option<FocusHandle>,
-    thread_menu_for: Option<String>,
     brief_input: Option<(Entity<InputState>, Subscription)>,
     pub chat_open: bool,
     chat_input: Entity<InputState>,
     /// The chat's scroll position: it follows the conversation to its newest line.
     chat_scroll: ScrollHandle,
-    /// Why the last chat question got no answer, shown under it with Try again.
-    chat_error: Option<String>,
     /// Threads whose question or reply got no answer: the request to send again, and why,
     /// shown in the tag under your words with Try again, as the chat does.
     unanswered: HashMap<String, (Value, String)>,
-    chat_pending: Option<(String, String)>,
+    chat_reply: ChatReply,
     pub just_my_words: bool,
     /// How present the window's controls are, 0..1: the app fades them while you type
     /// and brings them back when the pointer moves. The page's header row follows it.
@@ -518,16 +671,9 @@ pub struct NotePage {
     settle_task: Option<Task<()>>,
     /// Minds a script seats for its next ask.
     pending_room: Vec<String>,
-    /// How far each tag is unfolded (0 folded, 1 open), eased toward its target each frame.
-    unfold: HashMap<String, f32>,
-    /// Tags under the pointer, and when the pointer last left each.
-    /// Which parts of which tags the pointer is over: "<id>:tab" or "<id>:panel".
-    hover_tag: HashSet<String>,
-    hover_left: HashMap<String, std::time::Instant>,
-    /// When the pointer came onto each tag it is over (any part of it).
-    hover_at: HashMap<String, std::time::Instant>,
-    /// Each tag's unfold speed, for its spring.
-    unfold_v: HashMap<String, f32>,
+    /// Each visible tag between frames: the pointer's rest on it and how far it has
+    /// dropped open ([`Tag`]).
+    tags: HashMap<String, Tag>,
     /// A tag being dragged, and when the last drag ended (so its click is ignored).
     drag: Option<TagDrag>,
     last_drag_end: Option<std::time::Instant>,
@@ -535,6 +681,9 @@ pub struct NotePage {
     panel_heights: Heights,
     /// Each tab's bounds in the window at the last paint: where its panel has room to open.
     tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// The side each tag's panel opened on at the last frame (true: to the right), so a
+    /// dragged tag keeps its side through small moves (`panel_fit_held`).
+    panel_sides: HashMap<String, bool>,
     /// The sheet's bounds in the window at the last paint: tags are kept on the paper.
     sheet_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// Each unfolded tag's bounds at the last paint, and the column of your words, for
@@ -571,6 +720,11 @@ fn role_wire(r: Role) -> &'static str {
         Role::You => "you",
         Role::Mind => "mind",
     }
+}
+
+/// A thread's messages as the brain reads them (`own::message_json` says how one goes).
+fn messages_wire(messages: &[Message]) -> Vec<Value> {
+    messages.iter().map(own::message_json).collect()
 }
 
 impl NotePage {
@@ -615,14 +769,12 @@ impl NotePage {
             menu_focus: cx.focus_handle(),
             menu_pick: 0,
             menu_return: None,
-            thread_menu_for: None,
             brief_input: None,
             chat_open: false,
             chat_input,
             chat_scroll: ScrollHandle::new(),
-            chat_error: None,
             unanswered: HashMap::new(),
-            chat_pending: None,
+            chat_reply: ChatReply::None,
             just_my_words: false,
             enlarged: None,
             back: crate::back::Back::new(cx),
@@ -642,15 +794,12 @@ impl NotePage {
             rechecking: HashSet::new(),
             settle_task: None,
             pending_room: vec![],
-            unfold: HashMap::new(),
-            hover_tag: HashSet::new(),
-            hover_left: HashMap::new(),
-            hover_at: HashMap::new(),
-            unfold_v: HashMap::new(),
+            tags: HashMap::new(),
             drag: None,
             last_drag_end: None,
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
             tab_bounds: Rc::new(RefCell::new(HashMap::new())),
+            panel_sides: HashMap::new(),
             sheet_bounds: Rc::new(Cell::new(None)),
             panel_bounds: Rc::new(RefCell::new(HashMap::new())),
             column_bounds: Rc::new(Cell::new(None)),
@@ -734,14 +883,13 @@ impl NotePage {
         }
         self.own_calls.clear();
         self.flush(cx);
-        if let Some((req, _)) = self.chat_pending.take() {
+        if let Some(req) = self.chat_reply.take_request() {
             self.cancel_request(&req, cx);
         }
         // A pause timer started on this note must not read the next one.
         self.pause_task = None;
         self.last_edited = None;
         self.waiting.clear();
-        self.chat_error = None;
         // as the chat's failure line, a tag's goes with the note it was on
         self.unanswered.clear();
         self.mind = cx.global::<Store>().mind(&note.mind_id);
@@ -758,6 +906,28 @@ impl NotePage {
         self.back.reset();
         self.heights.borrow_mut().clear();
         self.marks_open.clear();
+        self.panel_sides.clear();
+        // Nothing of the old note's threads stays behind: looks-again that were due, the
+        // needle, questions waiting for a pause, a drag, the pointer's rest, the springs,
+        // the threads and their motion, the measured tags and the room a script seats. (The
+        // last dismissal stays: Undo puts a thread between notes back from either end, and
+        // skips a thread the note does not have.)
+        self.rechecks.clear();
+        self.rechecking.clear();
+        self.arrived.clear();
+        self.drag = None;
+        self.last_drag_end = None;
+        self.tags.clear();
+        self.tying.clear();
+        self.ropes.clear();
+        self.snipped.clear();
+        self.copied = None;
+        self.numbers.clear();
+        self.panel_heights.borrow_mut().clear();
+        self.tab_bounds.borrow_mut().clear();
+        self.panel_bounds.borrow_mut().clear();
+        self.menu_closed = None;
+        self.pending_room.clear();
         self.load_into_editor(cx);
         self.scroll.set_offset(point(px(0.), px(0.)));
         self.focus_editor_at_end(window, cx);
@@ -809,19 +979,23 @@ impl NotePage {
         self.note.updated_at = kept.unwrap_or_else(Utc::now);
         let note = crate::between::save_visitors_home(&self.note, cx.global_mut::<Store>());
         let store = cx.global_mut::<Store>();
-        match store.notes.iter_mut().find(|n| n.id == note.id) {
-            Some(n) => *n = note.clone(),
-            None => store.notes.insert(0, note.clone()),
-        }
-        store.save_note(&note);
+        let saved = store.try_save_note(&note);
         store.settings.last_note = Some(note.id.clone());
+        match store.notes.iter_mut().find(|n| n.id == note.id) {
+            Some(n) => *n = note,
+            None => store.notes.insert(0, note),
+        }
         store.save_settings();
+        if let Err(e) = saved {
+            // The words are still on the page; say that they are not on the disk.
+            self.notice(format!("Couldn't save this note: {e:#}"), cx);
+        }
         cx.emit(PageEvent::NotesChanged);
     }
 
     fn schedule_save(&mut self, cx: &mut Context<Self>) {
         self.save_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(600)).await;
+            cx.background_executor().timer(SAVE_DEBOUNCE).await;
             let _ = this.update(cx, |page, cx| page.flush(cx));
         }));
     }
@@ -891,11 +1065,10 @@ impl NotePage {
             return true;
         }
         // a tag that only unfolded under the pointer folds first
-        let hover_open = self.hover_at.keys().chain(self.hover_left.keys()).any(|id| {
-            self.active.as_deref() != Some(id.as_str()) && self.unfold.get(id).copied().unwrap_or(0.) > 0.5
-        });
-        self.hover_at.clear();
-        self.hover_left.clear();
+        let hover_open = self.tags.iter().any(|(id, t)| t.hover != Hover::Away && self.active.as_deref() != Some(id.as_str()) && t.unfold > 0.5);
+        for t in self.tags.values_mut() {
+            t.hover = Hover::Away;
+        }
         if hover_open {
             cx.notify();
             return true;
@@ -1040,8 +1213,8 @@ impl NotePage {
 
     fn schedule_pause(&mut self, cx: &mut Context<Self>) {
         let delay = match cx.global::<Store>().settings.pace {
-            Pace::Regular => Duration::from_millis(2200),
-            Pace::Slow => Duration::from_millis(4600),
+            Pace::Regular => PAUSE_REGULAR,
+            Pace::Slow => PAUSE_SLOW,
         };
         self.pause_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(delay).await;
@@ -1132,7 +1305,7 @@ impl NotePage {
     /// waits for this. Learning about the writer runs untracked, and saves wait 600 ms
     /// (quitting flushes them); neither shows on the page.
     pub(crate) fn settled(&self) -> bool {
-        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
+        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && !self.chat_reply.streaming() && !self.typing_recently() && self.goto.is_none()
             && self.relating.is_none() && self.relate_next.is_none()
             && self.read_through.is_none()
     }
@@ -1144,7 +1317,7 @@ impl NotePage {
             return;
         }
         let lr = ed.line_range(line);
-        let text = ed.text().to_string();
+        let text = ed.text();
         let touched: Vec<(String, Range<usize>)> = ed
             .anchors()
             .iter()
@@ -1186,7 +1359,7 @@ impl NotePage {
             "task": "reply",
             "ctx": self.context(cx),
             "quote": before,
-            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+            "messages": messages_wire(&t.messages),
             "message": message,
         });
         let input = self.between_reply(&t, input, cx);
@@ -1320,7 +1493,7 @@ impl NotePage {
                     "notAnswers": t.not_answers,
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
-                    "messages": t.messages.iter().map(own::message_json).collect::<Vec<_>>(),
+                    "messages": messages_wire(&t.messages),
                     "elsewhere": crate::between::summary_wire(&self.note, &t.id),
                     "own": t.own,
                 })
@@ -1430,9 +1603,11 @@ impl NotePage {
                 return;
             }
             let _ = this.update(cx, |page, cx| {
+                // The brain stops working on it either way; the page hears about it only
+                // for a request it still shows (learning about the writer shows nothing).
+                log::warn!("request {req_id} timed out after {}s", timeout.as_secs());
+                page.cancel_request(&req_id, cx);
                 if page.tracks(&req_id) {
-                    log::warn!("request {req_id} timed out after {}s", timeout.as_secs());
-                    page.cancel_request(&req_id, cx);
                     let deliver = deliver.clone();
                     cx.defer(move |cx| {
                         deliver(BrainMsg::Error { kind: "timeout".into(), message: "the model took too long to answer".into() }, cx)
@@ -1449,7 +1624,7 @@ impl NotePage {
         self.reading.as_ref().is_some_and(|r| r.req == req)
             || self.relating.as_ref().is_some_and(|r| r.req == req)
             || self.pending.values().any(|(r, _)| r == req)
-            || self.chat_pending.as_ref().is_some_and(|(r, _)| r == req)
+            || matches!(&self.chat_reply, ChatReply::Streaming { req: r, .. } if r == req)
     }
 
     fn cancel_request(&self, req: &str, cx: &mut Context<Self>) {
@@ -1545,7 +1720,8 @@ impl NotePage {
         let reads = task == "read";
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
-                page.reading = None;
+                // the line it was sent as, moved with the lines added or taken away since
+                let line = page.reading.take().map_or(line, |r| r.line);
                 if let Some(n) = v["repeats"].as_u64() {
                     log::info!("read held back: it makes let-stand point {n} again");
                 }
@@ -2133,7 +2309,7 @@ impl NotePage {
             "task": "reply",
             "ctx": self.context(cx),
             "quote": t.quote,
-            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+            "messages": messages_wire(&t.messages),
             "message": dispute.unwrap_or(text.clone()),
         });
         let input = self.between_reply(&t, input, cx);
@@ -2394,27 +2570,26 @@ impl NotePage {
 
     fn clear_chat(&mut self, cx: &mut Context<Self>) {
         // An answer still on its way belongs to the conversation being cleared.
-        if let Some((req, _)) = self.chat_pending.take() {
+        if let Some(req) = self.chat_reply.take_request() {
             self.cancel_request(&req, cx);
         }
         self.note.chat.clear();
-        self.chat_error = None;
         self.schedule_save(cx);
         cx.notify();
     }
 
     /// Send the question the chat failed on again.
     fn retry_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.chat_pending.is_some() || self.note.chat.last().is_none_or(|m| m.role != Role::You) {
+        if self.chat_reply.streaming() || self.note.chat.last().is_none_or(|m| m.role != Role::You) {
             return;
         }
         let Some(last) = self.note.chat.pop() else { return };
-        self.chat_error = None;
+        self.chat_reply = ChatReply::None;
         self.send_chat(Some(last.text), window, cx);
     }
 
     fn send_chat(&mut self, preset: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
-        if self.chat_pending.is_some() {
+        if self.chat_reply.streaming() {
             return;
         }
         let text = match preset {
@@ -2445,18 +2620,18 @@ impl NotePage {
         });
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Delta(d) => {
-                if let Some((_, s)) = page.chat_pending.as_mut() {
-                    s.push_str(&d);
+                if let ChatReply::Streaming { partial, .. } = &mut page.chat_reply {
+                    partial.push_str(&d);
                 }
                 page.chat_scroll.scroll_to_bottom();
                 cx.notify();
             }
             BrainMsg::Done(v) => {
-                page.chat_pending = None;
+                page.chat_reply = ChatReply::None;
                 page.chat_scroll.scroll_to_bottom();
                 let text = v["text"].as_str().unwrap_or("").trim().to_string();
                 if text.is_empty() {
-                    page.chat_error = Some("Inkling came back with nothing to say.".into());
+                    page.chat_reply = ChatReply::Failed("Inkling came back with nothing to say.".into());
                 } else {
                     page.note.chat.push(ChatMessage { role: Role::Mind, text, at: Utc::now() });
                     page.schedule_save(cx);
@@ -2464,12 +2639,12 @@ impl NotePage {
                 cx.notify();
             }
             BrainMsg::Error { kind, message } => {
-                page.chat_pending = None;
+                page.chat_reply = ChatReply::None;
                 // Said in the chat, under the question it failed on, with Try again (after
                 // this update, as `report` does).
                 if kind != "cancelled" {
                     page.later(cx, move |page, cx| {
-                        page.chat_error = Some(page.describe_failure(&kind, &message, cx));
+                        page.chat_reply = ChatReply::Failed(page.describe_failure(&kind, &message, cx));
                         page.chat_scroll.scroll_to_bottom();
                         cx.notify();
                     });
@@ -2477,8 +2652,7 @@ impl NotePage {
                 cx.notify();
             }
         });
-        self.chat_error = None;
-        self.chat_pending = Some((req, String::new()));
+        self.chat_reply = ChatReply::Streaming { req, partial: String::new() };
         self.schedule_save(cx);
         cx.notify();
     }
@@ -2710,9 +2884,12 @@ impl NotePage {
             Step::WriteIn | Step::UndoWriteIn => self.write_in_step(step, window, cx),
             Step::Jump(forward) => self.jump_to_open(*forward, window, cx),
             Step::Hover(n) => {
-                let ids: Vec<String> = self.hover_tag.drain().filter_map(|k| k.split_once(':').map(|(id, _)| id.to_string())).collect();
-                for id in ids {
-                    self.hover_left.insert(id, std::time::Instant::now());
+                // the pointer moves away from every tag it was on
+                let now = Instant::now();
+                for t in self.tags.values_mut() {
+                    if let Hover::Over { since, .. } = t.hover {
+                        t.hover = Hover::Left { at: now, since };
+                    }
                 }
                 if let Some(id) = (*n > 0).then(|| self.nth_thread(*n)).flatten() {
                     self.set_tag_hover(&id, "tab", true, cx);
@@ -2795,7 +2972,10 @@ impl NotePage {
                 "req": req,
                 "state": match p { Pending::Thinking => "thinking".to_string(), Pending::Streaming(s) => format!("streaming:{s}"), Pending::Sketching => "sketching".to_string() },
             })).collect::<Vec<_>>(),
-            "chat_pending": self.chat_pending.as_ref().map(|(req, s)| json!({"req": req, "partial": s})),
+            "chat_pending": match &self.chat_reply {
+                ChatReply::Streaming { req, partial } => json!({"req": req, "partial": partial}),
+                _ => Value::Null,
+            },
             "chat": self.note.chat.len(),
             "active": self.active.as_deref().map(short),
             "error": error,
@@ -2823,7 +3003,10 @@ impl NotePage {
             "copied": self.copied.as_ref().filter(|(_, at)| at.elapsed() < COPIED_FOR).map(|(id, _)| short(id)),
             "brief_editing": self.brief_input.is_some(),
             "chat_open": self.chat_open,
-            "chat_error": self.chat_error,
+            "chat_error": match &self.chat_reply {
+                ChatReply::Failed(why) => Value::String(why.clone()),
+                _ => Value::Null,
+            },
             "hidden": self.just_my_words,
             "asking": self.asking.is_some(),
             "last_edited": self.last_edited,
@@ -2853,7 +3036,7 @@ impl NotePage {
             "first_run": self.note.first_run,
             "statuses": self.note.threads.iter().map(|t| format!("{}:{:?}:{}", short(&t.id), t.status, t.mind_name)).collect::<Vec<_>>(),
             // tags more than half unfolded, and tags moved from where the margin puts them
-            "unfolded": self.unfold.iter().filter(|(_, u)| **u > 0.5).map(|(id, _)| short(id)).collect::<Vec<_>>(),
+            "unfolded": self.tags.iter().filter(|(_, t)| t.unfold > 0.5).map(|(id, _)| short(id)).collect::<Vec<_>>(),
             "moved_tags": self.note.threads.iter().filter(|t| t.tag_offset != (0., 0.)).map(|t| format!("{}:{:.0},{:.0}", short(&t.id), t.tag_offset.0, t.tag_offset.1)).collect::<Vec<_>>(),
         });
         // the paper you can see and each tab, in the window at the last paint: a dragged tag
@@ -3045,7 +3228,7 @@ impl NotePage {
     /// the press outside the menu has just closed it, and must not open it again. An open
     /// menu takes the keyboard, on the item chosen now, so the arrow keys work at once.
     fn toggle_menu(&mut self, menu: Menu, window: &mut Window, cx: &mut Context<Self>) {
-        let just_closed = self.menu_closed.is_some_and(|(m, at)| m == menu && at.elapsed() < Duration::from_millis(400));
+        let just_closed = self.menu_closed.is_some_and(|(m, at)| m == menu && at.elapsed() < MENU_RECLOSE);
         self.menu_closed = None;
         self.menu = if self.menu == Some(menu) || just_closed { None } else { Some(menu) };
         if self.menu.is_some() {
@@ -3264,12 +3447,6 @@ impl NotePage {
         )
     }
 
-    /// The header's menus hang under their own buttons (see [`Self::drop_down`]), so
-    /// nothing is drawn for them at the page level any more.
-    fn menus(&mut self, _cx: &mut Context<Self>) -> Option<AnyElement> {
-        None
-    }
-
     /// The card for a header menu: the minds, each in its own thread colour, or the modes.
     fn menu_card(&mut self, menu: Menu, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
@@ -3337,7 +3514,7 @@ impl NotePage {
                     )
                     .into_any_element()
             }
-            Menu::Mode | Menu::Thread => {
+            Menu::Mode => {
                 let current = self.note.mode;
                 let pick = self.menu_pick;
                 let focus = self.menu_focus.clone();
@@ -3517,7 +3694,7 @@ impl NotePage {
         let is_active = self.active.as_deref() == Some(id.as_str());
         let tied = thread.status == ThreadStatus::Resolved;
         let thread_color = if thread.own { own::ink(&t) } else { mind_thread(&thread.mind_name, &self.mind.name, cx.global::<Store>().settings.ink, &t) };
-        let unfold = self.unfold.get(&id).copied().unwrap_or(0.);
+        let unfold = self.tags.get(&id).map_or(0., |t| t.unfold);
         let since = self.tying.get(&id).map(|at| anim_since(*at, std::time::Instant::now()));
         let fade = if tied && !is_active { tag_fade(since) } else { 1. };
         let number = self.numbers.get(&id).copied();
@@ -3669,7 +3846,12 @@ impl NotePage {
             // paper on the words' side
             let window_w = self.viewport.width.as_f32();
             let (out, back) = if right { (window_w - 8. - tab_l, tab_r - (left + 8.)) } else { (tab_r - 8., right_edge - 8. - tab_l) };
-            (width, open_right) = panel_fit(right, width, out, back, thread.tag_offset != (0., 0.));
+            let held = self.drag.as_ref().filter(|d| d.id == id && d.moved).and_then(|_| self.panel_sides.get(&id).copied());
+            (width, open_right) = match held {
+                Some(was_right) => panel_fit_held(was_right, right, width, out, back),
+                None => panel_fit(right, width, out, back, thread.tag_offset != (0., 0.)),
+            };
+            self.panel_sides.insert(id.clone(), open_right);
             let below = px(bottom - 8.) - b.origin.y;
             if natural > below {
                 lift = (natural - below).min((b.origin.y - px(top + 4.)).max(px(0.)));
@@ -3981,32 +4163,12 @@ impl NotePage {
     /// Pointer over a tag (its tab or its open panel). Leaving starts a short grace
     /// period so moving from the tab onto the panel does not fold it.
     fn set_tag_hover(&mut self, id: &str, part: &str, hovered: bool, cx: &mut Context<Self>) {
-        let key = format!("{id}:{part}");
-        if hovered {
-            self.hover_tag.insert(key);
-            self.hover_at.entry(id.to_string()).or_insert_with(std::time::Instant::now);
-        } else {
-            let was_open = self.tag_rested(id);
-            self.hover_tag.remove(&key);
-            if !self.tag_pointed(id) {
-                self.hover_at.remove(id);
-                if was_open {
-                    self.hover_left.insert(id.to_string(), std::time::Instant::now());
-                }
-            }
-        }
+        let now = Instant::now();
+        let last_typed = self.last_typed;
+        let tag = self.tags.entry(id.to_string()).or_default();
+        let open = tag.hover.rested(now, last_typed);
+        tag.hover = tag.hover.part(part == "tab", hovered, now, open);
         cx.notify();
-    }
-
-    fn tag_pointed(&self, id: &str) -> bool {
-        self.hover_tag.contains(&format!("{id}:tab")) || self.hover_tag.contains(&format!("{id}:panel"))
-    }
-
-    /// The pointer has rested on this tag long enough to unfold it, and you have not
-    /// typed since it came to rest (a key in the note folds it).
-    fn tag_rested(&self, id: &str) -> bool {
-        let Some(at) = self.hover_at.get(id) else { return false };
-        self.tag_pointed(id) && at.elapsed() >= HOVER_REST && self.last_typed.is_none_or(|k| k < *at)
     }
 
     /// Click a tab: open it (and its reply box), or close it if it is the open one.
@@ -4039,7 +4201,7 @@ impl NotePage {
     /// 8 px in from its edges. A press that moves less than 4 px is still a click.
     fn drag_tag_by(&mut self, delta: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(d) = self.drag.as_mut() else { return };
-        if !d.moved && (delta.x.abs() + delta.y.abs()) < px(4.) {
+        if !d.moved && (delta.x.abs() + delta.y.abs()) < px(DRAG_START) {
             return;
         }
         d.moved = true;
@@ -4059,6 +4221,50 @@ impl NotePage {
         cx.notify();
     }
 
+    /// The pointer moved while a tag is held: drag it, or (the button came up outside the
+    /// window) let it go.
+    fn drag_pointer(&mut self, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let Some(start) = self.drag.as_ref().map(|d| d.start) else { return };
+        if ev.dragging() {
+            self.drag_tag_by(ev.position - start, cx);
+        } else {
+            self.end_tag_drag(cx);
+        }
+    }
+
+    /// While a tag is held, the page hears the pointer from the window itself rather than
+    /// from what is under it: the tag, and the panel that unfolds over it, occlude the
+    /// page, so a handler on the page would hear only the moves that slip off the tag,
+    /// and the tag would follow the pointer in jumps.
+    fn drag_listener(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.drag.as_ref()?;
+        let this = cx.entity().downgrade();
+        Some(
+            canvas(
+                |_, _, _| (),
+                move |_, _, window, _| {
+                    let page = this.clone();
+                    window.on_mouse_event(move |ev: &MouseMoveEvent, phase, _, cx| {
+                        if phase == DispatchPhase::Bubble {
+                            let _ = page.update(cx, |p, cx| p.drag_pointer(ev, cx));
+                        }
+                    });
+                    let page = this.clone();
+                    window.on_mouse_event(move |ev: &MouseUpEvent, phase, _, cx| {
+                        if phase == DispatchPhase::Bubble && ev.button == MouseButton::Left {
+                            let _ = page.update(cx, |p, cx| p.end_tag_drag(cx));
+                        }
+                    });
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .into_any_element(),
+        )
+    }
+
     fn end_tag_drag(&mut self, cx: &mut Context<Self>) {
         if self.drag.take().is_some_and(|d| d.moved) {
             self.last_drag_end = Some(std::time::Instant::now());
@@ -4068,7 +4274,7 @@ impl NotePage {
     }
 
     fn drag_moved_recently(&self) -> bool {
-        self.drag.as_ref().is_some_and(|d| d.moved) || self.last_drag_end.is_some_and(|t| t.elapsed() < Duration::from_millis(150))
+        self.drag.as_ref().is_some_and(|d| d.moved) || self.last_drag_end.is_some_and(|t| t.elapsed() < CLICK_AFTER_DRAG)
     }
 
     /// How far each tag should be unfolded: open while pointed at (and a moment after),
@@ -4081,14 +4287,15 @@ impl NotePage {
         if th.status == ThreadStatus::Resolved {
             return 0.;
         }
-        if self.tag_rested(id) {
+        let now = Instant::now();
+        let hover = self.tags.get(id).map_or(Hover::Away, |t| t.hover);
+        if hover.rested(now, self.last_typed) {
             return 1.;
         }
         // a tag the pointer just left stays open a moment, unless another one has opened:
         // one tag unfolded at a time
-        let lingering = self.hover_left.get(id).is_some_and(|t| t.elapsed() < FOLD_DELAY);
-        let other = self.hover_at.keys().any(|o| o != id && self.tag_rested(o));
-        if lingering && !other && self.last_typed.is_none_or(|k| k.elapsed() > FOLD_DELAY) { 1. } else { 0. }
+        let other = self.tags.iter().any(|(o, t)| o != id && t.hover.rested(now, self.last_typed));
+        if hover.lingering(now) && !other && self.last_typed.is_none_or(|k| now.duration_since(k) > FOLD_DELAY) { 1. } else { 0. }
     }
 
     fn toolbar(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -4386,8 +4593,8 @@ impl NotePage {
         let title = self.editor.read(cx).title();
         let visible = self.note.visible_threads();
         let open = self.note.open_threads();
-        let empty = self.note.chat.is_empty() && self.chat_pending.is_none();
-        let busy = self.chat_pending.is_some();
+        let busy = self.chat_reply.streaming();
+        let empty = self.note.chat.is_empty() && !busy;
         let can_send = !busy && !self.chat_input.read(cx).value().trim().is_empty();
         let mut messages = div().flex().flex_col().gap(px(14.)).px(px(16.)).py(px(12.));
         if empty {
@@ -4449,7 +4656,7 @@ impl NotePage {
                     .into_any_element(),
             });
         }
-        if let Some((_, partial)) = &self.chat_pending {
+        if let ChatReply::Streaming { partial, .. } = &self.chat_reply {
             if partial.is_empty() {
                 messages = messages.child(div().flex().child(Self::thinking_dot(&t, "chat-thinking")));
             } else {
@@ -4463,7 +4670,7 @@ impl NotePage {
                 );
             }
         }
-        if let Some(err) = self.chat_error.clone() {
+        if let ChatReply::Failed(err) = self.chat_reply.clone() {
             messages = messages.child(
                 div()
                     .flex()
@@ -4706,6 +4913,7 @@ impl NotePage {
 
 impl Render for NotePage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let frame_started = std::time::Instant::now();
         let t = Theme::get(cx).clone();
         let p = t.p;
         let placement = cx.global::<Store>().settings.placement;
@@ -4793,41 +5001,27 @@ impl Render for NotePage {
         });
 
         // Margin tags: folded tabs that drop open on a spring toward their target.
+        let started = std::time::Instant::now();
         let (threads, slots, anchor_boxes) = self.margin_layout(placement, m, cx);
+        crate::perf::span("margin layout", started.elapsed());
         let mut unfolding = false;
         for th in &threads {
             let target = self.unfold_target(th);
-            let x = self.unfold.entry(th.id.clone()).or_insert(0.);
-            let v = self.unfold_v.entry(th.id.clone()).or_insert(0.);
-            if (*x - target).abs() < 0.002 && v.abs() < 0.02 {
-                *x = target;
-                *v = 0.;
-                continue;
-            }
-            let (k, c) = if target > 0.5 { DROP_OPEN } else { DROP_CLOSE };
-            // small steps, so a slow frame does not throw the spring
-            let steps = (dt * 240.).ceil().max(1.);
-            let h = dt / steps;
-            for _ in 0..steps as usize {
-                *v += (k * (target - *x) - c * *v) * h;
-                *x += *v * h;
-            }
-            unfolding = true;
+            unfolding |= self.tags.entry(th.id.clone()).or_default().step(target, dt);
         }
-        self.unfold.retain(|id, _| threads.iter().any(|t| &t.id == id));
-        self.unfold_v.retain(|id, _| threads.iter().any(|t| &t.id == id));
+        self.tags.retain(|id, _| threads.iter().any(|t| &t.id == id));
         // tabs and panels drawn this frame put their bounds back as they paint
         self.tab_bounds.borrow_mut().retain(|id, _| !jmw && slots.iter().any(|s| &s.id == id));
-        self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.unfold.get(id).is_some_and(|u| *u > 0.01));
+        self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.tags.get(id).is_some_and(|t| t.unfold > 0.01));
         // a pointer resting on a tag, or one that just left, changes it without an event
-        if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) || self.hover_at.values().any(|t| t.elapsed() < HOVER_REST) {
+        if self.tags.values().any(|t| t.hover.settling(now)) {
             unfolding = true;
         }
-        self.hover_left.retain(|_, t| t.elapsed() < FOLD_DELAY * 4);
         if unfolding {
             window.request_animation_frame();
         }
         let owner: AnyView = cx.entity().into();
+        let started = std::time::Instant::now();
         let mut cards = vec![];
         if !jmw {
             for slot in &slots {
@@ -4846,6 +5040,7 @@ impl Render for NotePage {
                 );
             }
         }
+        crate::perf::span("cards", started.elapsed());
 
         // Marks-only placement: a small ? after each quote opens its tag; a correction gets
         // the × its tab would show, and a thread being tied off its knot.
@@ -4888,6 +5083,7 @@ impl Render for NotePage {
         }
 
         // The threads: one rope per visible tag, kept between frames.
+        let started = std::time::Instant::now();
         let mut ropes: Vec<(Rope, f32, Option<f32>, Hsla)> = vec![];
         let mut holes: Vec<(Point<Pixels>, f32)> = vec![];
         if !jmw && placement != Placement::Marks {
@@ -4915,7 +5111,7 @@ impl Render for NotePage {
                 // A thread is quiet until you look at it: faint at rest, stronger while its
                 // tag unfolds under the pointer, full strength while it is open, and while it
                 // is being tied off.
-                let unfolded = self.unfold.get(&s.id).copied().unwrap_or(0.);
+                let unfolded = self.tags.get(&s.id).map_or(0., |t| t.unfold);
                 let opacity = if th.status == ThreadStatus::Resolved {
                     tag_fade(since)
                 } else if self.active.as_deref() == Some(s.id.as_str()) {
@@ -4940,6 +5136,7 @@ impl Render for NotePage {
         if self.ropes.values().any(|r| r.moving) || !self.snipped.is_empty() || !self.tying.is_empty() {
             window.request_animation_frame();
         }
+        crate::perf::span("ropes", started.elapsed());
         let shadow = p.shadow;
         let hole_color = p.graphite.opacity(0.5);
         let tethers = canvas(
@@ -5015,7 +5212,6 @@ impl Render for NotePage {
 
         let header = self.header(cx);
         let brief = self.brief_line(cx);
-        let menus = self.menus(cx);
         let toolbar = self.toolbar(cx);
         let ask = self.ask_box(cx);
         let enlarged = self.enlarged_drawing(cx);
@@ -5041,7 +5237,6 @@ impl Render for NotePage {
             .flex()
             .flex_col()
             .child(div().relative().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::HEADER).child(header).when(!jmw, |d| d.children(brief)))
-            .children(menus)
             .child(div().h(px(18.)))
             .child(body)
             .child(div().h(px(220.)));
@@ -5093,21 +5288,13 @@ impl Render for NotePage {
                 .bg(linear_gradient(180., linear_color_stop(p.shadow, 0.), linear_color_stop(p.shadow.opacity(0.), 1.)))
         });
 
-        div()
+        let dragging = self.drag_listener(cx);
+        let root = div()
             .size_full()
             .flex()
             .flex_row()
             .bg(p.cloth)
-            .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
-                let Some(start) = this.drag.as_ref().map(|d| d.start) else { return };
-                if ev.dragging() {
-                    this.drag_tag_by(ev.position - start, cx);
-                } else {
-                    // the button came up outside the window
-                    this.end_tag_drag(cx);
-                }
-            }))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.end_tag_drag(cx)))
+            .children(dragging)
             .child(
                 div()
                     .relative()
@@ -5141,7 +5328,9 @@ impl Render for NotePage {
                     .children(hem)
                     .children(enlarged),
             )
-            .children(chat)
+            .children(chat);
+        crate::perf::span("page render", frame_started.elapsed());
+        root
     }
 }
 
@@ -5157,6 +5346,59 @@ mod tests {
         assert_eq!(inkling, crate::theme::ink_color(InkColor::Red, &t.p));
         assert_ne!(inkling, mind_thread("Socratic tutor", "Coach", InkColor::Ink, &t));
         assert_ne!(inkling, mind_thread("Coach", "Coach", InkColor::Ink, &t));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_tag_opens_after_the_pointer_rests_and_lingers_after_it_leaves() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        // onto the tab: a rest begins, and passes after HOVER_REST
+        let on_tab = Hover::Away.part(true, true, at(0), false);
+        assert!(matches!(on_tab, Hover::Over { tab: true, panel: false, .. }));
+        assert!(!on_tab.rested(at(100), None) && on_tab.rested(at(120), None));
+        assert!(on_tab.settling(at(100)) && !on_tab.settling(at(130)));
+        assert!(!on_tab.rested(at(200), Some(at(150))), "a key after the rest folds it");
+        // onto the panel too, then off the tab: still resting, since the start
+        let both = on_tab.part(false, true, at(130), true);
+        let panel_only = both.part(true, false, at(140), true);
+        assert!(matches!(panel_only, Hover::Over { tab: false, panel: true, .. }) && panel_only.rested(at(140), None));
+        // off the panel while open: it lingers for FOLD_DELAY, and coming back within that is the same rest
+        let left = panel_only.part(false, false, at(150), true);
+        assert!(matches!(left, Hover::Left { .. }) && left.lingering(at(300)) && !left.lingering(at(400)) && left.settling(at(300)));
+        assert!(left.part(true, true, at(200), false).rested(at(200), None));
+        assert!(!left.part(true, true, at(500), false).rested(at(500), None), "back too late: a new rest");
+        // leaving before it opened ends the rest, with no lingering
+        assert_eq!(Hover::Away.part(true, true, at(0), false).part(true, false, at(50), false), Hover::Away);
+        assert!(!Hover::Away.lingering(at(0)) && !Hover::Away.settling(at(0)));
+    }
+
+    #[std::prelude::v1::test]
+    fn the_drop_spring_overshoots_a_little_and_the_fold_does_not_bounce() {
+        let mut tag = Tag::default();
+        let (mut peak, mut frames) = (0f32, 0);
+        while tag.step(1., 1. / 60.) {
+            peak = peak.max(tag.unfold);
+            frames += 1;
+            assert!(frames < 600, "never settles");
+        }
+        assert!(peak > 1.02 && peak < 1.07, "overshoot {peak}");
+        assert!((tag.unfold - 1.).abs() < 0.002 && frames < 90, "{frames} frames to open");
+        while tag.step(0., 1. / 60.) {
+            assert!(tag.unfold > -0.005, "the fold bounced to {}", tag.unfold);
+        }
+        assert_eq!(tag.unfold, 0.);
+    }
+
+    #[std::prelude::v1::test]
+    fn the_chat_waits_for_one_answer_or_says_why_none_came_never_both() {
+        let mut reply = ChatReply::Streaming { req: "r1".into(), partial: String::new() };
+        assert!(reply.streaming());
+        assert_eq!(reply.take_request().as_deref(), Some("r1"), "stopping waiting names the request to cancel");
+        assert_eq!(reply, ChatReply::None);
+        reply = ChatReply::Failed("the model took too long to answer".into());
+        assert!(!reply.streaming());
+        assert_eq!(reply.take_request(), None, "a failure has nothing to cancel, and clearing forgets it");
+        assert_eq!(reply, ChatReply::None);
     }
 
     #[std::prelude::v1::test]
@@ -5358,5 +5600,32 @@ mod tests {
         // with no room outward, only a tag you dragged opens back over the words
         assert_eq!(panel_fit(true, 249., 60., 600., true), (249., false));
         assert_eq!(panel_fit(true, 249., 60., 600., false), (PANEL_FLOOR, true));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_held_tag_keeps_its_side_through_the_band_round_the_floor() {
+        let (w, back) = (249., 600.);
+        // Opened outward, dragged toward the edge: it stays outward, narrowing to the floor,
+        // until the room is 24 px short of the floor; then it opens back across the words.
+        for out in [200., 170., 160., 150., 137.] {
+            let (_, side) = panel_fit_held(true, true, w, out, back);
+            assert!(side, "out {out}: still outward");
+        }
+        assert_eq!(panel_fit_held(true, true, w, 150., back), (PANEL_FLOOR, true));
+        assert_eq!(panel_fit_held(true, true, w, 135., back), (w, false));
+        // Opened back across the words, dragged out again: it keeps that side until the
+        // room outward is 24 px over the floor, then opens outward at the room's width.
+        for out in [140., 160., 170., 183.] {
+            let (_, side) = panel_fit_held(false, true, w, out, back);
+            assert!(!side, "out {out}: still back across the words");
+        }
+        assert_eq!(panel_fit_held(false, true, w, 184., back), (184., true));
+        assert_eq!(panel_fit_held(false, true, w, 300., back), (w, true));
+        // The same from a left tab, mirrored; and a side that agrees with the plain fit is the plain fit.
+        assert_eq!(panel_fit_held(false, false, w, 150., back), (PANEL_FLOOR, false));
+        assert_eq!(panel_fit_held(true, false, w, 170., back), (w.min(back), true));
+        assert_eq!(panel_fit_held(true, true, w, 300., back), panel_fit(true, w, 300., back, true));
+        // No room back either: the narrowest, outward, with no flip to speak of.
+        assert_eq!(panel_fit_held(true, true, w, 100., 90.), (PANEL_FLOOR, true));
     }
 }

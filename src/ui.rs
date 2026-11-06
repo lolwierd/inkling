@@ -3,7 +3,6 @@
 //! here, so the same kind of control behaves the same everywhere.
 
 use gpui_kit::*;
-use gpui_kit::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 

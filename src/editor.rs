@@ -11,7 +11,6 @@
 //! events, layout and painting.
 
 use gpui_kit::*;
-use gpui_kit::prelude::*;
 use std::collections::HashMap;
 use std::{
     cell::RefCell,
@@ -194,6 +193,9 @@ pub struct LineBox {
     pub wrapped: WrappedLine,
     /// Local byte index where each visual row begins.
     pub row_starts: Vec<usize>,
+    /// The runs it was shaped with: a line whose kind, words and runs have not changed is
+    /// carried from one layout into the next instead of being shaped again.
+    runs: Vec<TextRun>,
 }
 
 impl LineBox {
@@ -441,6 +443,12 @@ impl Fx {
 struct State {
     text: String,
     kinds: Vec<BlockKind>,
+    /// Where each line starts in `text` (one entry per line, so as many as `kinds`), kept by
+    /// `reindex` after every change to the text: a line's range and the line at an offset
+    /// are then lookups, not scans of the whole note.
+    starts: Vec<usize>,
+    /// Bumped with `starts`, on every change to the text: what a layout was built from.
+    text_version: u64,
     marks: Vec<MarkSpan>,
     anchors: Vec<Anchor>,
     selected: Range<usize>,
@@ -461,6 +469,8 @@ impl State {
         Self {
             text: "\n".into(),
             kinds: vec![BlockKind::Title, BlockKind::Paragraph],
+            starts: vec![0, 1],
+            text_version: 0,
             marks: vec![],
             anchors: vec![],
             selected: 0..0,
@@ -494,6 +504,7 @@ impl State {
                 (_, k) => k,
             })
             .collect();
+        self.reindex();
         // Stored offsets can be stale; keep them inside the text and on character boundaries.
         let text = &self.text;
         self.marks = marks
@@ -527,31 +538,38 @@ impl State {
     // ----- document access ------------------------------------------------
 
     fn lines(&self) -> Vec<(BlockKind, String)> {
-        self.text
-            .split('\n')
-            .zip(self.kinds.iter())
-            .map(|(t, k)| (*k, t.to_string()))
-            .collect()
+        (0..self.kinds.len()).map(|i| (self.kinds[i], self.text[self.line_range(i)].to_string())).collect()
     }
 
     fn title(&self) -> String {
-        self.text.split('\n').next().unwrap_or("").to_string()
+        self.text[self.line_range(0)].to_string()
     }
 
     fn line_count(&self) -> usize {
         self.kinds.len()
     }
 
+    /// Byte range of line `ix`, without its '\n' (empty, at the end, for a line past the last).
     fn line_range(&self, ix: usize) -> Range<usize> {
-        line_range_in(&self.text, ix)
+        match self.starts.get(ix) {
+            Some(&start) => start..self.starts.get(ix + 1).map_or(self.text.len(), |next| next - 1),
+            None => self.text.len()..self.text.len(),
+        }
+    }
+
+    /// The line index after every change to the text.
+    fn reindex(&mut self) {
+        self.starts = line_starts(&self.text);
+        self.text_version += 1;
     }
 
     fn line_kind(&self, ix: usize) -> BlockKind {
         self.kinds.get(ix).copied().unwrap_or_default()
     }
 
+    /// Number of the line holding `offset` (any offset is safe; past the end is the last line).
     fn line_of(&self, offset: usize) -> usize {
-        line_of(&self.text, offset)
+        self.starts.partition_point(|&s| s <= offset.min(self.text.len())).max(1) - 1
     }
 
     fn cursor(&self) -> usize {
@@ -713,6 +731,7 @@ impl State {
             .collect();
         self.text = s.text;
         self.kinds = s.kinds;
+        self.reindex();
         self.marks = s.marks;
         self.anchors = restored;
         let text = &self.text;
@@ -746,7 +765,9 @@ impl State {
     /// Replace `range` with `new_text`, keeping block kinds, marks and anchors aligned.
     /// `new_kind` is the kind for lines created by newlines in `new_text`.
     fn replace(&mut self, range: Range<usize>, new_text: &str, new_kind: Option<BlockKind>) -> usize {
-        apply_edit(&mut self.text, &mut self.kinds, &mut self.marks, &mut self.anchors, range, new_text, new_kind)
+        let end = apply_edit(&mut self.text, &mut self.kinds, &mut self.marks, &mut self.anchors, range, new_text, new_kind);
+        self.reindex();
+        end
     }
 
     fn place_after_edit(&mut self, end: usize) {
@@ -1354,7 +1375,12 @@ fn line_of(text: &str, offset: usize) -> usize {
     text.as_bytes()[..offset.min(text.len())].iter().filter(|&&b| b == b'\n').count()
 }
 
-/// Byte range of line `ix`, without its '\n'.
+/// Where each line of `text` starts: 0, then one past every '\n'.
+fn line_starts(text: &str) -> Vec<usize> {
+    std::iter::once(0).chain(text.match_indices('\n').map(|(i, _)| i + 1)).collect()
+}
+
+/// Byte range of line `ix` of `text`, without its '\n' (`State::line_range` is the lookup).
 fn line_range_in(text: &str, ix: usize) -> Range<usize> {
     let mut start = 0;
     for (i, l) in text.split('\n').enumerate() {
@@ -1848,6 +1874,9 @@ pub struct NoteEditor {
     /// for one sentence); `None` keeps the usual "Just start writing."
     pub placeholder_hint: Option<String>,
     pub layout: Option<Rc<EditorLayout>>,
+    /// What `layout` was built from; while it still matches, the layout is kept from frame
+    /// to frame instead of shaping the whole note again.
+    layout_key: Option<LayoutKey>,
     layout_sig: Vec<(f32, f32)>,
     /// Checklist items checked or unchecked a moment ago, by line: they sew in or come out.
     toggles: HashMap<usize, Toggle>,
@@ -1886,6 +1915,7 @@ impl NoteEditor {
             gutter: vec![],
             placeholder_hint: None,
             layout: None,
+            layout_key: None,
             layout_sig: vec![],
             toggles: HashMap::new(),
             pointer: None,
@@ -1934,6 +1964,7 @@ impl NoteEditor {
     ) {
         self.st.load(lines, marks, anchors);
         self.layout = None;
+        self.layout_key = None;
         self.active_anchor = None;
         self.thinking.clear();
         cx.notify();
@@ -1994,18 +2025,6 @@ impl NoteEditor {
 
     pub fn is_focused(&self, window: &Window) -> bool {
         self.focus.is_focused(window)
-    }
-
-    pub fn set_anchors(&mut self, anchors: Vec<Anchor>, cx: &mut Context<Self>) {
-        let text = &self.st.text;
-        self.st.anchors = anchors
-            .into_iter()
-            .map(|mut a| {
-                a.range = snap_range(text, a.range);
-                a
-            })
-            .collect();
-        cx.notify();
     }
 
     pub fn add_anchor(&mut self, mut anchor: Anchor, cx: &mut Context<Self>) {
@@ -2113,11 +2132,6 @@ impl NoteEditor {
         let Some(fx) = self.st.remove_paragraph(line) else { return false };
         self.apply(fx, cx);
         true
-    }
-
-    pub fn set_line_kind(&mut self, line: usize, kind: BlockKind, cx: &mut Context<Self>) {
-        let fx = self.st.set_line_kind(line, kind);
-        self.apply(fx, cx);
     }
 
     /// Apply a block kind to every line touched by the selection.
@@ -2817,21 +2831,61 @@ fn placeholder(line: usize, last_line: usize, kind: BlockKind) -> Option<&'stati
     }
 }
 
-struct DocSnapshot {
-    text: String,
-    kinds: Vec<BlockKind>,
-    marks: Vec<MarkSpan>,
+struct DocSnapshot<'a> {
+    text: &'a str,
+    kinds: &'a [BlockKind],
+    marks: &'a [MarkSpan],
     marked: Option<Range<usize>>,
     note_size: Pixels,
     palette: Palette,
 }
 
-impl DocSnapshot {
-    fn of(st: &State, theme: &Theme) -> Self {
-        DocSnapshot {
-            text: st.text.clone(),
+/// Everything a layout depends on. A layout is kept across frames while the editor still
+/// matches the key it was built from (the text by its version, the rest by value), so an
+/// idle frame, a caret move or a scroll shapes nothing; an edit, a block kind, a mark, the
+/// column width, the text size or the palette changing makes a new one.
+#[derive(Clone, PartialEq)]
+struct LayoutKey {
+    text_version: u64,
+    kinds: Vec<BlockKind>,
+    marks: Vec<MarkSpan>,
+    marked: Option<Range<usize>>,
+    width: Pixels,
+    note_size: Pixels,
+    palette: Palette,
+}
+
+impl LayoutKey {
+    fn of(st: &State, width: Pixels, theme: &Theme) -> Self {
+        LayoutKey {
+            text_version: st.text_version,
             kinds: st.kinds.clone(),
             marks: st.marks.clone(),
+            marked: st.marked.clone(),
+            width,
+            note_size: theme.note_size,
+            palette: theme.p,
+        }
+    }
+
+    /// Does a layout built from this key still describe `st` at `width` under `theme`?
+    fn matches(&self, st: &State, width: Pixels, theme: &Theme) -> bool {
+        self.text_version == st.text_version
+            && (self.width - width).abs() < px(0.5)
+            && self.note_size == theme.note_size
+            && self.palette == theme.p
+            && self.marked == st.marked
+            && self.kinds == st.kinds
+            && self.marks == st.marks
+    }
+}
+
+impl<'a> DocSnapshot<'a> {
+    fn of(st: &'a State, theme: &Theme) -> Self {
+        DocSnapshot {
+            text: &st.text,
+            kinds: &st.kinds,
+            marks: &st.marks,
             marked: st.marked.clone(),
             note_size: theme.note_size,
             palette: theme.p,
@@ -2841,7 +2895,7 @@ impl DocSnapshot {
 
 fn runs_for_line(snap: &DocSnapshot, start: usize, end: usize, style: &LineStyle) -> Vec<TextRun> {
     let mut cuts = vec![start, end];
-    for m in &snap.marks {
+    for m in snap.marks {
         if m.end > start && m.start < end {
             cuts.push(m.start.max(start));
             cuts.push(m.end.min(end));
@@ -2983,13 +3037,21 @@ fn code_tokens(texts: &[&str], kinds: &[BlockKind]) -> Vec<Vec<(Range<usize>, cr
     out
 }
 
-fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem) -> EditorLayout {
+/// Lay the note out at `width`. Lines that `previous` (a layout at the same width) already
+/// shaped, with the same kind, words and runs, are carried over rather than shaped again:
+/// an edit changes one line, or a few, and the rest of a long note costs a comparison. A
+/// changed line is found at its old index, or that index shifted by the lines the edit
+/// added or took away. Returns the layout and how many lines it shaped.
+fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem, previous: Option<EditorLayout>) -> (EditorLayout, usize) {
     let mut lines = vec![];
     let mut y = px(0.);
     let mut start = 0;
     let texts: Vec<&str> = snap.text.split('\n').collect();
     let kind_of = |i: usize| snap.kinds.get(i).copied().unwrap_or_default();
-    let tokens = code_tokens(&texts, &snap.kinds);
+    let tokens = code_tokens(&texts, snap.kinds);
+    let mut old: Vec<Option<LineBox>> = previous.filter(|p| (p.width - width).abs() < px(0.5)).map(|p| p.lines.into_iter().map(Some).collect()).unwrap_or_default();
+    let shift = texts.len() as isize - old.len() as isize;
+    let mut shaped_count = 0;
     for (i, line_text) in texts.iter().copied().enumerate() {
         let kind = kind_of(i);
         let st = line_style(kind, snap.note_size, &snap.palette);
@@ -2998,44 +3060,49 @@ fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem)
         let (gap_before, gap_after) = gaps(kind, &st, opens, closes);
         let end = start + line_text.len();
         let runs = if kind.is_code() { code_runs(snap, start, end, &st, &tokens[i]) } else { runs_for_line(snap, start, end, &st) };
-        let column = (width - st.indent - st.right).max(px(40.));
-        // A long line of code wraps, and the rest of it hangs two characters past its own
-        // indentation (the code face is 0.6 of its size wide).
-        let hang = if kind.is_code() {
-            let lead: usize = line_text.chars().take_while(|c| *c == ' ' || *c == '\t').map(|c| if c == '\t' { 4 } else { 1 }).sum();
-            (st.size * 0.6 * (lead + 2) as f32).min(column / 2.)
-        } else {
-            px(0.)
-        };
-        let wrap = (column - hang).max(px(40.));
-        let shaped = text_system
-            .shape_text(SharedString::from(line_text.to_string()), st.size, &runs, Some(wrap), None)
-            .ok()
-            .and_then(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) })
-            .unwrap_or_default();
-        let mut row_starts = vec![0];
-        for b in shaped.wrap_boundaries() {
-            let run = &shaped.unwrapped_layout.runs[b.run_ix];
-            row_starts.push(run.glyphs[b.glyph_ix].index);
-        }
         y += gap_before;
-        let lb = LineBox {
-            start,
-            len: line_text.len(),
-            kind,
-            top: y,
-            line_height: st.line_height,
-            indent: st.indent,
-            hang,
-            font_size: st.size,
-            wrapped: shaped,
-            row_starts,
+        let same = |l: &LineBox| l.kind == kind && l.wrapped.text.as_ref() == line_text && l.runs == runs;
+        let carried = [i as isize, i as isize - shift]
+            .into_iter()
+            .filter(|&c| c >= 0)
+            .find(|&c| old.get(c as usize).is_some_and(|l| l.as_ref().is_some_and(same)))
+            .and_then(|c| old[c as usize].take());
+        let lb = match carried {
+            Some(mut lb) => {
+                lb.start = start;
+                lb.top = y;
+                lb
+            }
+            None => {
+                shaped_count += 1;
+                let column = (width - st.indent - st.right).max(px(40.));
+                // A long line of code wraps, and the rest of it hangs two characters past its
+                // own indentation (the code face is 0.6 of its size wide).
+                let hang = if kind.is_code() {
+                    let lead: usize = line_text.chars().take_while(|c| *c == ' ' || *c == '\t').map(|c| if c == '\t' { 4 } else { 1 }).sum();
+                    (st.size * 0.6 * (lead + 2) as f32).min(column / 2.)
+                } else {
+                    px(0.)
+                };
+                let wrap = (column - hang).max(px(40.));
+                let shaped = text_system
+                    .shape_text(SharedString::from(line_text.to_string()), st.size, &runs, Some(wrap), None)
+                    .ok()
+                    .and_then(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) })
+                    .unwrap_or_default();
+                let mut row_starts = vec![0];
+                for b in shaped.wrap_boundaries() {
+                    let run = &shaped.unwrapped_layout.runs[b.run_ix];
+                    row_starts.push(run.glyphs[b.glyph_ix].index);
+                }
+                LineBox { start, len: line_text.len(), kind, top: y, line_height: st.line_height, indent: st.indent, hang, font_size: st.size, wrapped: shaped, row_starts, runs }
+            }
         };
         y += lb.height() + gap_after;
         lines.push(lb);
         start = end + 1;
     }
-    EditorLayout { origin: point(px(0.), px(0.)), width, height: y, lines }
+    (EditorLayout { origin: point(px(0.), px(0.)), width, height: y, lines }, shaped_count)
 }
 
 /// Runs of lines that make one block (a callout's patch, a code block), as line ranges.
@@ -3118,6 +3185,15 @@ fn tack_stitches(layout: &EditorLayout, i: usize) -> Vec<sewn::Stitch> {
         .collect()
 }
 
+/// Lay the note out at `width`, carrying unchanged lines over from `previous` (see
+/// [`layout_doc`]): the costly step the layout key guards.
+fn shape_doc(st: &State, width: Pixels, theme: &Theme, window: &Window, previous: Option<EditorLayout>) -> EditorLayout {
+    let started = Instant::now();
+    let (layout, shaped) = layout_doc(&DocSnapshot::of(st, theme), width, window.text_system(), previous);
+    crate::perf::layout(layout.lines.len(), shaped, started.elapsed());
+    layout
+}
+
 struct EditorElement {
     editor: Entity<NoteEditor>,
 }
@@ -3152,21 +3228,34 @@ impl Element for EditorElement {
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         window: &mut Window,
-        cx: &mut App,
+        _: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let theme = Theme::get(cx).clone();
-        let ed = self.editor.read(cx);
-        let snap = Rc::new(DocSnapshot::of(&ed.st, &theme));
+        let editor = self.editor.clone();
+        // A layout made here, for prepaint to take (the layout engine may measure more than
+        // once a frame; the second time finds it here).
         let cache: Rc<RefCell<Option<EditorLayout>>> = Rc::new(RefCell::new(None));
         let cache2 = cache.clone();
         let mut style = Style::default();
         style.size.width = relative(1.).into();
-        let id = window.request_measured_layout(style, move |known, available, window, _cx| {
+        let id = window.request_measured_layout(style, move |known, available, window, cx| {
             let width = known.width.unwrap_or(match available.width {
                 AvailableSpace::Definite(w) => w,
                 _ => px(600.),
             });
-            let layout = layout_doc(&snap, width, window.text_system());
+            let theme = Theme::get(cx).clone();
+            let ed = editor.read(cx);
+            if let Some(kept) = ed.layout.as_ref().filter(|_| ed.layout_key.as_ref().is_some_and(|k| k.matches(&ed.st, width, &theme))) {
+                return size(width, kept.height);
+            }
+            if let Some(made) = cache2.borrow().as_ref().filter(|l| (l.width - width).abs() < px(0.5)) {
+                return size(width, made.height);
+            }
+            // The old layout is this editor's alone between frames: take it, so the lines
+            // that did not change move into the new one.
+            let layout = editor.update(cx, |ed, _| {
+                let previous = ed.layout.take().and_then(|l| Rc::try_unwrap(l).ok());
+                shape_doc(&ed.st, width, &theme, window, previous)
+            });
             let h = layout.height;
             *cache2.borrow_mut() = Some(layout);
             size(width, h)
@@ -3183,27 +3272,47 @@ impl Element for EditorElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let mut layout = match cache.borrow_mut().take() {
-            Some(l) if (l.width - bounds.size.width).abs() < px(0.5) => l,
-            _ => {
-                let theme = Theme::get(cx).clone();
-                let snap = DocSnapshot::of(&self.editor.read(cx).st, &theme);
-                layout_doc(&snap, bounds.size.width, window.text_system())
-            }
-        };
-        layout.origin = bounds.origin;
-        let layout = Rc::new(layout);
-        let sig = layout.signature();
+        let width = bounds.size.width;
+        let theme = Theme::get(cx).clone();
+        let made = cache.borrow_mut().take().filter(|l| (l.width - width).abs() < px(0.5));
         let editor = self.editor.clone();
-        let l2 = layout.clone();
-        let changed = editor.update(cx, |ed, _| {
-            let changed = ed.layout_sig != sig;
-            ed.layout = Some(l2);
-            ed.layout_sig = sig;
-            changed
+        let (layout, fresh) = editor.update(cx, |ed, _| {
+            // The layout kept from the last frame, while it still describes the note; else
+            // the one made while measuring, or (the width changed since) a new one.
+            let kept = ed.layout.take().filter(|_| made.is_none() && ed.layout_key.as_ref().is_some_and(|k| k.matches(&ed.st, width, &theme)));
+            let (mut layout, mut fresh) = match (kept, made) {
+                (Some(kept), _) => (kept, false),
+                (None, Some(made)) => (Rc::new(made), true),
+                (None, None) => (Rc::new(shape_doc(&ed.st, width, &theme, window, None)), true),
+            };
+            // Nothing else holds a kept layout between frames, so its origin can move in
+            // place; should something ever hold one, a fresh layout is made instead.
+            match Rc::get_mut(&mut layout) {
+                Some(l) => l.origin = bounds.origin,
+                None => {
+                    let mut l = shape_doc(&ed.st, width, &theme, window, None);
+                    l.origin = bounds.origin;
+                    layout = Rc::new(l);
+                    fresh = true;
+                }
+            }
+            if fresh {
+                ed.layout_key = Some(LayoutKey::of(&ed.st, width, &theme));
+            }
+            ed.layout = Some(layout.clone());
+            (layout, fresh)
         });
-        if changed {
-            cx.defer(move |cx| editor.update(cx, |_, cx| cx.emit(EditorEvent::LayoutChanged)));
+        // Lines that moved: anything aligned to them (the margin's tags) lays out again.
+        if fresh {
+            let sig = layout.signature();
+            let changed = editor.update(cx, |ed, _| {
+                let changed = ed.layout_sig != sig;
+                ed.layout_sig = sig;
+                changed
+            });
+            if changed {
+                cx.defer(move |cx| editor.update(cx, |_, cx| cx.emit(EditorEvent::LayoutChanged)));
+            }
         }
         let at = |b: Bounds<Pixels>| Bounds::new(bounds.origin + b.origin, b.size);
         let mut hands: Vec<Hitbox> = layout
@@ -3228,6 +3337,7 @@ impl Element for EditorElement {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let paint_started = Instant::now();
         let theme = Theme::get(cx).clone();
         let p = theme.p;
         let ed = self.editor.read(cx);
@@ -3251,6 +3361,10 @@ impl Element for EditorElement {
         let copied = ed.copied.filter(|(_, at)| at.elapsed() < sewn::COPIED_FOR).map(|(line, _)| line);
         let layout = pre.layout.clone();
         let origin = bounds.origin;
+        // Only what is in view is painted: a long note has most of its rows scrolled away.
+        let mask = window.content_mask().bounds;
+        let (view_top, view_bottom) = (mask.origin.y - origin.y, mask.origin.y + mask.size.height - origin.y);
+        let in_view = |top: Pixels, height: Pixels| top < view_bottom && top + height > view_top;
 
         window.handle_input(&focus, ElementInputHandler::new(bounds, self.editor.clone()), cx);
         for hand in &pre.hands {
@@ -3264,11 +3378,14 @@ impl Element for EditorElement {
         for run in &runs {
             let b = run_box(&layout, run);
             let on_page = Bounds::new(origin + b.origin, b.size);
+            if let BlockKind::Code(_) = layout.lines[run.start].kind {
+                numbers.extend(run.clone().map(|l| (l, l - run.start + 1)));
+            }
+            if !in_view(b.origin.y, b.size.height) {
+                continue;
+            }
             match layout.lines[run.start].kind {
-                BlockKind::Code(_) => {
-                    window.paint_quad(fill(on_page, p.code).corner_radii(px(8.)));
-                    numbers.extend(run.clone().map(|l| (l, l - run.start + 1)));
-                }
+                BlockKind::Code(_) => window.paint_quad(fill(on_page, p.code).corner_radii(px(8.))),
                 BlockKind::Callout(kind) => {
                     let thread = sewn::callout_thread(kind, &p);
                     sewn::patch(window, on_page, thread, 7 + run.start as u64);
@@ -3313,7 +3430,7 @@ impl Element for EditorElement {
 
         // Inline code sits on a small chip of ink, as tall as the code face it holds.
         for m in marks.iter().filter(|m| m.mark == Mark::Code) {
-            for line in layout.lines.iter().filter(|l| !l.kind.is_code() && m.start < l.start + l.len && m.end > l.start) {
+            for line in layout.lines.iter().filter(|l| !l.kind.is_code() && m.start < l.start + l.len && m.end > l.start && in_view(l.top, l.height())) {
                 let base = baseline(line);
                 let s = line.font_size * 0.86;
                 for r in layout.rects(m.start.max(line.start)..m.end.min(line.start + line.len)) {
@@ -3330,10 +3447,14 @@ impl Element for EditorElement {
         // Block decorations, text, placeholders.
         let mut number = 0;
         for (i, line) in layout.lines.iter().enumerate() {
+            // a numbered list counts on through the items that are scrolled away
+            number = if line.kind == BlockKind::Numbered { number + 1 } else { 0 };
+            if !in_view(line.top, line.height()) {
+                continue;
+            }
             let line_origin = origin + point(line.indent, line.top);
             match line.kind {
                 BlockKind::Bullet => {
-                    number = 0;
                     let dot = Bounds::new(
                         origin + point(px(8.), line.top + line.line_height / 2. - px(2.5)),
                         size(px(5.), px(5.)),
@@ -3341,7 +3462,6 @@ impl Element for EditorElement {
                     window.paint_quad(fill(dot, p.ink).corner_radii(px(2.5)));
                 }
                 BlockKind::Numbered => {
-                    number += 1;
                     let label = format!("{number}.");
                     let run = TextRun {
                         len: label.len(),
@@ -3356,13 +3476,11 @@ impl Element for EditorElement {
                     let _ = shaped.paint(origin + point(x, line.top), line.line_height, TextAlign::Left, None, window, cx);
                 }
                 BlockKind::Quote => {
-                    number = 0;
                     // a back-stitched seam in tacking thread, where the 2 px bar was
                     let (y0, y1) = (origin.y + line.top + px(3.), origin.y + line.top + line.height() - px(3.));
                     sewn::seam(window, origin.x + px(3.), y0, y1, p.tack, 17 + i as u64);
                 }
                 BlockKind::Check(done) => {
-                    number = 0;
                     // a stitched square in graphite; done, a cross-stitch in your ink
                     let at = origin + point(px(0.), line.top + line.line_height / 2. - px(sewn::BOX / 2.));
                     sewn::check_box(window, at, p.graphite);
@@ -3375,7 +3493,6 @@ impl Element for EditorElement {
                     sewn::cross(window, at, p.ink, k1, k2);
                 }
                 BlockKind::Code(_) => {
-                    number = 0;
                     // its number, right-aligned before the code; wrapped rows get none
                     let label = numbers.get(&i).copied().unwrap_or(1).to_string();
                     let run = TextRun {
@@ -3390,7 +3507,7 @@ impl Element for EditorElement {
                     let x = px(sewn::NUMBER_END) - shaped.width;
                     let _ = shaped.paint(origin + point(x, line.top), line.line_height, TextAlign::Left, None, window, cx);
                 }
-                _ => number = 0,
+                _ => {}
             }
             if line.len == 0 {
                 let ph: Option<String> = if i == last_line && line.kind == BlockKind::Paragraph && hint.is_some() {
@@ -3439,6 +3556,9 @@ impl Element for EditorElement {
         let mut animating = false;
         for (i, line) in layout.lines.iter().enumerate() {
             let BlockKind::Check(done) = line.kind else { continue };
+            if !in_view(line.top, line.height()) {
+                continue;
+            }
             let toggle = toggles.get(&i).filter(|t| t.done == done);
             if !done && toggle.is_none() {
                 continue;
@@ -3467,6 +3587,9 @@ impl Element for EditorElement {
         // pointer is on the block (Copied for a moment after).
         let under = pointer.map(|at| at - origin);
         for block in code_blocks(&layout) {
+            if !in_view(block.ground.origin.y, block.ground.size.height) {
+                continue;
+            }
             let g = Bounds::new(origin + block.ground.origin, block.ground.size);
             if !block.lang.is_empty() {
                 let label = block.lang.as_str().to_string();
@@ -3507,6 +3630,9 @@ impl Element for EditorElement {
             let color = if a.open { style.color.opacity(if is_active || active.is_none() { 1. } else { 0.7 }) } else { style.color.opacity(0.42) };
             let seed = crate::stitch::seed_of(&a.id);
             for (row, r) in layout.rects(a.range.clone()).into_iter().enumerate() {
+                if !in_view(r.origin.y, r.size.height) {
+                    continue;
+                }
                 let y = origin.y + r.origin.y + r.size.height - px(3.2);
                 let x0 = origin.x + r.origin.x;
                 let x1 = x0 + r.size.width;
@@ -3539,7 +3665,7 @@ impl Element for EditorElement {
         // The gutter: what Inkling has made of each paragraph.
         let gx = origin.x - px(26.);
         for (line, mark) in &gutter {
-            let Some(l) = layout.lines.get(*line) else { continue };
+            let Some(l) = layout.lines.get(*line).filter(|l| in_view(l.top, l.height())) else { continue };
             let cy = origin.y + l.top + l.line_height / 2.;
             match mark {
                 GutterMark::Read => crate::stitch::tacking_stitch(window, point(gx, cy), p.faint.opacity(0.75)),
@@ -3560,18 +3686,21 @@ impl Element for EditorElement {
             }
         }
 
-        // The needle works beside a paragraph while Inkling reads it.
-        if !thinking.is_empty() {
-            let t = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as f32 / 1000.)
-                .unwrap_or(0.);
-            let phase = (t / 0.9).fract();
-            for off in &thinking {
-                let l = &layout.lines[layout.line_of(*off)];
-                let cy = origin.y + l.top + l.line_height / 2.;
-                crate::stitch::needle(window, point(gx, cy), phase, p.graphite);
+        // The needle works beside a paragraph while Inkling reads it (and asks for frames
+        // only while it is in view).
+        let mut needles = false;
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as f32 / 1000.).unwrap_or(0.);
+        let phase = (t / 0.9).fract();
+        for off in &thinking {
+            let l = &layout.lines[layout.line_of(*off)];
+            if !in_view(l.top, l.height()) {
+                continue;
             }
+            let cy = origin.y + l.top + l.line_height / 2.;
+            crate::stitch::needle(window, point(gx, cy), phase, p.graphite);
+            needles = true;
+        }
+        if needles {
             window.request_animation_frame();
         }
 
@@ -3584,6 +3713,7 @@ impl Element for EditorElement {
             let caret = Bounds::new(origin + pt + point(px(0.), (lh - h) / 2.), size(px(1.5), h));
             window.paint_quad(fill(caret, p.ink));
         }
+        crate::perf::span("editor paint", paint_started.elapsed());
     }
 }
 
@@ -3707,6 +3837,7 @@ mod tests {
     fn check(s: &State) {
         let ok = |o: usize| o <= s.text.len() && s.text.is_char_boundary(o);
         assert_eq!(s.text.split('\n').count(), s.kinds.len(), "one kind per line in {:?}", s.text);
+        assert_eq!(s.starts, line_starts(&s.text), "the line index follows the text {:?}", s.text);
         assert!(s.kinds.len() >= 2, "a title and at least one body line");
         assert_eq!(s.kinds[0], K::Title);
         assert!(s.kinds[1..].iter().all(|k| *k != K::Title), "only line 0 is the title: {:?}", s.kinds);
@@ -3730,15 +3861,56 @@ mod tests {
     /// size wide (astral characters such as emoji twice that). At a 10 px note size a
     /// paragraph glyph is 6 px, the title's 11.4 px and an H1's 9 px; the body starts at y 34.
     fn lay_out(s: &State, ts: &WindowTextSystem, width: f32) -> EditorLayout {
-        let snap = DocSnapshot {
-            text: s.text.clone(),
-            kinds: s.kinds.clone(),
-            marks: s.marks.clone(),
-            marked: s.marked.clone(),
-            note_size: px(10.),
-            palette: Palette::light(),
-        };
-        layout_doc(&snap, px(width), ts)
+        lay_out_from(s, ts, width, None).0
+    }
+
+    /// Lay `s` out carrying what it can over from `previous`; also how many lines it shaped.
+    fn lay_out_from(s: &State, ts: &WindowTextSystem, width: f32, previous: Option<EditorLayout>) -> (EditorLayout, usize) {
+        let snap = DocSnapshot { text: &s.text, kinds: &s.kinds, marks: &s.marks, marked: s.marked.clone(), note_size: px(10.), palette: Palette::light() };
+        layout_doc(&snap, px(width), ts, previous)
+    }
+
+    /// The geometry of a layout, line by line: what a reader of it sees.
+    fn geometry(l: &EditorLayout) -> Vec<(usize, usize, f32, f32, usize, String)> {
+        l.lines.iter().map(|b| (b.start, b.len, b.top.as_f32(), b.height().as_f32(), b.rows(), b.wrapped.text.to_string())).collect()
+    }
+
+    #[std::prelude::v1::test]
+    fn a_layout_carries_unchanged_lines_over_and_shapes_only_the_rest() {
+        let ts = text_system();
+        let mut s = st("Title\nfirst paragraph here\nsecond paragraph here\nthird paragraph, long enough to wrap onto a second row at this width");
+        let (first, shaped) = lay_out_from(&s, &ts, 120., None);
+        assert_eq!(shaped, 4, "a first layout shapes every line");
+        // Typing in one line shapes that line alone; the others keep their shaped text.
+        s.set_caret(at(&s, "second") + "second".len(), false);
+        typ(&mut s, "ly");
+        let (next, shaped) = lay_out_from(&s, &ts, 120., Some(first));
+        assert_eq!(shaped, 1);
+        assert_eq!(geometry(&next), geometry(&lay_out(&s, &ts, 120.)), "the same layout as from scratch");
+        // A new line above shifts every line below it by one: they are still found.
+        s.set_caret(at(&s, "first"), false);
+        s.newline();
+        let (next, shaped) = lay_out_from(&s, &ts, 120., Some(next));
+        assert_eq!(shaped, 1, "only the empty line is new: {:?}", s.text);
+        assert_eq!(geometry(&next), geometry(&lay_out(&s, &ts, 120.)));
+        // Merging two lines shifts the rest up by one.
+        s.backspace();
+        let (next, shaped) = lay_out_from(&s, &ts, 120., Some(next));
+        assert_eq!(shaped, 0, "every line is as it was: {:?}", s.text);
+        assert_eq!(geometry(&next), geometry(&lay_out(&s, &ts, 120.)));
+        // A mark changes a line's runs, so that line is shaped again.
+        s.select(at(&s, "third")..at(&s, "third") + 5, false);
+        s.toggle_mark(Mark::Bold);
+        let (next, shaped) = lay_out_from(&s, &ts, 120., Some(next));
+        assert_eq!(shaped, 1);
+        assert_eq!(geometry(&next), geometry(&lay_out(&s, &ts, 120.)));
+        // A block kind too; and a layout at another width carries nothing over.
+        s.set_line_kind(1, K::Quote);
+        let (next, shaped) = lay_out_from(&s, &ts, 120., Some(next));
+        assert_eq!(shaped, 1);
+        let (wider, shaped) = lay_out_from(&s, &ts, 200., Some(next));
+        assert_eq!(shaped, 4);
+        assert_eq!(geometry(&wider), geometry(&lay_out(&s, &ts, 200.)));
     }
 
     // ----- text helpers -------------------------------------------------------
@@ -5247,7 +5419,7 @@ mod tests {
         let mut s = st_kinds(&[(K::Title, "T"), (K::Paragraph, "call finish() now"), (rust(), "fn a() -> u64 { 42 } // done")]);
         let at_code = at(&s, "finish()");
         s.marks = vec![MarkSpan { start: at_code, end: at_code + "finish()".len(), mark: Mark::Code }];
-        let snap = DocSnapshot { text: s.text.clone(), kinds: s.kinds.clone(), marks: s.marks.clone(), marked: None, note_size: px(10.), palette: Palette::light() };
+        let snap = DocSnapshot { text: &s.text, kinds: &s.kinds, marks: &s.marks, marked: None, note_size: px(10.), palette: Palette::light() };
         let st = line_style(K::Paragraph, px(10.), &snap.palette);
         let runs = runs_for_line(&snap, 2, 2 + "call finish() now".len(), &st);
         let inline = runs.iter().find(|r| r.font.family.as_ref() == MONO_INLINE).expect("inline code run");

@@ -292,7 +292,10 @@ impl Brain {
         let id = format!("r{}", self.next_id);
         self.next_id += 1;
         // A level the model does not take would fail the call; send the nearest one.
-        let effort = effort_for(&self.model_choices(cx).0, model, effort);
+        let effort = match &self.models {
+            Some(list) => effort_for(list, model, effort),
+            None => effort_for(&cx.global::<Store>().settings.models, model, effort),
+        };
         // Settings › Model › Look things up on the web; the brain decides which tasks may.
         let web = cx.try_global::<crate::store::Store>().is_some_and(|s| s.settings.look_up);
         let req = json!({
@@ -325,10 +328,13 @@ impl Brain {
         }
     }
 
+    /// Stop the brain for good (the app is quitting). `state` says so, as it does whenever
+    /// there is no process: a running brain is `Starting` or `Ready`, no brain is `Failed`.
     pub fn shutdown(&mut self) {
         self.generation += 1;
         if let Some(proc) = self.proc.take() {
             proc.stop();
+            self.state = BrainState::Failed("the brain was shut down".into());
         }
     }
 }
@@ -362,11 +368,12 @@ impl<C: ?Sized> Pending<C> {
     }
 
     fn deliver(&mut self, id: &str, msg: BrainMsg, cx: &mut C) {
-        let Some(mut callback) = self.waiting.remove(id) else { return };
-        let more = matches!(msg, BrainMsg::Delta(_));
-        callback(msg, cx);
-        if more {
-            self.waiting.insert(id.to_string(), callback);
+        if matches!(msg, BrainMsg::Delta(_)) {
+            if let Some(callback) = self.waiting.get_mut(id) {
+                callback(msg, cx);
+            }
+        } else if let Some(mut callback) = self.waiting.remove(id) {
+            callback(msg, cx);
         }
     }
 

@@ -11,8 +11,9 @@ use crate::working::{self, Place};
 const REPLY_HINT: &str = "Write back\u{2026}";
 const DISPUTE_HINT: &str = "What doesn\u{2019}t hold?";
 
-/// About how wide `s` is at the interface size with tabular figures, so every line of a
-/// sum gets the same columns and the = signs line up.
+/// About how wide `s` is at the interface size with tabular figures, with room to spare,
+/// so every line of a sum gets the same columns and the = signs line up. A cell is never
+/// narrower than its words (it does not wrap), so a low guess only costs the alignment.
 fn width_of(s: &str) -> f32 {
     s.chars()
         .map(|c| match c {
@@ -23,7 +24,8 @@ fn width_of(s: &str) -> f32 {
             _ => 8.0,
         })
         .sum::<f32>()
-        + 2.
+        * 1.12
+        + 4.
 }
 
 fn tabular() -> FontFeatures {
@@ -108,12 +110,12 @@ impl NotePage {
                         .when(back, |d| d.line_through())
                         .child(
                             div()
-                                .when(fits, |d| d.w(px(ew)).flex_none().text_right())
+                                .when(fits, |d| d.min_w(px(ew)).flex_none().whitespace_nowrap().text_right())
                                 .when(!fits, |d| d.flex_1().min_w(px(0.)))
                                 .child(line.sum.clone()),
                         )
                         .child(div().flex_none().text_color(p.faint).child(working::sign(line)))
-                        .child(div().flex_none().when(fits, |d| d.w(px(rw)).text_right()).child(line.is.clone())),
+                        .child(div().flex_none().whitespace_nowrap().when(fits, |d| d.min_w(px(rw)).text_right()).child(line.is.clone())),
                 );
             }
             if !c.givens.is_empty() {

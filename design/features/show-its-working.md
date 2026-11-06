@@ -118,7 +118,7 @@ passage, read the two places side by side, and decide which one you meant.
   sum: the arithmetic, 1 to 4 lines, each {"sum": "5:30 × 10", "is": "55:00"}: numbers, durations (5:30, 1:05:00) and percentages with + − × ÷ and brackets, no units or words. Every number in a sum is one of givens, an earlier line's "is", or 1, 2, 7, 12, 24, 52, 60, 100, 365 or 1000; with
   givens: each number you took from the writer, {"value": "5:30", "words": "hold 5:30"}, words being their exact words that contain it (1 to 6 words);
   or words: 1 or 2 passages copied exactly from elsewhere in the note that this paragraph contradicts.
-  Every number in text must come from the writer's words or from your sum.
+  Every number in text is the writer's or is in your sum: a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {"sum": "50:00 ÷ 10", "is": "5:00"}.
 - question (corrections only): what to ask instead if your check does not hold up, at most 45 words.
 You cannot open any source from here: no web, no books, no files. A fact that rests only on what you remember is a question, not a correction; say what you remember inside the question.
 ```
@@ -160,8 +160,10 @@ leaves the brain. The fake brain imports the same function, so the scenarios go 
 3. **The givens are the writer's.** Each given's words are found in the title, the note or
    the brief (loosely, as quotes are snapped today) and contain its value: `5:30` in
    "hold 5:30"; `50:00` in "under 50 minutes" (a whole duration matches its first part);
-   `10` in "10k"; `4` in "four days". At least one given comes from the paragraph being
-   read, so the sum is about the claim.
+   `10` in "10k"; `4` in "four days". A number the sum uses that the model forgot to list
+   is looked up in the writer's words, the corrected paragraph first, and listed with them
+   ("10k"); one the writer never wrote fails the check. At least one given comes from the
+   paragraph being read, so the sum is about the claim.
 4. **The words are elsewhere in the note.** Each passage has two words or more, sits on
    one line, is found in the note, and is not inside the corrected words.
 5. **The correction says nothing the check does not show.** Every number in the text
@@ -179,9 +181,21 @@ the reads that need it most.
 The prompt grows by about 300 tokens and the schema by about 250; the schema sits at the
 front of the prompt and is cached after the first read ($0.20 per million). That is about
 $0.0015 more per read, about 5% of a measured read. Only corrections write a check: about
-100 to 150 more output tokens plus some thinking, $0.003 to $0.008 more per correction,
-and most reads stay silent. To be confirmed with three real reads on the running plan
-(allowed for this build).
+100 to 150 more output tokens plus some thinking, and most reads stay silent.
+
+Measured on 7 Nov with five real reads (Opus 5.5, low effort, the SDK's estimates):
+
+| Read | Came back as | Cost | Time |
+|---|---|---|---|
+| The running plan's paragraph | correction, working `5:30 × 10 = 55:00`, `50:00 ÷ 10 = 5:00`, from "hold 5:30 per km", "city 10k", "under 50 minutes" | $0.013 | 6.4 s |
+| The same, before the prompt's line about figures | its question: the text said 5:00 with no line for it | $0.030 | 12.9 s |
+| The same, before the brain looked up unlisted numbers | its question: the sum used 10 without listing it | $0.021 | 6.5 s |
+| "The far side of the Moon is dark…" | a question that says what it remembers ("As I remember it, the far side gets as much sunlight as the near side…") | $0.017 | 7.2 s |
+| "With three runs a week…" after "I run four days a week…" | correction with your words | $0.018 | 5.9 s |
+
+That is within the $0.024 to $0.034 measured for reads on 6 Nov: the check costs less
+than the spread between reads. The two failed tries show the gate working: each would have
+been a confident correction resting on a number the tag did not show.
 
 ## Data model
 
@@ -314,6 +328,23 @@ New script steps: `see: N M` (the Mth quoted words of thread N's check, as a cli
 | `AGENTS.md`, `design/capabilities.md` | the map and the capability |
 
 Size: M.
+
+## As built (7 Nov)
+
+- Everything above works end to end with the fake brain (`t14-show-working`,
+  `t15-working-words`) and was checked against the real model (the table above).
+- Screenshots: `design/features/shots/show-working-sum.jpg` and `-sum-dark.jpg` (hovered),
+  `-open.jpg` (open, with Disagree), `-words.jpg` and `-words-dark.jpg`, `-taken-back.jpg`,
+  `-marks.jpg` (Marks only), from the `show-working` fixture.
+- The Disagree message the mind gets: "I don't think your working holds: “…”. Check each
+  line of it, and the words it rests on, against my note. If I'm right, say in one
+  sentence what you got wrong and mark this resolved. If I'm not, show me where, in one or
+  two sentences." Your reply shows in the tag as you wrote it.
+- A bare `[[correction]]` in the fake brain still passes unchecked, so other branches'
+  scenarios keep working; any of the check directives sends it through the real rules.
+- Not mine to change: the Start here tour (`src/welcome.rs`) has two corrections with no
+  working, and `design/capabilities.md` now lists the capability the tour and the film
+  should show.
 
 ## Open question for the owner
 

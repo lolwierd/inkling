@@ -211,6 +211,9 @@ interface Mention {
   kind: Kind;
   /** Every value the words could mean: "10k" is 10 (a 10k race) or 10,000. */
   values: number[];
+  /** Where it is in the text it was found in, and how long it is. */
+  at: number;
+  len: number;
 }
 
 const WORDS: Record<string, number> = {
@@ -227,17 +230,19 @@ const MENTION =
 export function mentions(text: string, digitsOnly = false): Mention[] {
   const out: Mention[] = [];
   for (const m of text.matchAll(MENTION)) {
+    const at = m.index ?? 0;
+    const len = m[0].length;
     if (m[1]) {
       const q = parseQuantity(m[1]);
-      if (q) out.push({ kind: "duration", values: [q.value] });
+      if (q) out.push({ kind: "duration", values: [q.value], at, len });
     } else if (m[2]) {
       const n = Number(m[2].replace(/,/g, "") + (m[3] ? "." + m[3] : ""));
-      if (m[4]) out.push({ kind: "percent", values: [n / 100] });
-      else if (m[5]) out.push({ kind: "number", values: [n, n * 1000] });
-      else out.push({ kind: "number", values: [n] });
+      if (m[4]) out.push({ kind: "percent", values: [n / 100], at, len });
+      else if (m[5]) out.push({ kind: "number", values: [n, n * 1000], at, len });
+      else out.push({ kind: "number", values: [n], at, len });
     } else if (m[6] && !digitsOnly) {
       const w = WORDS[m[6].toLowerCase()];
-      if (w !== undefined) out.push({ kind: "number", values: [w] });
+      if (w !== undefined) out.push({ kind: "number", values: [w], at, len });
     }
   }
   return out;
@@ -254,6 +259,28 @@ function fits(q: Quantity, ms: Mention[]): boolean {
     if (q.kind === "percent") return m.kind === "percent" ? m.values.some((v) => near(v, q.value)) : false;
     return m.kind === "number" && m.values.some((v) => near(v, q.value));
   });
+}
+
+const STOP = new Set(["a", "an", "the", "per", "of", "in", "on", "at", "to", "for", "and", "or", "by", "is", "it"]);
+
+/**
+ * The writer's own words for a number the sum uses but the model did not list as a given:
+ * the first mention of it (in the corrected paragraph first), with the word after it when
+ * that word says what it counts ("50 minutes"). `null` when the writer never wrote it.
+ */
+export function findGiven(q: Quantity, w: Writer): { words: string; inTarget: boolean } | null {
+  for (const [source, inTarget] of [[w.target, true], [w.note, false], [w.title, false], [w.brief ?? "", false]] as const) {
+    for (const m of mentions(source)) {
+      if (!fits(q, [m])) continue;
+      let end = m.at + m.len;
+      const next = /^\s+([\p{L}]+)/u.exec(source.slice(end));
+      if (next && /^\d/u.test(source.slice(m.at)) && !/[kK%]$/u.test(source.slice(m.at, end)) && !STOP.has(next[1].toLowerCase()) && next[1].length <= 10) {
+        end += next[0].length;
+      }
+      return { words: source.slice(m.at, end), inTarget };
+    }
+  }
+  return null;
 }
 
 // ----- the check -------------------------------------------------------------------
@@ -294,7 +321,6 @@ export function backCorrection(raw: unknown, text: string, w: Writer): { check: 
   if (lines.length) {
     if (lines.length > MAX_LINES) return { why: `its sum has ${lines.length} lines` };
     const givens = list(raw.givens).filter(isObject).slice(0, MAX_GIVENS);
-    if (!givens.length) return { why: "its sum takes no numbers from the writer" };
     const known: number[] = [];
     let fromParagraph = false;
     for (const g of givens) {
@@ -309,7 +335,6 @@ export function backCorrection(raw: unknown, text: string, w: Writer): { check: 
       shownValues.push(q.value);
       check.givens.push({ value, words });
     }
-    if (!fromParagraph) return { why: "none of its numbers come from the paragraph it corrects" };
     for (const [i, line] of lines.entries()) {
       const n = i + 1;
       const got = evaluate(str(line.sum));
@@ -317,8 +342,14 @@ export function backCorrection(raw: unknown, text: string, w: Writer): { check: 
       const is = parseQuantity(str(line.is));
       if (!is) return { why: `line ${n}: “${str(line.is)}” is not a number` };
       for (const o of got.operands) {
-        const home = known.some((k) => near(k, o.q.value)) || (o.q.kind === "number" && UNITS.includes(o.q.value));
-        if (!home) return { why: `line ${n}: ${o.text} is not in the note, not an earlier result and not a unit` };
+        if (known.some((k) => near(k, o.q.value)) || (o.q.kind === "number" && UNITS.includes(o.q.value))) continue;
+        // one of the writer's numbers the model did not list: find their words for it
+        const found = check.givens.length < MAX_GIVENS ? findGiven(o.q, w) : null;
+        if (!found) return { why: `line ${n}: ${o.text} is not in the note, not an earlier result and not a unit` };
+        if (found.inTarget) fromParagraph = true;
+        known.push(o.q.value);
+        shownValues.push(o.q.value);
+        check.givens.push({ value: o.text, words: found.words });
       }
       const off = Math.abs(got.value - is.value);
       if (off > is.half + 1e-9 * Math.max(1, Math.abs(is.value))) {
@@ -328,6 +359,7 @@ export function backCorrection(raw: unknown, text: string, w: Writer): { check: 
       shownValues.push(is.value, got.value, ...got.operands.map((o) => o.q.value));
       check.sum.push({ sum: got.shown, is: str(line.is).replace(/^(?:≈|~|about\s+)/iu, "").trim(), rounded: !near(got.value, is.value) });
     }
+    if (!fromParagraph) return { why: "none of its numbers come from the paragraph it corrects" };
   }
 
   if (passages.length) {

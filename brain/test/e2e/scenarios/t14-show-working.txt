@@ -1,0 +1,40 @@
+# Show its working: a correction carries a sum the brain worked out again; a sum that does
+# not add up arrives as its fallback question; the working shows in the tag (margin and
+# Marks only), and Copy and Export carry it.
+# tags: working
+note: Race plan
+type: [[correction]][[quote:so the 10k takes 50 minutes]][[sum:5:30 × 10 = 55:00]][[given:5:30@5:30 per km]][[given:10@the 10k]][[question:How long does 10 km take at 5:30?]] My pace is 5:30 per km, so the 10k takes 50 minutes.
+settle
+dump: backed
+expect: d.threads.length === 1 && d.threads[0].kind === "Correction" && d.threads[0].check === "sum:1"
+type: [[correction]][[sum:6:00 × 10 = 50:00]][[given:6:00@6:00 per km]][[given:10@the 10k]][[question:What does 6:00 a km come to over 10 km?]] At 6:00 per km the long run takes 50 minutes.
+settle
+dump: demoted
+expect: d.threads.length === 2 && d.threads[1].kind === "Question" && d.threads[1].check === null
+set: appearance=light
+hover: 1
+wait: 900
+dump: unfolded
+expect: d.unfolded.includes(d.threads[0].id)
+shot: working
+set: appearance=dark
+wait: 300
+shot: working-dark
+set: appearance=light
+hover: 0
+set: placement=marks
+wait: 300
+mark: 1
+wait: 600
+dump: marks
+expect: d.active === d.threads[0].id
+shot: working-marks
+copy: 1
+export: md
+export: html
+quit
+expect: note("Race plan").threads[0].messages[0].check.sum[0].is === "55:00" && note("Race plan").threads[0].messages[0].check.givens[1].words === "the 10k"
+expect: note("Race plan").threads[1].kind === "question" && note("Race plan").threads[1].messages[0].text === "What does 6:00 a km come to over 10 km?" && note("Race plan").threads[1].messages[0].check === undefined
+expect: log.some(r => r.msg.startsWith("script copy:") && r.msg.includes("Working: 5:30 × 10 = 55:00 (from your words: “5:30 per km”, “the 10k”)"))
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> *Working:* 5:30 × 10 = 55:00 (from your words: “5:30 per km”, “the 10k”)"))
+expect: log.some(r => r.msg.startsWith("script export html:") && r.msg.includes('<p class=\\"working\\">Working: 5:30 × 10 = 55:00'))

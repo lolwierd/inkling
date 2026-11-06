@@ -1,0 +1,115 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000d2",
+ "title": "Training week",
+ "folder": null,
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Training week"
+  },
+  {
+   "kind": "paragraph",
+   "text": "I run four days a week, Monday to Thursday, and rest at the weekend."
+  },
+  {
+   "kind": "paragraph",
+   "text": "With three runs a week, Sunday stays free for the long run."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Each run is 8 km, so the week comes to 32 km before the long run."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "w1",
+   "start": 88,
+   "end": 105,
+   "quote": "three runs a week",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:05:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Earlier you wrote that you run four days a week. Which is it: three runs or four?",
+     "at": "2026-11-06T12:05:00Z",
+     "check": {
+      "sum": [],
+      "givens": [],
+      "words": [
+       {
+        "words": "I run four days a week",
+        "note": null
+       }
+      ],
+      "taken_back": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "w2",
+   "start": 161,
+   "end": 187,
+   "quote": "so the week comes to 32 km",
+   "kind": "correction",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:06:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Three runs of 8 km come to 24 km, not 32. Which week is this sentence about?",
+     "at": "2026-11-06T12:06:00Z",
+     "check": {
+      "sum": [
+       {
+        "sum": "8 × 3",
+        "is": "24",
+        "rounded": false
+       }
+      ],
+      "givens": [
+       {
+        "value": "8",
+        "words": "Each run is 8 km"
+       },
+       {
+        "value": "3",
+        "words": "three runs a week"
+       }
+      ],
+      "words": [],
+      "taken_back": true
+     }
+    },
+    {
+     "role": "you",
+     "text": "This line is about the four-run week, not the three.",
+     "at": "2026-11-06T12:07:00Z"
+    },
+    {
+     "role": "mind",
+     "text": "You're right: four runs of 8 km are 32 km. I took the correction back.",
+     "at": "2026-11-06T12:07:10Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-11-06T12:05:00Z",
+ "updated_at": "2026-11-06T12:05:00Z"
+}

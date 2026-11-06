@@ -1,0 +1,107 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000d1",
+ "title": "Sub-50 10k by March",
+ "folder": null,
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Sub-50 10k by March"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I’ll come in just under 50."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Sunday is the long run. I’ll add a kilometre every week until I reach 16."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Strength work twice a week, mostly calves and hips, because that’s where it fell apart last year."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "t1",
+   "start": 261,
+   "end": 325,
+   "quote": "If I hold 5:30 for the whole race, I’ll come in just under 50.",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "At 5:30 a km, 10 km takes 55:00. Under 50 needs 5:00 a km or faster. Which do you want to change: the pace or the goal?",
+     "at": "2026-11-06T12:00:00Z",
+     "check": {
+      "sum": [
+       {
+        "sum": "5:30 × 10",
+        "is": "55:00",
+        "rounded": false
+       },
+       {
+        "sum": "50:00 ÷ 10",
+        "is": "5:00",
+        "rounded": false
+       }
+      ],
+      "givens": [
+       {
+        "value": "5:30",
+        "words": "hold 5:30 for the whole race"
+       },
+       {
+        "value": "10",
+        "words": "city 10k"
+       },
+       {
+        "value": "50:00",
+        "words": "under 50 minutes"
+       }
+      ],
+      "words": [],
+      "taken_back": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "t2",
+   "start": 357,
+   "end": 400,
+   "quote": "add a kilometre every week until I reach 16",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Starting from how far? If you start at 8 km, 16 km is eight weeks out. Is the race at least eight weeks away, with an easier week before it?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-11-06T12:00:00Z",
+ "updated_at": "2026-11-06T12:00:00Z"
+}

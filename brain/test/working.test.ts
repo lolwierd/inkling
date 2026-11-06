@@ -145,7 +145,19 @@ describe("a correction shows its working", () => {
   test("an empty or missing check", () => {
     expect(why(undefined)).toBe("it came without a check");
     expect(why({ sum: [], words: [] })).toBe("its check was empty");
-    expect(why({ sum: GOOD.sum })).toBe("its sum takes no numbers from the writer");
+  });
+  test("the writer's numbers the model did not list are found in their words", () => {
+    const r = backCorrection({ sum: GOOD.sum }, TEXT, writer);
+    expect("check" in r && r.check.givens).toEqual([
+      { value: "5:30", words: "5:30" },
+      { value: "10", words: "10k" },
+      { value: "50:00", words: "50" },
+    ]);
+    const minutes = backCorrection({ sum: [{ sum: "56:40 − 50:00", is: "6:40" }] }, "That is 6:40 faster than last year, a lot to find.", { ...writer, target: NOTE.split("\n")[0] });
+    expect("check" in minutes && minutes.check.givens).toEqual([
+      { value: "56:40", words: "56:40" },
+      { value: "50:00", words: "50 minutes" },
+    ]);
   });
 });
 

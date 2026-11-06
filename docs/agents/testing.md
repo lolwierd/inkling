@@ -65,7 +65,9 @@ one catches the typo that would otherwise make a scenario pass while testing not
 
 `brain/test/e2e/fake-brain.ts` speaks the real protocol with canned answers, chosen by
 directives written into the text the request carries: `[[silent]]`, `[[quote:TEXT]]`,
-`[[correction]]`, `[[sketch]]`, `[[resolved]]`, `[[error:KIND]]`, `[[hang]]`,
+`[[correction]]` (with `[[sum:5:30 × 10 = 55:00]]`, `[[given:5:30@5:30 per km]]`,
+`[[words:PASSAGE]]`, `[[question:TEXT]]` for its check, run through the real brain's rules),
+`[[sketch]]`, `[[resolved]]`, `[[error:KIND]]`, `[[hang]]`,
 `[[delay:MS]]`, `[[exitmid]]`, ...; prefix one with a task to scope it
 (`[[draw>badsvg]]`). Its answers start with the request id (`[r7] Read: what about ...`),
 which makes them easy to find in a dump. It logs every request and answer to

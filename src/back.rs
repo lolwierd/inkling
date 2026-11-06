@@ -20,7 +20,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use crate::note_page::NotePage;
-use crate::store::{Ending, Message, Note, Role, Store, ThoughtKind, Thread};
+use crate::store::{Check, Ending, Message, Note, Role, Store, ThoughtKind, Thread};
 use crate::theme::{DISPLAY, Palette, SANS, SERIF, Theme, ts};
 use crate::ui::{self, Keyed};
 
@@ -418,7 +418,11 @@ fn markdown_in(note: &Note, tz: &impl TimeZone<Offset: std::fmt::Display>, this_
                 .iter()
                 .map(|m| {
                     let who = if m.role == Role::Mind { e.who() } else { "You" };
-                    let text = format!("*{who}:* {}", m.text.trim());
+                    // a correction's working goes with its message, as Copy writes it
+                    let mut text = format!("*{who}:* {}", m.text.trim());
+                    for line in m.check.as_ref().map(crate::working::text_lines).unwrap_or_default() {
+                        text.push_str(&format!("\n{line}"));
+                    }
                     text.lines().map(|l| if l.trim().is_empty() { ">\n".to_string() } else { format!("> {l}\n") }).collect()
                 })
                 .collect();
@@ -491,7 +495,7 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
         if i == 1 && folded > 0 {
             talk = talk.child(div().flex().child(control(Act::More, format!("{folded} more"), cx)));
         }
-        talk = talk.child(message(m, t));
+        talk = talk.child(message(m, color, t));
     }
     if e.sketch {
         talk = talk.child(div().text_size(px(ts::SMALL)).text_color(p.faint).child("With a sketch"));
@@ -502,7 +506,7 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
     // how it ended, set like a status line, and what goes under it
     col = col.child(div().mt(px(10.)).text_size(px(ts::SMALL)).line_height(px(16.)).font_weight(FontWeight::MEDIUM).text_color(p.graphite).child(e.ending_line(&Local, year)));
     let under: Option<AnyElement> = match e.ending {
-        Ending::TiedOff => e.why().map(|m| message(m, t).into_any_element()),
+        Ending::TiedOff => e.why().map(|m| message(m, color, t).into_any_element()),
         Ending::LetStand => Some(match (look.reason_box, &e.reason) {
             (Some(b), _) => b,
             (None, Some(r)) => div().font_family(SERIF).text_size(words).line_height(words_lh).text_color(p.ink).child(format!("\u{201c}{r}\u{201d}")).into_any_element(),
@@ -536,11 +540,18 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
     col.child(row).into_any_element()
 }
 
-/// A message as the tag sets it: the mind's words in its lettering, yours beside "You".
-fn message(m: &Message, t: &Theme) -> Div {
+/// A message as the tag sets it: the mind's words in its lettering, with a correction's
+/// working under them; yours beside "You".
+fn message(m: &Message, color: Hsla, t: &Theme) -> Div {
     let p = t.p;
     match m.role {
-        Role::Mind => div().font_family(t.voice_font.clone()).text_size(px(ts::BODY)).line_height(px(20.)).text_color(p.ink).child(m.text.clone()),
+        Role::Mind => {
+            let words = div().font_family(t.voice_font.clone()).text_size(px(ts::BODY)).line_height(px(20.)).text_color(p.ink).child(m.text.clone());
+            match &m.check {
+                Some(c) => div().flex().flex_col().gap(px(6.)).child(words).child(working(c, color, t)),
+                None => words,
+            }
+        }
         Role::You => div()
             .flex()
             .gap(px(6.))
@@ -550,6 +561,38 @@ fn message(m: &Message, t: &Theme) -> Div {
             .child(div().flex_none().text_color(p.faint).child("You"))
             .child(div().flex_1().min_w(px(0.)).child(m.text.clone())),
     }
+}
+
+/// A correction's working as its tag shows it, but still: the sum line by line and the
+/// words of yours it took the numbers from, or your words elsewhere that it rests on;
+/// struck through once the mind took the correction back.
+fn working(c: &Check, color: Hsla, t: &Theme) -> Div {
+    let p = t.p;
+    let quoted = |w: &str| format!("\u{201c}{w}\u{201d}");
+    let label = if c.sum.is_empty() { "In your note" } else { "Working" };
+    let mut block = div()
+        .pl(px(10.))
+        .border_l(px(1.))
+        .border_dashed()
+        .border_color(color.opacity(0.45))
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .text_size(px(ts::UI))
+        .line_height(px(18.))
+        .text_color(if c.taken_back { p.faint } else { p.graphite })
+        .child(div().text_size(px(ts::META)).text_color(p.faint).child(if c.taken_back { format!("{label}, taken back") } else { label.to_string() }));
+    for l in &c.sum {
+        block = block.child(div().when(c.taken_back, |d| d.line_through()).child(format!("{} {} {}", l.sum, crate::working::sign(l), l.is)));
+    }
+    if !c.givens.is_empty() {
+        let words: Vec<String> = c.givens.iter().map(|g| quoted(&g.words)).collect();
+        block = block.child(div().text_size(px(ts::SMALL)).line_height(px(17.)).child(format!("From your words: {}", words.join(", "))));
+    }
+    for w in &c.words {
+        block = block.child(div().when(c.taken_back, |d| d.line_through()).child(quoted(&w.words)));
+    }
+    block
 }
 
 /// The entry's ending in the gutter, where the front draws its read marks, level with its
@@ -829,8 +872,8 @@ mod tests {
             messages: said
                 .iter()
                 .map(|s| match s.strip_prefix("you: ") {
-                    Some(mine) => Message { role: Role::You, text: mine.into(), at: opened },
-                    None => Message { role: Role::Mind, text: s.to_string(), at: opened },
+                    Some(mine) => Message { at: opened, ..Message::new(Role::You, mine) },
+                    None => Message { at: opened, ..Message::new(Role::Mind, *s) },
                 })
                 .collect(),
             drawing: None,
@@ -1007,11 +1050,20 @@ mod tests {
         let mut note = running_plan();
         note.title.clear();
         note.threads[0].reason = None;
-        note.threads[0].messages.push(Message { role: Role::You, text: "It is ten weeks.\nFrom 8 km.".into(), at: at(6, 9) });
+        note.threads[0].messages.push(Message { at: at(6, 9), ..Message::new(Role::You, "It is ten weeks.\nFrom 8 km.") });
         note.threads[0].drawing = Some("<svg/>".into());
         let md = markdown_in(&note, &Utc, 2026);
         assert!(md.starts_with("# The back of \u{201c}Untitled\u{201d}\n"), "{md}");
         assert!(md.contains("> *Inkling:* Starting from how far?\n>\n> *You:* It is ten weeks.\n> From 8 km.\n\n*With a sketch.*\n\nNo reason given.\n"), "{md}");
+        // a correction's working is copied with its message
+        let mut checked = running_plan();
+        checked.threads[1].messages[0].check = Some(Check {
+            sum: vec![crate::store::SumLine { sum: "5:30 \u{d7} 10".into(), is: "55:00".into(), rounded: false }],
+            givens: vec![crate::store::Given { value: "5:30".into(), words: "hold 5:30".into() }],
+            ..Default::default()
+        });
+        let md = markdown_in(&checked, &Utc, 2026);
+        assert!(md.contains("> *Inkling:* At 5:30 a km, 10 km takes 55:00.\n> Working: 5:30 \u{d7} 10 = 55:00 (from your words: \u{201c}hold 5:30\u{201d})\n>\n"), "{md}");
         // a note with no threads
         note.threads.clear();
         assert_eq!(markdown_in(&note, &Utc, 2026), format!("# The back of \u{201c}Untitled\u{201d}\n\n{EMPTY}\n"));

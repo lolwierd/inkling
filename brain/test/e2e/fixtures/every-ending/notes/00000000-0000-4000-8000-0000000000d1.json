@@ -49,7 +49,21 @@
         {
           "role": "mind",
           "text": "At 5:30 a km, 10 km takes 55:00. Under 50 needs 5:00 a km or faster; 4:55 leaves a little room. Which do you want to change: the pace or the goal?",
-          "at": "2026-11-04T09:12:00Z"
+          "at": "2026-11-04T09:12:00Z",
+          "check": {
+            "sum": [
+              {
+                "sum": "5:30 × 10",
+                "is": "55:00"
+              }
+            ],
+            "givens": [
+              {
+                "value": "5:30",
+                "words": "hold 5:30"
+              }
+            ]
+          }
         },
         {
           "role": "mind",
@@ -73,7 +87,7 @@
       "messages": [
         {
           "role": "mind",
-          "text": "Starting from how far? If you start at 8 km, 16 km is eight weeks out. Is the race at least eight weeks away, with an easier week before it?",
+          "text": "Starting from how far? From 8 km, 16 km is eight weeks out.",
           "at": "2026-11-05T10:02:00Z"
         }
       ]
@@ -135,7 +149,7 @@
         },
         {
           "role": "mind",
-          "text": "What gave out first last year, your calves or your form? Start from that and the exercises pick themselves.",
+          "text": "What gave out first last year, your calves or your form?",
           "at": "2026-11-06T16:20:08Z"
         }
       ]

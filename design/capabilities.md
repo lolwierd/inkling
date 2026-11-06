@@ -80,5 +80,5 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Capability | How |
 |---|---|
 | Runs on your Claude | the Claude Code login on this Mac; nothing to set up |
-| Pick the model and effort | Settings > Model; reading and answering have their own effort |
-| Every shortcut can be changed | Settings (on the `settings` branch, not merged yet) |
+| Pick the model and effort | Settings > Model: the models Claude Code offers (from the Agent SDK), kept for when it is not running; reading and answering have their own effort, from the levels the model takes |
+| Every shortcut can be changed | Settings > Shortcuts: click keys and press new ones, add or remove keys, clashes flagged on both rows, reset one or all; new keys work at once, menus included |

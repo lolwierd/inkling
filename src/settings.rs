@@ -345,14 +345,17 @@ impl SettingsView {
         this
     }
 
-    /// Test aid: INKLING_SETTINGS_KEYS="settings:alt-cmd-right main:alt-cmd-right" presses
+    /// Test aid: INKLING_SETTINGS_KEYS="settings:alt-cmd-right,main:alt-cmd-right" presses
     /// each key in that window (Settings or the note), a second apart, through GPUI's own
-    /// dispatch, as a key press would arrive.
+    /// dispatch, as a key press would arrive. Commas or spaces separate the presses.
     fn press_test_keys(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Ok(steps) = std::env::var("INKLING_SETTINGS_KEYS") else { return };
         let here = window.window_handle();
-        let steps: Vec<(bool, String)> =
-            steps.split_whitespace().filter_map(|s| s.split_once(':')).map(|(w, k)| (w == "settings", k.to_string())).collect();
+        let steps: Vec<(bool, String)> = steps
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter_map(|s| s.split_once(':'))
+            .map(|(w, k)| (w == "settings", k.to_string()))
+            .collect();
         cx.spawn_in(window, async move |_, cx| {
             for (in_settings, keys) in steps {
                 cx.background_executor().timer(Duration::from_millis(1000)).await;

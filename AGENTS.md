@@ -82,7 +82,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | File | Owns | Look here for |
 |---|---|---|
 | `src/main.rs` | logging, the notebook guard, the one window | `INKLING_LOG_JSON`, window options |
-| `src/app.rs` | the window: no title bar (traffic lights, sidebar toggle and Chat sit on the cloth above the sheet and fade while you type), the sidebar with the wordmark, ⌘K palette, settings and export overlays, key bindings, hold-⌥ dictation, the script runner (`run_script`) and window-level steps | actions and keys (`init`), `chrome_layer`, `INKLING_OPEN`, `INKLING_JIGGLE` |
+| `src/app.rs` | the window: no title bar (traffic lights, sidebar toggle and Chat sit on the cloth above the sheet and fade while you type), the sidebar with the wordmark, ⌘K palette and export overlays, opening Settings, hold-⌥ dictation, the script runner (`run_script`) and window-level steps | actions and menus (`init`), `chrome_layer`, `INKLING_OPEN`, `INKLING_JIGGLE` |
+| `src/shortcuts.rs` | every shortcut: the table (app actions here, the editor's from `editor::bindings()`), your keys from `settings.json` `shortcuts`, clashes, the keymap rebuild and menu refresh when a key changes | `table`, `apply`, `clashes`, `take` (what recording accepts) |
 | `src/note_page.rs` | one note: header row, editor, the margin's tags (folded to a tab until pointed at or opened; draggable, `Thread.tag_offset`), threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
 | `src/editor.rs` | the document as one string with `\n` between blocks; block kinds, marks, undo, IME, layout, painting; `Anchor`s (thread ranges) that follow edits; gutter marks | `State` (pure, tested headless), `map_anchor`, `NoteEditor` API |
 | `src/margin.rs` | where tags go without overlapping (`place`), and the `Measured` wrapper that reports their heights | |
@@ -93,7 +94,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
 | `src/export.rs` | Markdown, HTML, Word (via `textutil`) with threads under paragraphs | |
 | `src/welcome.rs` | the first-run note "Start here": a tour with real threads, whose own paragraphs are never read (`Note.left_alone`); the writer's first sentence is probed | `first_run_note` |
-| `src/theme.rs`, `src/ui.rs`, `src/palette.rs`, `src/settings.rs` | colours and fonts, small widgets, ⌘K, the settings window | |
+| `src/theme.rs`, `src/ui.rs`, `src/palette.rs` | colours and fonts, small widgets, ⌘K | |
+| `src/settings.rs`, `src/settings/parts.rs` | the Settings window (its own window, ⌘,): sidebar of panes, the glass, grouped rows, the shortcut recorder, the model list from the brain's `status` | `open_window`, `Glass`, `INKLING_SETTINGS_*` |
 | `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
@@ -167,6 +169,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `INKLING_JIGGLE=<ms>` | keep a covered window drawing |
 | `INKLING_LOG_JSON=1` | JSON log lines (`ms`, `level`, `target`, `msg`) |
 | `INKLING_OPEN=chat,sidebar,...` | panels open at launch |
+| `INKLING_SETTINGS_TAB=<pane>` | the pane Settings opens on (with `INKLING_OPEN=settings`) |
+| `INKLING_SETTINGS_RECORD=<action>`, `INKLING_SETTINGS_KEYS=settings:<keys>,main:<keys>`, `INKLING_SETTINGS_SEARCH=<text>` | drive the shortcut recorder without clicks: listen for an action's keys, press keys in Settings or the note, fill the search |
 | `INKLING_SLOWMO=<factor>` | slow every thread animation |
 | `INKLING_BUN`, `INKLING_BRAIN_DIR`, `INKLING_CLAUDE_PATH`, `INKLING_USE_API_KEY=1` | where Bun, the brain and `claude` are; keep an API key in the brain's env |
 | `FAKE_*` | the fake brain's delays and failures (its header) |

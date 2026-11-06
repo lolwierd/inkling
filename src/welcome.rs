@@ -109,6 +109,7 @@ pub fn first_run_note(mode: Mode) -> Note {
         (H2, "Make it yours"),
         (P, "In Settings (\u{2318},) choose Light, Dark or the system\u{2019}s look, the text size, the lettering, and your thread colour: madder, indigo, sage, rose, plum, walnut or ochre. Questions can appear in both margins, in the right margin only, or as small marks in the text. Reading pace can be regular or slow. Ink from the pointer lets a drop of ink fall now and then as you move it."),
         (P, "Hold \u{2325} on its own to speak instead of typing. Under Model, pick which Claude model Inkling uses, and how much effort it spends reading along and answering. It runs on the Claude login already on this Mac."),
+        (P, "Under Shortcuts you can change any key: click it and press the keys you want."),
         (H2, "Quiet when you want it"),
         (P, "The window\u{2019}s controls fade while you write and come back when you move the pointer. \u{2318}\u{21e7}. hides every thread and leaves just your words."),
         (H2, "Keys"),

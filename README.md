@@ -84,7 +84,7 @@ commands (checks, scenarios with expectations, the page state as JSON, screensho
 | `INKLING_CLAUDE_PATH=<path>` | Use a specific `claude` binary instead of the SDK's bundled one. |
 | `INKLING_SETTINGS_TAB=<pane>` | Open Settings on reading, appearance, minds, newmind, about, model, shortcuts or help (with `INKLING_OPEN=settings`). |
 | `INKLING_SETTINGS_RECORD=<action>` | Open Settings listening for new keys for that shortcut, e.g. `app::NewNote`. |
-| `INKLING_SETTINGS_KEYS="settings:<keys> main:<keys>"` | Press keys in Settings or in the note window, a second apart, through GPUI's own dispatch. |
+| `INKLING_SETTINGS_KEYS=settings:<keys>,main:<keys>` | Press keys in Settings or in the note window, a second apart, through GPUI's own dispatch. |
 | `INKLING_SETTINGS_SEARCH=<text>` | Fill the shortcut search. |
 | `FAKE_MODELS=none` | The fake brain reports no model list (by default it reports the list the real SDK gave, `brain/test/fixtures/supported-models.json`). |
 

@@ -1,6 +1,7 @@
 # The owner's rule: a thread never covers your words unless you dragged its tag onto them.
-# Every tag of hard-content and of the first-run guide (thread 5 is the Moon correction
-# with its sketch, in the left margin), folded and opened one at a time, stays clear of
+# Every tag of hard-content and of the first-run guide (its five threads, whatever the
+# guide says; the old guide's fifth was the Moon correction with a sketch, in the left
+# margin, the owner's case), folded and opened one at a time, stays clear of
 # the text column (from the header row to the last line): in Both margins and Right
 # margin, from 760 to 1800 px wide, with the chat closed and open, in Linen and
 # Lamplight. A tag short of room hangs outward over the sheet's edge, or narrows. The

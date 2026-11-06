@@ -33,6 +33,7 @@ mod goto;
 mod between;
 /// Threads between notes, as the page shows and follows them.
 mod ends;
+mod read_through;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -551,6 +552,8 @@ pub struct NotePage {
     relate_next: Option<(usize, String)>,
     /// Threads between notes: the thread being followed into the next note to open.
     ends: ends::Ends,
+    /// Read it through: the pass running on this note, if any (`read_through.rs`).
+    read_through: Option<read_through::Pass>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -649,6 +652,7 @@ impl NotePage {
             relating: None,
             relate_next: None,
             ends: Default::default(),
+            read_through: None,
         };
         page.load_into_editor(cx);
         page
@@ -698,6 +702,7 @@ impl NotePage {
 
     /// Switch the page to another note, saving this one first.
     pub fn open(&mut self, note: Note, window: &mut Window, cx: &mut Context<Self>) {
+        self.leave_read_through(cx);
         // The read in flight will never land: leave its paragraph unread.
         if let Some(r) = self.reading.take() {
             self.note.read_hashes.retain(|h| *h != r.hash);
@@ -1052,6 +1057,7 @@ impl NotePage {
             if let Some(r) = self.reading.as_mut() {
                 r.line = moved(r.line);
             }
+            self.shift_read_through(&moved);
         }
         // Writing moved on to another paragraph without a pause: the one left
         // behind may be finished, so keep it for the next look.
@@ -1112,6 +1118,7 @@ impl NotePage {
     pub(crate) fn settled(&self) -> bool {
         self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
             && self.relating.is_none() && self.relate_next.is_none()
+            && self.read_through.is_none()
     }
 
     /// The words of an open thread were edited: look at them again at the next pause.
@@ -1199,13 +1206,14 @@ impl NotePage {
         cx.notify();
     }
 
-    /// When a read ends, look at the paragraphs that were finished meanwhile.
+    /// When a read ends, look at the paragraphs that were finished meanwhile, then let Read
+    /// it through take the next one.
     fn after_read(&mut self, cx: &mut Context<Self>) {
-        if self.reading.is_some() || self.waiting.is_empty() {
-            return;
+        if self.reading.is_none() && !self.waiting.is_empty() {
+            let lines = std::mem::take(&mut self.waiting);
+            self.consider(lines, cx);
         }
-        let lines = std::mem::take(&mut self.waiting);
-        self.consider(lines, cx);
+        self.step_through(cx);
     }
 
     fn consider(&mut self, lines: Vec<usize>, cx: &mut Context<Self>) {
@@ -1499,7 +1507,12 @@ impl NotePage {
     fn read_line(&mut self, line: usize, text: String, hash: u64, cx: &mut Context<Self>) {
         // The first sentence of a new notebook is always asked about.
         let task = if self.note.first_run { "probe" } else { "read" };
-        let input = json!({"task": task, "ctx": self.context(cx), "target": text});
+        let mut input = json!({"task": task, "ctx": self.context(cx), "target": text});
+        // Read it through: a read of a finished draft, and a failure ends the pass.
+        let through = self.reads_through(hash);
+        if through {
+            input["through"] = json!(true);
+        }
         let target = text.clone();
         let reads = task == "read";
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
@@ -1541,7 +1554,9 @@ impl NotePage {
                 // It was never read: let a later pause try this paragraph again.
                 page.note.read_hashes.retain(|h| *h != hash);
                 page.schedule_save(cx);
-                if kind != "cancelled" {
+                if through {
+                    page.pass_failed(&kind, &message, cx);
+                } else if kind != "cancelled" {
                     page.report(&kind, &message, cx);
                 }
                 page.later(cx, |page, cx| page.after_read(cx));
@@ -2664,6 +2679,7 @@ impl NotePage {
                 Some(id) if self.far_end(&id).is_some() => self.follow(&id, cx),
                 _ => log::warn!("script: no thread between notes {n}"),
             },
+            Step::ReadThrough => self.toggle_read_through(cx),
             Step::Log(text) => log::info!("script log: {text}"),
             Step::Export(format) => {
                 self.sync_from_editor(cx);
@@ -2813,6 +2829,7 @@ impl NotePage {
         // the back of the note: `turned`, and `back`, its entries in order
         crate::back::dump_into(&mut state, self, window, cx);
         self.between_state(&mut state, cx);
+        state["read_through"] = self.read_through_state();
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -2877,6 +2894,7 @@ impl NotePage {
         };
         let mind_menu = (menu == Some(Menu::Mind)).then(|| self.menu_card(Menu::Mind, cx));
         let mode_menu = (menu == Some(Menu::Mode)).then(|| self.menu_card(Menu::Mode, cx));
+        let pass = self.read_through_status(cx);
         // Each menu hangs so its words line up with its button's: the mind's dot and name
         // over the button's dot and name; a mode's title under "Reads along", its icon
         // out to the left (the card's edge, an item's inset, then a 12 px icon and a gap).
@@ -2932,6 +2950,7 @@ impl NotePage {
                         )
                         .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
                 )
+                .children(pass)
             })
             // the open count and Hide threads wrap together, and keep to the right edge on
             // whichever line they land (a spacer that wrapped with them, or did not, put
@@ -2986,11 +3005,11 @@ impl NotePage {
     }
 
     /// How many items a header menu has, and which one is chosen now. The mind menu ends
-    /// with New mind and Manage.
+    /// with New mind and Manage, the mode menu with Read it through.
     fn menu_len(&self, menu: Menu, cx: &App) -> usize {
         match menu {
             Menu::Mind => cx.global::<Store>().minds.len() + 2,
-            _ => 2,
+            _ => 3,
         }
     }
 
@@ -3030,6 +3049,7 @@ impl NotePage {
                     Some(_) => cx.emit(PageEvent::OpenSettings(crate::settings::Tab::Minds)),
                 }
             }
+            _ if i == 2 => self.toggle_read_through(cx),
             _ => self.set_mode(if i == 0 { Mode::ThinksWithYou } else { Mode::WhenYouAsk }, cx),
         }
         self.menu = None;
@@ -3291,6 +3311,7 @@ impl NotePage {
                     .on_key_down(cx.listener(Self::menu_key))
                     .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Speaks up when something’s worth a second look.", cx))
                     .child(item("mode-ask", Mode::WhenYouAsk, "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", cx))
+                    .child(self.read_through_item(pick, cx))
                     .into_any_element()
             }
         }

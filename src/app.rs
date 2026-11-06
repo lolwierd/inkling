@@ -48,6 +48,7 @@ gpui_kit::actions!(
         Zoom,
         TurnOver,
         FollowThread,
+        ReadThrough,
     ]
 );
 
@@ -1813,6 +1814,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_action(cx.listener(|this, _: &ImportObsidian, _, cx| this.choose_vault(cx)))
             .on_action(cx.listener(|this, _: &TurnOver, window, cx| this.page.update(cx, |p, cx| p.turn_over(window, cx))))
+            .on_action(cx.listener(|this, _: &ReadThrough, _, cx| this.page.update(cx, |p, cx| p.toggle_read_through(cx))))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_pointer))

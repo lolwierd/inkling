@@ -306,6 +306,15 @@ fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mu
     }
 }
 
+/// Whether the pointer unfolds tags. Not in a test run (`INKLING_BACKGROUND`, which only
+/// `scripts/dev` sets): GPUI tracks the real pointer over the covered test window, so the
+/// owner's parked pointer would unfold whatever tag it rests on. There a tag takes its
+/// hover only from script steps (`hover: n`).
+fn pointer_hovers_tags() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("INKLING_BACKGROUND").is_none())
+}
+
 pub(crate) fn slowmo() -> f32 {
     static F: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *F.get_or_init(|| std::env::var("INKLING_SLOWMO").ok().and_then(|v| v.parse::<f32>().ok()).filter(|f| *f >= 1.).unwrap_or(1.))
@@ -3783,7 +3792,9 @@ impl NotePage {
             // a tag dragged over your words must not put the caret under it
             .occlude()
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                this.set_tag_hover(&id_hover, "tab", *hovered, cx);
+                if pointer_hovers_tags() {
+                    this.set_tag_hover(&id_hover, "tab", *hovered, cx);
+                }
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, _| {
                 let tab = this.tab_bounds.borrow().get(&id_down).copied();
@@ -4121,7 +4132,9 @@ impl NotePage {
                     inset: false,
                 }])
                 .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                    this.set_tag_hover(&id_hover, "panel", *hovered, cx);
+                    if pointer_hovers_tags() {
+                        this.set_tag_hover(&id_hover, "panel", *hovered, cx);
+                    }
                 }))
                 // a click on a tag that only unfolded under the pointer opens it for a reply
                 .on_click(cx.listener(move |this, _, window, cx| {

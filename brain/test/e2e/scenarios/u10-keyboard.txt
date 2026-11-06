@@ -2,21 +2,18 @@
 # leaves the note for the header and Tab walks back to the note; Return or Space presses;
 # the mode and mind menus take the arrow keys and give the keyboard back to their button;
 # from the open tag's reply box Tab goes to Resolve, Dismiss, Make a note and Copy; ⌃Tab
-# leaves the note (whose Tab indents) for the controls after it; the sidebar's rows are
-# stops; Tab stays inside the export dialog.
+# leaves the note (whose Tab indents) for the controls after it, Chat and then ☰, even
+# after typing has faded them; the sidebar's rows are stops; Tab stays inside the export
+# dialog. (Tags take no hover from the real pointer in test runs, so none is open here
+# that the steps did not open.)
 # fixture: running-plan
 wait: 1500
-# a tag under the owner's parked pointer drops open by itself (GPUI tracks the real pointer
-# over the covered test window): move the pointer off every tag first, so the Tab order
-# below is the page's own
-hover: 0
-wait: 700
 set: appearance=light
 caret: end
 key: shift-tab
 dump: header-last
-expect: d.focus === "header:hide-threads"
-key: shift-tab shift-tab shift-tab
+expect: d.focus === "header:turn-over"   // the header's last control, after Hide threads
+key: shift-tab shift-tab shift-tab shift-tab
 dump: tell
 expect: d.focus === "header:tell"
 key: tab
@@ -40,7 +37,7 @@ key: down down
 key: escape
 dump: mind-escaped
 expect: d.menu === null && d.focus === "header:mind" && d.note.mind === "Inkling"
-key: tab tab tab tab tab
+key: tab tab tab tab tab tab
 dump: back-to-note
 expect: d.focus === "note"
 jump: next
@@ -57,9 +54,11 @@ key: shift-tab shift-tab shift-tab enter
 wait: 400
 dump: resolved
 expect: d.statuses.includes("t1:Resolved:Inkling") && d.focus === "note"   // Return pressed Resolve; the keyboard went back to the note
+keys: \sTyped.
+wait: 1200
 key: ctrl-tab
 dump: ctrl-tab
-expect: d.focus === "chrome:chat"   // the next control after the note (no tag is open): Chat
+expect: d.typing && d.focus === "chrome:chat"   // the next control after the note (no tag is open): Chat, though typing faded it
 key: tab
 dump: round
 expect: d.focus === "chrome:sidebar"   // round the window to ☰

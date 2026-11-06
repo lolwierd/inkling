@@ -14,12 +14,12 @@
 //! activate: 1
 //! reply: Fair, what's the cheapest fix?
 //! chat: What have we figured out so far?
-//! open: settings          # or sidebar, palette, minds, model, export, jmw, welcome
+//! open: settings          # or sidebar, palette, loose (Loose ends), minds, model, export, jmw, welcome
 //! ```
 //!
 //! `wait: ms` waits on the clock. `settle` waits until the page has nothing scheduled
 //! or in flight (no pause pending, no read, no thread or chat request, not typing, no
-//! `import:` still reading its vault), up
+//! `import:` still reading its vault, no thread being gone to from Loose ends), up
 //! to `settle: ms` (default 20000); prefer it after typing or asking, so a run does not
 //! depend on how busy the machine is.
 //!
@@ -58,7 +58,7 @@
 //! room: Inkling, Skeptic    # minds for the next `ask:` (Ask the room, up to three)
 //! undo-dismiss              # put back the last dismissed thread
 //! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
-//! open: settings            # sidebar|palette|settings|minds|newmind|model|about|export|jmw
+//! open: settings            # sidebar|palette|loose|settings|minds|newmind|model|about|export|jmw
 //! close                     # close the sidebar and every overlay
 //! quit                      # every script should end with it
 //! ```

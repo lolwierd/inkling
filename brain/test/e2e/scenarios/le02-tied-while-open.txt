@@ -1,0 +1,30 @@
+# A thread tied off while Loose ends is open keeps its row, which says so, and Return still
+# goes to its words; the next time the list opens it is gone. With nothing open, the list
+# says so plainly.
+# fixture: running-plan
+# tags: loose-ends
+wait: 1500
+edit: 5:30 for the whole race => 4:55 for the whole race [[resolved]]
+open: loose
+dump: before
+expect: d.loose_ends.open && d.loose_ends.rows.map(r => r.thread + ":" + r.state).join() === "t1:open,t2:open"
+settle
+dump: tied
+expect: d.statuses.includes("t1:Resolved:Inkling")   // the recheck tied it off behind the card
+expect: d.loose_ends.open && d.loose_ends.rows.map(r => r.thread + ":" + r.state).join() === "t1:tied off,t2:open"   // the row stays and says so
+expect: d.loose_ends.selected === 0
+key: enter
+settle
+dump: went-tied
+expect: d.active === "t1" && !d.loose_ends.open
+expect: d.slots.some(s => s.id === "t1")   // its tag is open, tied off
+open: loose
+dump: reopened
+expect: d.loose_ends.rows.map(r => r.thread).join() === "t2" && d.loose_ends.count === 1
+key: escape
+resolve: 2
+open: loose
+dump: none
+expect: d.loose_ends.open && d.loose_ends.rows.length === 0 && d.loose_ends.count === 0 && d.loose_ends.selected === null
+expect: tasks.join() === "reply"   // the recheck, and nothing else
+quit

@@ -1,0 +1,32 @@
+# Going to a thread from Loose ends when threads are hidden shows them again; in Marks only
+# its tag opens alone; words far down a long note are brought to a third of the window.
+# fixture: hard-content
+# tags: loose-ends
+wait: 1500
+open: jmw
+dump: hidden
+expect: d.hidden
+open: loose
+key: enter
+settle
+dump: shown
+expect: !d.hidden && d.active !== null && d.focus === "reply"
+set: placement=marks
+escape
+open: loose
+key: enter
+settle
+dump: marks
+expect: d.active !== null && d.slots.length === 1 && d.slots[0].id === d.active   // Marks only: just its tag
+set: placement=both
+escape
+open: loose
+key: p a r a g r a p h space 3 0
+dump: narrowed
+expect: d.loose_ends.rows.length === 1 && d.loose_ends.rows[0].note === "A very long note"
+key: enter
+settle
+dump: far
+expect: d.note.title === "A very long note" && d.active === "h01" && d.focus === "reply"
+expect: d.scrolled > 600   // brought down to the words
+quit

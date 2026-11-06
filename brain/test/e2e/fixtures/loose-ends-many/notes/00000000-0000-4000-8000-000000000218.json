@@ -1,0 +1,157 @@
+{
+ "id": "00000000-0000-4000-8000-000000000218",
+ "title": "Reading notes, week 19",
+ "folder": "f-read",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Reading notes, week 19"
+  },
+  {
+   "kind": "paragraph",
+   "text": "A weekly review on Friday afternoon keeps the inbox at zero, in week 19 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The kitchen shelves can hold the cookbooks if we drop the top one, in week 19 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Two easy runs a week are enough to keep the base mileage up, in week 19 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The migration is safe because every write goes to both databases, in week 19 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Notes in the margin help me remember more of what I read, in week 19 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Watering in the evening loses less to the sun than the morning does, in week 19 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "m18-0",
+   "start": 23,
+   "end": 106,
+   "quote": "A weekly review on Friday afternoon keeps the inbox at zero, in week 19 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-04-27T21:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-04-27T21:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m18-1",
+   "start": 108,
+   "end": 197,
+   "quote": "The kitchen shelves can hold the cookbooks if we drop the top one, in week 19 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-04-28T22:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-04-28T22:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m18-2",
+   "start": 199,
+   "end": 282,
+   "quote": "Two easy runs a week are enough to keep the base mileage up, in week 19 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-04-29T23:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-04-29T23:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m18-3",
+   "start": 284,
+   "end": 372,
+   "quote": "The migration is safe because every write goes to both databases, in week 19 of the plan",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-05-01T00:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-01T00:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m18-4",
+   "start": 374,
+   "end": 454,
+   "quote": "Notes in the margin help me remember more of what I read, in week 19 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-05-02T01:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-02T01:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m18-5",
+   "start": 456,
+   "end": 547,
+   "quote": "Watering in the evening loses less to the sun than the morning does, in week 19 of the plan",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-05-03T02:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-05-03T02:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-01-23T09:00:00Z",
+ "updated_at": "2026-01-23T09:00:00Z"
+}

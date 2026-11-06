@@ -6,6 +6,7 @@ mod drawing;
 mod editor;
 mod export;
 mod import;
+mod loose_ends;
 mod margin;
 mod note_page;
 mod palette;

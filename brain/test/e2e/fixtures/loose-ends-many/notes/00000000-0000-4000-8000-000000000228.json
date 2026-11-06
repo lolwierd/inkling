@@ -1,0 +1,157 @@
+{
+ "id": "00000000-0000-4000-8000-000000000228",
+ "title": "Running notes, week 29",
+ "folder": "f-run",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Running notes, week 29"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Interval sessions at 4:40 per km build the speed for race day, in week 29 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Moving the build to bigger machines halves the wait for everyone, in week 29 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "A weekly review on Friday afternoon keeps the inbox at zero, in week 29 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The kitchen shelves can hold the cookbooks if we drop the top one, in week 29 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Two easy runs a week are enough to keep the base mileage up, in week 29 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The migration is safe because every write goes to both databases, in week 29 of the plan."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "m28-0",
+   "start": 23,
+   "end": 108,
+   "quote": "Interval sessions at 4:40 per km build the speed for race day, in week 29 of the plan",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-06-29T09:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-29T09:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m28-1",
+   "start": 110,
+   "end": 198,
+   "quote": "Moving the build to bigger machines halves the wait for everyone, in week 29 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-06-30T10:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-06-30T10:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m28-2",
+   "start": 200,
+   "end": 283,
+   "quote": "A weekly review on Friday afternoon keeps the inbox at zero, in week 29 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-07-01T11:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-07-01T11:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m28-3",
+   "start": 285,
+   "end": 374,
+   "quote": "The kitchen shelves can hold the cookbooks if we drop the top one, in week 29 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-07-02T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-07-02T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m28-4",
+   "start": 376,
+   "end": 459,
+   "quote": "Two easy runs a week are enough to keep the base mileage up, in week 29 of the plan",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-07-03T13:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-07-03T13:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "m28-5",
+   "start": 461,
+   "end": 549,
+   "quote": "The migration is safe because every write goes to both databases, in week 29 of the plan",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-07-04T14:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which part of this would you check first?",
+     "at": "2026-07-04T14:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-02-02T09:00:00Z",
+ "updated_at": "2026-02-02T09:00:00Z"
+}

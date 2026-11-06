@@ -28,6 +28,7 @@ use crate::theme::{SANS, TEXT_COLORS, Theme, ts};
 use crate::ui::{self, Keyed, icon};
 
 mod show_working;
+mod goto;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -535,6 +536,9 @@ pub struct NotePage {
     _subs: Vec<Subscription>,
     /// Threads whose next reply says the working does not hold (Disagree).
     disputes: HashSet<String>,
+    /// A thread gone to from Loose ends, whose words are brought into view once the note
+    /// is laid out (`goto.rs`).
+    goto: Option<goto::Goto>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -628,6 +632,7 @@ impl NotePage {
             last_frame: None,
             _subs: subs,
             disputes: HashSet::new(),
+            goto: None,
         };
         page.load_into_editor(cx);
         page
@@ -992,11 +997,12 @@ impl NotePage {
     }
 
     /// Nothing is scheduled or in flight, so the page will not change on its own: no
-    /// pause pending, no read, no thread or chat request, not typing. A script's `settle`
+    /// pause pending, no read, no thread or chat request, not typing, no thread being gone
+    /// to from Loose ends (its words scrolled in, its reply box given the keyboard). A script's `settle`
     /// waits for this. Learning about the writer runs untracked, and saves wait 600 ms
     /// (quitting flushes them); neither shows on the page.
     pub(crate) fn settled(&self) -> bool {
-        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently()
+        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
     }
 
     /// The words of an open thread were edited: look at them again at the next pause.
@@ -2670,6 +2676,8 @@ impl NotePage {
         state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         // whether the open tag's second button reads Let stand (else Dismiss), or null with none open
         state["lets_stand"] = json!(self.active.as_ref().and_then(|a| self.note.threads.iter().find(|t| &t.id == a)).map(crate::stand::lets_stand));
+        // Loose ends, open or as it would open now (see loose_ends.rs)
+        state["loose_ends"] = crate::loose_ends::describe(&self.note, window, cx);
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -4451,6 +4459,7 @@ impl Render for NotePage {
         let placement = cx.global::<Store>().settings.placement;
         let viewport = window.viewport_size();
         self.viewport = viewport;
+        self.finish_goto(window, cx);
         let width = viewport.width.as_f32() - if self.chat_open { CHAT_WIDTH } else { 0. };
         // The page sits on the linen with a strip of cloth showing on each side.
         self.m = Metrics::for_width(width - 2. * (SHEET_PAD + 14.));

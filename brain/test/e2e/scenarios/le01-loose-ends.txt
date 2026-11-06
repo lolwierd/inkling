@@ -1,0 +1,48 @@
+# Loose ends (⇧⌘K): every open thread in the notebook, oldest first, keyed by note and thread
+# (two notes have a thread t2), a folded folder hiding nothing. Return goes to the words on
+# any note with the tag open and the keyboard in its reply box; reopening starts on the next
+# row; typing narrows; ⌘K and ⇧⌘K hand each other what was typed; Escape gives the keyboard
+# back to the note; nothing goes to the brain.
+# fixture: loose-ends
+# tags: loose-ends
+wait: 1500
+set: appearance=light
+key: shift-cmd-k
+dump: opened
+expect: d.loose_ends.open && d.loose_ends.focused && d.loose_ends.selected === 0
+expect: d.loose_ends.rows.map(r => r.thread + "@" + r.note).join() === "b1@Q3 budget,t1@Sub-50 10k by March,t2@Sub-50 10k by March,t2@Untitled"
+expect: d.loose_ends.count === 4 && d.loose_ends.rows.every(r => r.state === "open")   // tied off and dismissed threads are not listed
+expect: d.loose_ends.rows[0].folder === "Work" && d.loose_ends.rows[0].mind === "Skeptic" && !d.loose_ends.rows[0].here
+expect: d.loose_ends.rows[1].here && d.loose_ends.rows[1].mark === "×" && d.loose_ends.rows[2].mark === "?"
+expect: d.loose_ends.rows[3].folder === null && d.loose_ends.rows[3].mind === "Editor"
+key: enter
+settle
+dump: went-budget
+expect: d.note.title === "Q3 budget" && d.note.mode === "WhenYouAsk" && d.active === "b1" && d.focus === "reply"
+expect: !d.loose_ends.open
+key: shift-cmd-k
+dump: walked
+expect: d.loose_ends.selected === 1   // the row after the one gone to
+expect: d.loose_ends.rows[0].here && !d.loose_ends.rows[1].here   // "This note" follows the page
+key: down enter
+settle
+dump: went-plan
+expect: d.note.title === "Sub-50 10k by March" && d.active === "t2" && d.focus === "reply"
+key: shift-cmd-k
+dump: walked-again
+expect: d.loose_ends.selected === 3
+key: k i l o
+dump: narrowed
+expect: d.loose_ends.query === "kilo" && d.loose_ends.selected === 0
+expect: d.loose_ends.rows.length === 1 && d.loose_ends.rows[0].thread === "t2" && d.loose_ends.rows[0].here
+key: cmd-k
+dump: to-notes
+expect: !d.loose_ends.open
+key: shift-cmd-k
+dump: back
+expect: d.loose_ends.open && d.loose_ends.query === "kilo" && d.loose_ends.rows.length === 1   // what was typed went to ⌘K and back
+key: escape
+dump: closed
+expect: !d.loose_ends.open && d.focus === "note"
+expect: tasks.length === 0   // nothing went to the brain: going to a thread reads nothing
+quit

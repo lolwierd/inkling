@@ -1,0 +1,22 @@
+[
+ {
+  "id": "f-run",
+  "name": "Running",
+  "collapsed": false
+ },
+ {
+  "id": "f-work",
+  "name": "Work",
+  "collapsed": false
+ },
+ {
+  "id": "f-read",
+  "name": "Reading",
+  "collapsed": false
+ },
+ {
+  "id": "f-home",
+  "name": "Home",
+  "collapsed": false
+ }
+]

@@ -18,6 +18,8 @@ use crate::theme::{SANS, Theme, ts};
 use crate::toast::Kind;
 use crate::ui::{self, Keyed, icon};
 
+mod goto;
+
 gpui_kit::actions!(
     app,
     [
@@ -25,6 +27,7 @@ gpui_kit::actions!(
         ToggleSidebar,
         NewNote,
         OpenPalette,
+        LooseEnds,
         ToggleChat,
         OpenSettings,
         JustMyWords,
@@ -96,6 +99,7 @@ pub fn init(cx: &mut App) {
             items: vec![
                 MenuItem::action("New Note", NewNote),
                 MenuItem::action("Find or Start a Note…", OpenPalette),
+                MenuItem::action("Loose Ends…", LooseEnds),
                 MenuItem::separator(),
                 MenuItem::action("Copy This Note", CopyNote),
                 MenuItem::action("Export This Note…", ExportNote),
@@ -199,6 +203,11 @@ pub struct AppView {
     settings_sub: Option<Subscription>,
     folder_sub: Option<Subscription>,
     _subs: Vec<Subscription>,
+    /// Loose ends (⇧⌘K), ⌘K's card turned to every open thread (`goto.rs`), its
+    /// subscription, and the thread gone to last with its row, so the next ⇧⌘K starts after it.
+    loose: Option<Entity<crate::loose_ends::Card>>,
+    loose_sub: Option<Subscription>,
+    loose_last: Option<(crate::loose_ends::Key, usize)>,
 }
 
 /// How long ⌥ must be held on its own before the microphone starts.
@@ -566,6 +575,9 @@ impl AppView {
             settings_sub: None,
             folder_sub: None,
             _subs: subs,
+            loose: None,
+            loose_sub: None,
+            loose_last: None,
         };
         this.apply_launch_hooks(window, cx);
         this.run_script(window, cx);
@@ -656,6 +668,7 @@ impl AppView {
             Step::Open(what) => match what.as_str() {
                 "sidebar" => self.sidebar_open = true,
                 "palette" => self.open_palette(window, cx),
+                "loose" => self.open_loose_ends(window, cx),
                 "settings" => self.open_settings(Tab::Customize, window, cx),
                 "minds" => self.open_settings(Tab::Minds, window, cx),
                 "newmind" => self.open_settings(Tab::NewMind, window, cx),
@@ -671,6 +684,7 @@ impl AppView {
                 self.palette = None;
                 self.settings = None;
                 self.export = None;
+                self.loose = None;
             }
             Step::Quit => cx.quit(),
             Step::Import(dir) => self.import_vault(crate::script::path(dir), cx),
@@ -694,6 +708,7 @@ impl AppView {
             match part.trim() {
                 "sidebar" => self.sidebar_open = true,
                 "palette" => self.open_palette(window, cx),
+                "loose" => self.open_loose_ends(window, cx),
                 "settings" => self.open_settings(Tab::Customize, window, cx),
                 "minds" => self.open_settings(Tab::Minds, window, cx),
                 "newmind" => self.open_settings(Tab::NewMind, window, cx),
@@ -771,7 +786,7 @@ impl AppView {
     fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.export.is_some() {
             self.close_export(window, cx);
-        } else if self.palette.is_some() || self.settings.is_some() {
+        } else if self.palette.is_some() || self.settings.is_some() || self.loose.is_some() {
             return false;
         } else if self.sidebar_open && self.new_folder.is_some() {
             self.finish_new_folder(false, window, cx);
@@ -793,6 +808,8 @@ impl AppView {
             window.focus(&settings.focus_handle(cx), cx);
         } else if let Some(palette) = self.palette.clone() {
             palette.update(cx, |p, cx| p.focus(window, cx));
+        } else if let Some(card) = self.loose.clone() {
+            card.update(cx, |c, cx| c.focus(window, cx));
         } else if self.export.is_some() {
             window.focus(&self.focus, cx);
         } else {
@@ -873,7 +890,7 @@ impl AppView {
         let threads_out = self.page.read(cx).note.threads.iter().any(|t| t.status == ThreadStatus::Open);
         // Nor does it belong on top of a dialog or the drawer, or beside a toast, which
         // sits on the same line along the bottom (and runs into it in a narrow window).
-        let covered = self.sidebar_open || self.palette.is_some() || self.settings.is_some() || self.export.is_some() || crate::toast::any(cx);
+        let covered = self.sidebar_open || self.palette.is_some() || self.loose.is_some() || self.settings.is_some() || self.export.is_some() || crate::toast::any(cx);
         if !self.listening && (chat_open || threads_out || covered) {
             return div().into_any_element();
         }
@@ -993,6 +1010,10 @@ impl AppView {
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = Some(self.page.read(cx).note_id().to_string());
         let palette = cx.new(|cx| Palette::new(current, window, cx));
+        // over Loose ends, ⌘K keeps what was typed there
+        if let Some(query) = self.take_loose_query(cx) {
+            palette.update(cx, |p, cx| p.set_query(&query, window, cx));
+        }
         let sub = cx.subscribe_in(&palette, window, |this, _, ev: &PaletteEvent, window, cx| match ev {
             PaletteEvent::Open(id) => this.open_note(id.clone(), window, cx),
             PaletteEvent::Create { title, folder } => {
@@ -1400,6 +1421,7 @@ impl AppView {
             keys_of("app::OpenPalette"),
             keys_of("app::NewNote"),
         );
+        let k_loose = keys_of("app::LooseEnds");
         let action = |id: &'static str, label: &'static str, keys: String| {
             div()
                 .id(id)
@@ -1474,6 +1496,15 @@ impl AppView {
                             .child(div().flex_1().child("New note"))
                             .child(ui::key_hint(k_new, &t))
                             .keyed_as("sidebar:new", 6., ring, cx, |this, window, cx| this.create_note("", None, window, cx)),
+                    )
+                    // every open thread in the notebook; no count here (it speaks only when asked)
+                    .child(
+                        row("sidebar-loose".into(), false)
+                            .text_color(p.graphite)
+                            .child(icon("spool", 13., p.faint))
+                            .child(div().flex_1().child("Loose ends"))
+                            .child(ui::key_hint(k_loose, &t))
+                            .keyed_as("sidebar:loose-ends", 6., ring, cx, |this, window, cx| this.open_loose_ends(window, cx)),
                     )
                     .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().child(list).child(
                         match new_folder {
@@ -1750,6 +1781,7 @@ impl Render for AppView {
             }))
             .on_action(cx.listener(|this, _: &NewNote, window, cx| this.create_note("", None, window, cx)))
             .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette(window, cx)))
+            .on_action(cx.listener(|this, _: &LooseEnds, window, cx| this.open_loose_ends(window, cx)))
             .on_action(cx.listener(|this, _: &ToggleChat, window, cx| {
                 this.page.update(cx, |p, cx| p.toggle_chat(window, cx));
                 cx.notify();
@@ -1772,6 +1804,7 @@ impl Render for AppView {
             .child(self.chrome_layer(window, cx))
             .children(sidebar)
             .children(self.palette.clone())
+            .children(self.loose.clone())
             .children(self.settings.clone())
             .children(export)
             // every toast, the page's included, in one stack centred under the page

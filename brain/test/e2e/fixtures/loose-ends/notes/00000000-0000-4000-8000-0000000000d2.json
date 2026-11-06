@@ -1,0 +1,91 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000d2",
+ "title": "Q3 budget",
+ "folder": "f-work",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Q3 budget"
+  },
+  {
+   "kind": "paragraph",
+   "text": "We cut the cloud bill by moving the cache to one node."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Hiring two more engineers pays for itself by March."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The support rota stays as it is."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "when_you_ask",
+ "mind_id": "skeptic",
+ "threads": [
+  {
+   "id": "b1",
+   "start": 10,
+   "end": 64,
+   "quote": "We cut the cloud bill by moving the cache to one node.",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-09-20T09:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "What happens to the bill, and to you, the day that one node goes down?",
+     "at": "2026-09-20T09:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "b2",
+   "start": 91,
+   "end": 115,
+   "quote": "pays for itself by March",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-09-02T09:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "On what numbers? Two salaries need a lot of saved hours by March.",
+     "at": "2026-09-02T09:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "b3",
+   "start": 134,
+   "end": 148,
+   "quote": "stays as it is",
+   "kind": "question",
+   "status": "dismissed",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-09-01T09:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Has anyone asked the people on it?",
+     "at": "2026-09-01T09:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-09-01T09:00:00Z",
+ "updated_at": "2026-09-01T09:00:00Z"
+}

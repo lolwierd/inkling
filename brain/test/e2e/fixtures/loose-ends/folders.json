@@ -1,0 +1,12 @@
+[
+ {
+  "id": "f-run",
+  "name": "Running",
+  "collapsed": false
+ },
+ {
+  "id": "f-work",
+  "name": "Work",
+  "collapsed": true
+ }
+]

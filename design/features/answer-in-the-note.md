@@ -4,6 +4,11 @@ Manifesto items 1 and 6 (`design/manifesto.md`, section 2), designed 7 Nov 2026 
 `feat-answer`. Both move what you worked out into the note itself, and both end the same way:
 a thread whose knot points at your words in the note.
 
+**State (7 Nov 2026):** the shared part and Answer in the note are built on `feat-answer`
+(scenarios t14, t15, t16, t18; six live checks against the real model, below). Write it in
+is being built by a second agent on top of the shared part. Screenshots, light and dark:
+`design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`.
+
 They are built by two agents at once. This doc is the contract between them: the
 **shared part** (the answer link and its knot) is built first, on `feat-answer`; then
 **Answer in the note** (detection) and **Write it in** (the offer) are built on top of it,
@@ -42,8 +47,8 @@ away, with an easier week before it?"
 ### Answer in the note
 
 1. Further down, you write a new paragraph: "The long run starts at 8 km on 6 December, so
-   it reaches 16 km by late January, seven weeks before the race, and the last week is
-   easy." You pause.
+   it reaches 16 km on 31 January, six weeks before the race, and the last week is easy."
+   You pause.
 2. Inkling reads the paragraph, as it reads every finished paragraph: the needle bobs in the
    gutter beside it, then a tacking stitch marks it read. If the paragraph raises something
    new, a new thread comes as usual.
@@ -53,8 +58,9 @@ away, with an easier week before it?"
 4. If your words settle it, thread 2 ties itself off:
    - Its thread pulls taut and knots, and the border at the top of the page grows one motif,
      exactly as for any tie-off.
-   - Its mind adds one line to the thread saying what settled it, for example: "Starting at
-     8 km you reach 16 seven weeks out, with an easy week before the race."
+   - Its mind adds one line to the thread saying what settled it, for example (the real
+     model's words): "Starting at 8 km on 6 December gets you to 16 km on 31 January, six
+     weeks before 14 March, and the last week is easy."
    - The count above the title drops ("1 loose thread"), and the numbered knot leaves the
      gutter beside thread 2's paragraph.
    - **At your paragraph, a small French knot sews in just after the last word that
@@ -66,7 +72,7 @@ away, with an easier week before it?"
 6. Click the knot: the page scrolls to thread 2's words and opens its tag. The tag reads
    "Inkling · tied off", shows the conversation, and under it a new row:
    **"Answered in your note:"** followed by the first words of your answer in your own
-   typeface, **“The long run starts at 8 km on 6 December…”**. Clicking those words takes
+   typeface, **“The long run starts at 8 km on 6 December, so it reaches 16 km…”**. Clicking those words takes
    you back to your answer and washes it. The tag's first button, as on any tied-off tag,
    is **Reopen**.
 7. If the knot is wrong (the paragraph does not really answer it), Reopen: the thread is
@@ -76,6 +82,11 @@ away, with an easier week before it?"
 8. If you later edit the answering words, the knot follows them. If you delete them all, the
    knot goes and the thread stays tied off; its tag no longer shows the "Answered in your
    note" row.
+
+A wrong answer does not count, and the read says what is wrong instead. In the first live
+check the test paragraph itself had a slip ("16 km on 24 January": a kilometre a week from
+8 km on 6 December reaches 16 km on 31 January). The read raised a correction on those
+words, and the thread's mind refused to settle the thread on them.
 
 An explanation you asked for counts the same way. Select "VO2 max", choose Ask Inkling,
 type "What is it?", and Inkling explains in the margin. When you later write "VO2 max is the
@@ -134,10 +145,10 @@ answer in the note. Closing the tag without pressing it is the "no": nothing is 
 | **Right margin** | Same; tags hang on the right. Clicking the knot opens the tag on the right of the question. | Same. |
 | **Marks only** | The knot after your answer is a mark like the ? and ×: click it and the thread's card opens beside its question (scrolled into view), as clicking its ? would. | The offer shows in that card. |
 | **Hidden threads** (⇧⌘.) | Knots and washes hide with every other mark. Reading goes on, so a thread can tie off while hidden; showing threads again shows it tied with its knot in place, without replaying the animation. | No offer while hidden (tags are hidden, and you cannot reply). |
-| **A note that waits to be asked** | It never starts a thread. While it has open threads (from your asks, Find a loose thread, or a call by name), each finished paragraph is checked once for answers only, without the needle; nothing is checked when no thread is open. See the open question. | Works the same. |
+| **A note that waits to be asked** | It never starts a thread. While it has open threads (from your asks, Find a loose thread, or a call by name), each finished paragraph is read once for answers only (`answersOnly`; the needle shows while it reads, as for any read); nothing is read when no thread is open. A paragraph written before the thread can be read once too, when the reading loop next looks at it. See the open question. | Works the same. |
 | **Imported or guide text left alone** | Paragraphs in `left_alone` (an Obsidian import, the Start here guide) are never read, so they never count as answers. Once you edit one, it is your paragraph and is read like any other. | Not affected. |
 | **Export and copy** | With threads, a thread tied off by an answer prints one more line under its messages: Markdown `> *Answered in the note:* “…”`, HTML and Word `Answered in the note: “…”`. Without threads, nothing is added: the answer is already in your text. The knot never prints. Copy (⇧⌘C) is Markdown with threads, so it has the line too. | The written-in paragraph is ordinary text and exports as such; its thread gets the same "Answered in the note" line. |
-| **Undo** | A tie-off is not a text edit, so ⌘Z does not untie it; Reopen does. ⌘Z that removes all of the answer's words removes the knot (the thread stays tied off). Redo brings the words back, and the knot finds them again by their words when the note is next saved. | One undo step: ⌘Z or the toast's Undo removes the paragraph; the toast's Undo works only while the paragraph is unchanged. |
+| **Undo** | A tie-off is not a text edit, so ⌘Z does not untie it; Reopen does. ⌘Z that removes all of the answer's words removes the knot (the thread stays tied off). Redo brings the words back; the saved answer finds them again by their words, and the knot returns the next time the note opens. | One undo step: ⌘Z or the toast's Undo removes the paragraph; the toast's Undo works only while the paragraph is unchanged. |
 | **Several minds** | Any open thread can be answered, whichever mind asked it. The check runs as the thread's own mind, so Skeptic judges Skeptic's question by its own standard; its line in the thread is in its voice, and the knot is in its colour. One paragraph can tie off several threads, such as three minds asked the same thing in Ask the room; each gets its own knot, side by side after the answer. | The offer is per thread, under whichever mind's thread your reply settled. |
 | **The thread's own paragraph** | A sentence added to the paragraph a thread hangs on counts too, as long as the quoted words themselves are unchanged (if they changed, Fix the words re-checks instead, one look per edit). | The paragraph goes under it. |
 | **Lists, callouts, code** | A checklist item, a callout line or a code block is read like a paragraph and can be an answer. | "Under its paragraph" means under the whole list, callout patch or code block the thread's words are in, so the new paragraph never splits them. |
@@ -207,9 +218,10 @@ Rules:
 
 - **`tied_by`** is set wherever a thread ties off: `send_reply` (Reply), `recheck` (Edit),
   the answer check (Answer), and `set_status(Resolved)` (Hand, only if nothing set it
-  first). Reopen clears it. A dismissed thread keeps whatever it had.
+  first). Reopen clears it. A dismissed thread keeps whatever it had. A value this build
+  does not know (a newer build's) reads as `None`, so it costs that field, not the note.
 - **`answer` follows edits** as an editor `Anchor` with the id `"<thread id>#answer"`
-  (`answer_anchor_id`). It has no stitch style, so the editor draws nothing for it and a
+  (`crate::answers::anchor_id`). It has no stitch style, so the editor draws nothing for it and a
   click never opens it; it only keeps the range on its words through typing, undo and
   redo, as thread anchors do. `load_into_editor` adds it (re-finding the words nearest the
   stored offset when the offsets no longer match, as threads are re-found), and
@@ -231,7 +243,7 @@ Rules:
 ### What the minds are told
 
 The context's thread summaries (`ThreadSummary` in `brain/src/protocol.ts`, built in
-`context_with` in `src/note_page.rs`) gain four optional fields:
+`context_with` in `src/note_page.rs`) gain three optional fields:
 
 ```ts
 export interface ThreadSummary {
@@ -239,11 +251,13 @@ export interface ThreadSummary {
   messages: ThreadMessage[];
   resolved: boolean;
   id?: string;            // the thread's id, so an answer can name it without guessing
-  kind?: string;          // "question" | "correction" | "sketch" | "ask" | "answer"
-  mind?: string;          // who asked it
+  open?: boolean;         // still open (without it: not resolved), so a thread let stand never counts as open
   notAnswers?: string[];  // words the writer said do not answer it
 }
 ```
+
+(The design first had `kind` and `mind` too; the thread's messages already show who asked
+what, and `settle` runs as the thread's own mind, so they were left out.)
 
 `threadsBlock` in `prompts.ts`, which every prompt shares, does not change: Let it stand is
 changing it in parallel, and the answer check needs nothing from it but its numbers.
@@ -274,18 +288,19 @@ answers: { type: "array", items: { type: "object", additionalProperties: false,
   required: ["thread", "quote"], properties: { thread: { type: "integer" }, quote: { type: "string" } } } }
 ```
 
-`main.ts` turns each answer into `{ thread: <id>, quote }`: the number picks
-`ctx.threads[n - 1]`, an entry for a thread that is resolved, unknown or has no id is
+`pickAnswers` (`output.ts`) turns each answer into `{ thread: <id>, quote }`: the number
+picks `ctx.threads[n - 1]`, an entry for a thread that is not open, unknown or has no id is
 dropped, the quote is snapped onto the paragraph (`snapQuote`, as every quote is), and at
 most three are kept. The `done` data carries `answers` only when there are some, so a read
 that answers nothing looks exactly as it does today.
 
 With no open threads the prompt and the schema are today's.
 
-**A note that waits to be asked** sends the same `read` with `answersOnly: true`. Its
-prompt drops "decide whether to say something" and says instead: "Do not raise anything
-new: set speak to false and leave quote and text empty. Only check whether it answers an
-open thread." `main.ts` always returns `speak: false` for it.
+**A note that waits to be asked** sends the same `read` with `answersOnly: true`
+(`answersOnlyPrompt`). Its prompt drops "decide whether to say something" and says
+instead: "The writer has asked you to stay quiet while they write, so raise nothing new",
+followed by the same block. `main.ts` always returns `speak: false` for it, and answers
+without calling the model when no thread is open.
 
 ### `settle`: the thread's own mind checks the answer
 
@@ -354,12 +369,16 @@ Reopen is the way back from a wrong one, and `not_answers` makes it stay back.
 
 ### What it costs
 
-Measured counts go here once the live checks have run (see Tests); these are the shape.
+Measured on 7 Nov 2026 with Opus 5.5 through the brain (`brain/test/live.ts`, eight calls):
+a read took 13 to 27 s and a `settle` 13 to 20 s; each cost about $0.03 in API terms with a
+warm prompt cache, and $0.40 to $0.86 when the cache was cold (Claude Code's own prompt
+dominates a cold call, on any task).
 
-- **A read in a note with open threads** carries about 170 more input tokens (the block
-  above, plus a few per open thread), and about 5 more output tokens when it answers
-  nothing. That is roughly 5 to 15% of a read, and nothing at all in a note with no open
-  threads. No extra call.
+- **A read in a note with open threads** carries the block above: about 870 characters,
+  some 200 tokens, plus a line per thread that has words turned down; and about 5 more
+  output tokens when it answers nothing. Against a read's whole prompt (the note, its
+  threads and the runtime's own) that is a few percent, and nothing at all in a note with
+  no open threads. No extra call.
 - **A `settle`** costs about one read (it carries the note too) plus its instructions,
   with a short answer, at medium effort. It runs only when a read names a thread, at most
   three per read; most reads name none.
@@ -420,7 +439,9 @@ Exactly which shared types change, all of them:
 
 ### Fake brain
 
-Directives, read from the paragraph (the read's and the settle's `target`):
+Directives, read from the paragraph (the read's and the settle's `target`). Put them
+before the paragraph's last full stop: a paragraph ending in `]]` is not finished, so it is
+not read.
 
 - `[[answers:2]]`: the read names thread 2 (the number in the context), quoting the
   paragraph's first six words; `[[answers:2,3]]` names two.
@@ -429,57 +450,46 @@ Directives, read from the paragraph (the read's and the settle's `target`):
 
 ### Scenarios
 
-`brain/test/e2e/scenarios/t14-answer-in-note.txt`:
+Built, in `brain/test/e2e/scenarios/`; the dump has `answers` (thread, words, range,
+`tied_by`), `knots` (threads whose knot is drawn), `tied_by` and `washed`, and the script
+has `knot: N` (click thread N's knot) and `hover-knot: N` (rest the pointer on it).
+
+`t14-answer-in-note.txt`:
 
 ```text
-# Answer in the note: a paragraph that answers an open thread ties it off, and its knot
-# points to the answer; Reopen remembers that it was not the answer.
 # fixture: running-plan
 wait: 1500
-type: The long run starts at 8 km on 6 December and reaches 16 km by late January. [[answers:2]]
+type: The long run starts at 8 km on 6 December and reaches 16 km by late January [[silent]] [[answers:2]].
 settle
 dump: answered
 expect: d.statuses.includes("t2:Resolved:Inkling") && d.statuses.includes("t1:Open:Inkling")
-expect: d.answers.length === 1 && d.answers[0].thread === "t2" && d.answers[0].quote.startsWith("The long run starts")
-expect: d.knots.includes("t2")
+expect: d.answers.length === 1 && d.answers[0].thread === "t2" && d.answers[0].quote.startsWith("The long run starts at 8")
+expect: d.knots.includes("t2") && d.tied_by.t2 === "answer"
 expect: tasks.join() === "read,settle"
-expect: requests[1].input.target.startsWith("The long run starts")
-expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").tied_by === "answer"
-expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").messages.length === 2
+expect: requests[1].input.target.startsWith("The long run starts") && requests[1].input.answer === "The long run starts at 8"
+expect: requests[0].input.ctx.threads.find(t => t.id === "t2").open === true
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").messages.at(-1).text.includes("Settled by")
 export: md
-expect: log.some(l => l.msg.includes("Answered in the note:* “The long run starts"))
 knot: 2
 dump: knot-clicked
-expect: d.active === "t2"
+expect: d.active === "t2" && d.cursor_line === 3
 reopen: 2
 dump: reopened
 expect: d.statuses.includes("t2:Open:Inkling") && d.answers.length === 0 && d.knots.length === 0
-expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").not_answers.length === 1
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").not_answers[0] === "The long run starts at 8"
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").tied_by === undefined
+expect: log.some(l => l.msg.includes("Answered in the note:* \u201cThe long run starts at 8\u201d"))
 quit
 ```
 
-`t15-answer-not-settled.txt`: the same paragraph with `[[answers:2]] [[settle>unsettled]]`;
-expect thread 2 still open with one message, no answers, no knots, tasks `read,settle`.
-
-`t16-answer-waiting.txt` (a note that waits to be asked):
-
-```text
-note: VO2 notes
-mode: ask
-type: Intervals raise VO2 max more than easy running does.
-settle
-expect: tasks.length === 0
-select: VO2 max
-ask: What is it?
-settle
-type: VO2 max is the most oxygen my body can use in a minute, which caps my pace. [[answers:1]]
-settle
-dump: answered
-expect: d.statuses[0].includes(":Resolved:")
-expect: requests.some(r => r.input.task === "read" && r.input.answersOnly === true)
-expect: !requests.some(r => r.input.task === "read" && !r.input.answersOnly)
-quit
-```
+- `t15-answer-not-settled.txt`: `[[answers:2]] [[settle>unsettled]]`; thread 2 stays open
+  with its one message, no answers, no knots, no problem toast, tasks `read,settle`.
+- `t16-answer-waiting.txt`: a note set to `mode: ask` reads nothing while no thread is open;
+  after `ask:`, a paragraph with `[[answers:1]]` ties the ask thread off; every read it sent
+  was `answersOnly`, and the `settle` ran as Inkling.
+- `t18-answer-room.txt`: three minds asked the same thing (Ask the room); one paragraph
+  answers all three; three knots, three tie-offs, and each `settle` ran as its own mind
+  (Inkling, Skeptic, Socratic tutor).
 
 `t17-write-it-in.txt` (for the Write it in build):
 
@@ -506,11 +516,20 @@ quit
 
 ### Live checks (the real model, a handful of calls)
 
-New scenarios in `brain/test/live.ts`, each one call: `read_answers` (a paragraph that
-answers thread 2 must name it), `read_answers_mention` (a paragraph about the long run that
-does not say where it starts must name nothing), `settle_yes`, `settle_mention`,
-`settle_promise` ("I'll work out where it starts later") and `settle_wrong` (8 km to 16 km
-"in four weeks") must say no. The results and the measured token counts go into this doc.
+In `brain/test/live.ts`, one call each, run on 7 Nov 2026 with Opus 5.5:
+
+| Check | Expects | Result |
+|---|---|---|
+| `read_answers` | a paragraph that answers thread 2 names it, and not thread 1 | named thread 2 with the whole sentence |
+| `read_answers_mention` | a paragraph that only mentions the long run names nothing | nothing named, silent |
+| `settle_yes` | the answer settles thread 2, with its words and a line | settled, with a line in the writer's terms |
+| `settle_mention` | only mentioning the subject does not settle it | not settled |
+| `settle_promise` | "I still need to work out where the long run starts" does not | not settled |
+| `settle_wrong` | 8 km to 16 km "after four weeks" does not | not settled |
+
+The first run of `read_answers` and `settle_yes` failed for the right reason: the test
+paragraph's date was wrong (see "What you see and do"), and the model caught it. With the
+date fixed, all six pass.
 
 ## Files and functions, and size
 
@@ -520,22 +539,23 @@ does not say where it starts must name nothing), `settle_yes`, `settle_mention`,
 |---|---|
 | `src/store.rs` | `Answer`, `TiedBy`, the three `Thread` fields, `Thread: Default`, tests |
 | `src/answers.rs` (new) | the pure rules: `answerable`, `copies_mind`, `is_not_answer`, `push_not_answer`, `relocate`, `answer_anchor_id` |
-| `src/note_page/answers.rs` (new, `impl NotePage`) | `load_answers`, `sync_answers`, `before_status` (tied_by, Reopen), `answer_knots` (the knots, their tooltip and click), `answer_row` (the tag's "Answered in your note"), `go_to_answer`, `go_to_question`, `wash_answer`, `answers_dump` |
+| `src/note_page/answers.rs` (new, `impl NotePage`) | `load_answers`, `sync_answers`, `before_status` (tied_by, Reopen), `answer_knots` (the knots, their tooltip and click), `answer_row` (the tag's "Answered in your note"), `go_to_answer`, `go_to_question`, `wash_answer`, `dump_answers`, `click_knot`, `hover_knot` |
 | `src/note_page.rs` (hooks, one line each where possible) | `mod answers;`; `load_into_editor`, `sync_from_editor`, `set_status`, `send_reply`, `recheck` set or keep `tied_by`; `tag_panel` adds `answer_row`; `render` adds the knots and the washes; `debug_state` adds `answers` and `knots`; `script_step` handles `knot:` |
 | `src/editor.rs` | `NoteEditor.washes: Vec<(Range<usize>, Hsla)>`, painted under the text like the active wash (about 8 lines) |
 | `src/export.rs` | the "Answered in the note" line in `thread_markdown` and `thread_html` |
-| `src/script.rs` | `knot: N` (click thread N's knot) |
+| `src/script.rs` | `knot: N` (click thread N's knot), `hover-knot: N` (rest the pointer on it) |
+| `brain/test/e2e/fixtures/answered` | the running plan with thread 2 tied off by an answer, for looking at the knot |
 | `src/welcome.rs` | two thread literals end with `..Default::default()` (nothing else) |
 
 ### Answer in the note (this branch)
 
 | File | What |
 |---|---|
-| `brain/src/protocol.ts`, `prompts.ts`, `main.ts` | the context fields, `answersBlock`, `THOUGHT_WITH_ANSWERS_SCHEMA`, `answersOnly`, `settle` |
-| `brain/test/e2e/fake-brain.ts`, `protocol.test.ts`, `live.ts` | as in Tests |
-| `src/note_page/answers.rs` | `take_answers` (from a read), `read_for_answers` (waiting notes), `settle_answer`, `tie_by_answer` |
+| `brain/src/protocol.ts`, `prompts.ts`, `main.ts`, `output.ts` | the context fields, `answersBlock`, `answersOnlyPrompt`, `settlePrompt`, `THOUGHT_WITH_ANSWERS_SCHEMA`, `SETTLE_SCHEMA`, `answersOnly`, `settle`, `pickAnswers` |
+| `brain/test/e2e/fake-brain.ts`, `unit.test.ts`, `protocol.test.ts`, `live.ts` | as in Tests |
+| `src/note_page/answers.rs` | `take_answers` (from a read), `read_for_answers` (waiting notes), `listens_for_answers`, `settle_answer`, `tie_by_answer` |
 | `src/note_page.rs` (hooks) | `read_line`'s `done` calls `take_answers`; `consider` sends a waiting note's paragraphs to `read_for_answers`; `context_with` adds the thread fields; `NotePage.answer_checks` |
-| scenarios `t14`, `t15`, `t16`; `design/capabilities.md` | one row under Threads |
+| scenarios `t14`, `t15`, `t16`, `t18`; `design/capabilities.md` | one row under Reading along |
 
 ### Write it in (the second agent, on top of the shared part)
 

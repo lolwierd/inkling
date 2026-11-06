@@ -25,7 +25,7 @@
   },
   {
    "kind": "paragraph",
-   "text": "The long run starts at 8 km on 6 December, so it reaches 16 km by late January, seven weeks before the race, and the last week is easy."
+   "text": "The long run starts at 8 km on 6 December, so it reaches 16 km on 31 January, six weeks before the race, and the last week is easy."
   },
   {
    "kind": "paragraph",
@@ -73,15 +73,15 @@
     },
     {
      "role": "mind",
-     "text": "Starting at 8 km you reach 16 seven weeks out, with an easy week before the race.",
+     "text": "Starting at 8 km you reach 16 on 31 January, six weeks out, with an easy week before the race.",
      "at": "2026-11-06T12:05:00Z"
     }
    ],
    "tied_by": "answer",
    "answer": {
     "start": 503,
-    "end": 638,
-    "quote": "The long run starts at 8 km on 6 December, so it reaches 16 km by late January, seven weeks before the race, and the last week is easy."
+    "end": 634,
+    "quote": "The long run starts at 8 km on 6 December, so it reaches 16 km on 31 January, six weeks before the race, and the last week is easy."
    }
   }
  ],

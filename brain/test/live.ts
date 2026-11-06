@@ -579,7 +579,77 @@ const scenarios: Record<string, () => Promise<unknown>> = {
     const r = await call(LIGHT, { task: "learn", aboutMe: null, message: "I'm a backend engineer." });
     return r;
   },
+  // Answer in the note (design/features/answer-in-the-note.md): a read names the open
+  // threads its paragraph answers, and the thread's mind confirms, strictly.
+  async read_answers() {
+    const r = await call(LIGHT, { task: "read", ctx: planCtx(ANSWER), target: ANSWER });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    const a = r.e.data?.answers ?? [];
+    check(a.some((x: any) => x.thread === "t2"), `did not name thread 2: ${JSON.stringify(r.e.data)}`);
+    check(!a.some((x: any) => x.thread === "t1"), "named thread 1, which it does not answer");
+    for (const x of a) check(ANSWER.includes(x.quote), `answer words ${JSON.stringify(x.quote)} not in the paragraph`);
+    return r;
+  },
+  async read_answers_mention() {
+    const r = await call(LIGHT, { task: "read", ctx: planCtx(MENTION), target: MENTION });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    check(!(r.e.data?.answers ?? []).length, `named a thread for a paragraph that only mentions the long run: ${JSON.stringify(r.e.data)}`);
+    return r;
+  },
+  async settle_yes() {
+    return settleCase(ANSWER, true);
+  },
+  async settle_mention() {
+    return settleCase(MENTION, false);
+  },
+  async settle_promise() {
+    return settleCase("I still need to work out where the long run starts, and I'll come back to it once I've talked to my coach.", false);
+  },
+  async settle_wrong() {
+    return settleCase("The long run starts at 8 km, so adding a kilometre a week it reaches 16 km after four weeks, well before the race.", false);
+  },
 };
+
+// ----- answers in the note ------------------------------------------------------------
+
+const PLAN = [
+  "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes, and the race is on 14 March.",
+  "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I'll come in just under 50.",
+  "Sunday is the long run. I'll add a kilometre every week until I reach 16.",
+  "Strength work twice a week, mostly calves and hips, because that's where it fell apart last year.",
+];
+// (8 km on 6 December plus a kilometre a week is 16 km on 31 January, six weeks before 14 March)
+const ANSWER = "The long run starts at 8 km on 6 December, so it reaches 16 km on 31 January, six weeks before the race, and the week before the race is an easy one.";
+const MENTION = "The long run is my favourite part of the week, and I like doing it on the river path with a friend.";
+const PLAN_THREADS = [
+  {
+    id: "t1",
+    open: true,
+    resolved: false,
+    quote: "If I hold 5:30 for the whole race, I'll come in just under 50.",
+    messages: [{ role: "mind", text: "At 5:30 a km, 10 km takes 55:00. Under 50 needs 5:00 a km or faster; 4:55 leaves a little room. Which do you want to change: the pace or the goal?" }],
+  },
+  {
+    id: "t2",
+    open: true,
+    resolved: false,
+    quote: "add a kilometre every week until I reach 16",
+    messages: [{ role: "mind", text: "Starting from how far? If you start at 8 km, 16 km is eight weeks out. Is the race at least eight weeks away, with an easier week before it?" }],
+  },
+];
+function planCtx(extra: string) {
+  return { ...ctx([...PLAN, extra], { noteTitle: "Sub-50 10k by March" }), threads: PLAN_THREADS };
+}
+async function settleCase(target: string, expected: boolean) {
+  const t = PLAN_THREADS[1];
+  const r = await call(HEAVY, { task: "settle", ctx: planCtx(target), quote: t.quote, messages: t.messages, target, answer: target.split(/(?<=[.,])\s/)[0], notAnswers: [] });
+  check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+  if (r.e.ev === "done") {
+    check(r.e.data.settled === expected, `settled is ${r.e.data.settled}, expected ${expected}`);
+    if (r.e.data.settled) check(target.includes(r.e.data.quote) && r.e.data.text.length > 0, "settled without words in the paragraph or a line");
+  }
+  return r;
+}
 
 const names = wanted.includes("all") ? Object.keys(scenarios) : wanted;
 await waitFor((e) => e.ev === "ready", 10_000);

@@ -161,16 +161,7 @@ impl NotePage {
                     .cursor_pointer()
                     .hover(move |s| s.bg(p.hover))
                     .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(label.clone()).build(window, cx))
-                    .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                        let aid = rules::anchor_id(&id_hover);
-                        this.editor.update(cx, |e, cx| {
-                            e.washes.retain(|(w, _)| *w != aid);
-                            if *hovered {
-                                e.washes.push((aid, wash));
-                            }
-                            cx.notify();
-                        });
-                    }))
+                    .on_hover(cx.listener(move |this, hovered: &bool, _, cx| this.point_at_knot(&id_hover, *hovered, wash, cx)))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.go_to_question(&id_click, window, cx);
@@ -180,6 +171,18 @@ impl NotePage {
             );
         }
         out
+    }
+
+    /// The pointer on a knot (or off it): its answer washes while it is there.
+    fn point_at_knot(&mut self, id: &str, on: bool, wash: Hsla, cx: &mut Context<Self>) {
+        let aid = rules::anchor_id(id);
+        self.editor.update(cx, |e, cx| {
+            e.washes.retain(|(w, _)| *w != aid);
+            if on {
+                e.washes.push((aid, wash));
+            }
+            cx.notify();
+        });
     }
 
     /// The open tag's "Answered in your note:" and the first words of the answer, in your
@@ -271,6 +274,24 @@ impl NotePage {
             Some(id) => self.go_to_question(&id, window, cx),
             None => log::warn!("script: thread {n} has no knot"),
         }
+    }
+
+    /// `hover-knot: N` in a script: the pointer rests on thread N's knot (`hover-knot: 0`,
+    /// on none), as pointing does; a scripted pointer does not reach a background window.
+    pub(super) fn hover_knot(&mut self, n: usize, cx: &mut Context<Self>) {
+        let knots = self.knot_threads(cx);
+        for t in &knots {
+            let wash = self.wash_color(t, cx);
+            self.point_at_knot(&t.id, false, wash, cx);
+        }
+        let Some(t) = self.nth_thread(n).and_then(|id| knots.into_iter().find(|t| t.id == id)) else {
+            if n > 0 {
+                log::warn!("script: thread {n} has no knot");
+            }
+            return;
+        };
+        let wash = self.wash_color(&t, cx);
+        self.point_at_knot(&t.id, true, wash, cx);
     }
 
     /// The answers and knots, for the script's dump.

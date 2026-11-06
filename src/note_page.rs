@@ -2730,6 +2730,7 @@ impl NotePage {
             Step::ReadThrough => self.toggle_read_through(cx),
             Step::Log(text) => log::info!("script log: {text}"),
             Step::Knot(n) => self.click_knot(*n, window, cx),
+            Step::HoverKnot(n) => self.hover_knot(*n, cx),
             Step::Export(format) => {
                 self.sync_from_editor(cx);
                 let text = match format.as_str() {

@@ -665,8 +665,9 @@ impl NotePage {
 
     pub fn focus_editor_at_end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let empty_title = self.editor.read(cx).title().is_empty();
-        // the welcome guide is read from the top, though its caret waits at the end
-        self.hold_scroll = self.note.first_run;
+        // A note opens at its top, title and header in view, however long it is; its
+        // caret waits at the end, and the page follows it once you type or move it.
+        self.hold_scroll = true;
         self.editor.update(cx, |e, cx| {
             let target = if empty_title { 0 } else { e.text().len() };
             e.move_cursor_to(target, cx);

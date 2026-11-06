@@ -2044,10 +2044,12 @@ impl NotePage {
     fn thread_text(&self, id: &str) -> String {
         let Some(t) = self.note.threads.iter().find(|t| t.id == id) else { return String::new() };
         let mut out = format!("> {}\n\n", t.quote);
+        // named as Export names them: the mind (Inkling when an old thread has no name), and Me
+        let mind = if t.mind_name.trim().is_empty() { "Inkling" } else { t.mind_name.as_str() };
         for m in &t.messages {
             match m.role {
-                Role::Mind => out.push_str(&format!("{}: {}\n\n", t.mind_name, m.text)),
-                Role::You => out.push_str(&format!("You: {}\n\n", m.text)),
+                Role::Mind => out.push_str(&format!("{mind}: {}\n\n", m.text)),
+                Role::You => out.push_str(&format!("Me: {}\n\n", m.text)),
             }
         }
         out.trim_end().to_string()
@@ -2064,7 +2066,7 @@ impl NotePage {
         note.blocks = vec![Block { kind: BlockKind::Title, text: title }];
         note.blocks.push(Block { kind: BlockKind::Quote, text: quote });
         for m in &t.messages {
-            let who = if m.role == Role::Mind { t.mind_name.clone() } else { "Me".into() };
+            let who = if m.role != Role::Mind { "Me".to_string() } else if t.mind_name.trim().is_empty() { "Inkling".to_string() } else { t.mind_name.clone() };
             note.blocks.push(Block { kind: BlockKind::Paragraph, text: format!("{who}: {}", m.text.replace('\n', " ")) });
         }
         note.blocks.push(Block { kind: BlockKind::Paragraph, text: String::new() });
@@ -4151,7 +4153,7 @@ impl NotePage {
                                             .note
                                             .chat
                                             .iter()
-                                            .map(|m| format!("{}: {}", if m.role == Role::You { "You" } else { this.mind.name.as_str() }, m.text))
+                                            .map(|m| format!("{}: {}", if m.role == Role::You { "Me" } else { this.mind.name.as_str() }, m.text))
                                             .collect::<Vec<_>>()
                                             .join("\n\n");
                                         cx.write_to_clipboard(ClipboardItem::new_string(text));

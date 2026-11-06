@@ -392,6 +392,60 @@ describe("what each task sends back", () => {
     const correction = thought(true, "so the 10k takes 50 minutes", "At 5:30 a km the 10k takes 55:00.", { kind: "correction", check: sum, question: "How long is 10 km at 5:30?" });
     b.send(run("w", { task: "read", ctx: ctx(pace), target: `${pace} ${fake(correction)}`, through: true }));
     expect((await b.end("w")).data).toMatchObject({ kind: "correction", quote: "so the 10k takes 50 minutes", check: { sum: [{ sum: "5:30 × 10", is: "55:00", rounded: false }] } });
+  describe("sources from the web, only when real", () => {
+    const TOWER = "https://en.wikipedia.org/wiki/Eiffel_Tower";
+    const target = "The Eiffel Tower is 450 metres tall.";
+    const web = { ...settings, web: true };
+    const hit = { query: "eiffel tower height", results: [{ title: "Eiffel Tower - Wikipedia", url: TOWER }] };
+    const page = "<p>The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.</p>";
+    const cite = (url: string, extra: object = {}) =>
+      thought(true, "450 metres tall", "It is 330 metres, not 450.", { kind: "correction", check: { source: { url, passage: "The tower is 330 metres (1,083 ft) tall" } }, question: "Where did 450 come from?", ...extra });
+
+    test("a page a search returned, with the passage on it, backs the correction", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: page } }) + "\n" + target), target }, web));
+      const done = await b.end("r");
+      expect(done.data.kind).toBe("correction");
+      expect(done.data.check.source).toEqual({ url: TOWER, title: "Eiffel Tower - Wikipedia", domain: "en.wikipedia.org", passage: "The tower is 330 metres (1,083 ft) tall" });
+      expect(done.usage.searches).toBe(1);
+    });
+
+    test("a made-up URL, or a passage the page does not have, falls back to the question", async () => {
+      const b = brain();
+      const madeUp = "https://eiffel-facts.example/height";
+      b.send(run("r1", { task: "read", ctx: ctx(fake({ ...cite(madeUp), searches: [hit], pages: { [madeUp]: page } }) + "\n" + target), target }, web));
+      expect((await b.end("r1")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
+      b.send(run("r2", { task: "read", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: "<p>Nothing about its height.</p>" } }) + "\n" + target), target }, web));
+      expect((await b.end("r2")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
+      expect(b.stderr).toContain(`a source was dropped: ${madeUp} did not come back from a search in this answer`);
+      expect(b.stderr).toContain(`a source was dropped: the passage is not on ${TOWER}`);
+    });
+
+    test("with the web off, nothing was searched, so no page counts", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...cite(TOWER), pages: { [TOWER]: page } }) + "\n" + target), target }));
+      expect((await b.end("r")).data).toMatchObject({ kind: "question" });
+    });
+
+    test("in prose, a link no search returned is taken out", async () => {
+      const b = brain();
+      b.send(run("a", { task: "ask", ctx: ctx(fake({ deltas: [`It is 330 m (${TOWER}); `, "see https://made.up/x too."], searches: [hit] })), target: "the words", question: "why?" }, web));
+      expect((await b.end("a")).data.text).toBe(`It is 330 m (${TOWER}); see too.`);
+    });
+
+    test("the tools: the web's two when it is on, none when it is off", async () => {
+      const b = brain();
+      const echo = (id: string, input: object, s: object) => {
+        b.send(run(id, input, s));
+        return b.end(id).then((e) => JSON.parse(e.data.text ?? "{}"));
+      };
+      const chat = await echo("c", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, web);
+      expect(chat).toMatchObject({ tools: ["WebSearch", "WebFetch"], allowedTools: ["WebSearch", "WebFetch"], maxTurns: 8 });
+      expect(chat.prompt).toContain("Link only to a page your search returned");
+      const off = await echo("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, settings);
+      expect(off).toMatchObject({ tools: [], maxTurns: 1 });
+      expect(off.prompt).not.toContain("WebSearch");
+    });
   });
 
   test("a non-object structured answer is bad_output", async () => {

@@ -79,6 +79,8 @@ export interface Context {
 
 // Both are optional on the wire: a missing or unknown value leaves the runtime's default.
 export interface RunSettings {
+  /** Look things up on the web (Settings › Model): the tasks that can use a source search. */
+  web?: boolean;
   model?: string;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
 }
@@ -121,4 +123,6 @@ export interface Usage {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Web searches the call made. */
+  searches?: number;
 }

@@ -77,6 +77,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
         code.rs (lexer)  sewn.rs (your blocks)
       margin.rs  stitch.rs  drawing.rs            output.ts  snap quotes, clean SVG
                                                   working.ts a correction's check, re-worked
+                                                  web.ts     sources only when real, links
     brain.rs  ⇄ JSON lines on stdin/stdout ⇄      protocol.ts the wire types
   store.rs: notes/<id>.json, settings.json, minds.json, folders.json in INKLING_DATA_DIR
 ```
@@ -110,7 +111,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/stand.rs` | Let it stand: what every mind is told about the points you let stand (`ctx.letStand`), the Let stand button's words and toasts | `points` (which points, in what order, how short), `dismiss` (the reason from the tag's box) |
 | `src/back.rs` | Turn it over: the back of the note (⇧⌘B), every thread it has had, oldest first, with how each ended (`Thread::ending`), the words before and after, what was said, your reasons (added or changed there), Reopen and Show on the page; ⇧⌘C there copies the back as Markdown | `entries` (the pure model), `entry` (one thread, for any view), `view`, `to_markdown`, `turn` (the sheet's timing) |
 | `src/settings.rs`, `src/settings/parts.rs` | the Settings window (its own window, ⌘,): sidebar of panes, the glass, grouped rows, the shortcut recorder, the model list from the brain's `status` | `open_window`, `Glass`, `INKLING_SETTINGS_*` |
-| `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `working.test.ts` (a correction's check), `live.ts` (real model, by hand) | |
+| `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `working.test.ts` (a correction's check), `web.test.ts` (sources from the web), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
 | `assets/` | the app icon: `Inkling.icon` (the Initial in layers, for light, dark, clear and tinted; `icon-layers.py` remakes the layers from `design/logo/03-initial/`, `scripts/bundle.sh` compiles it when Xcode is installed), `Inkling.icns` (the fallback), the Dock's images, fonts | `Inkling.icon/icon.json` |

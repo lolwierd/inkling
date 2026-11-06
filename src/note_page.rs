@@ -4706,6 +4706,7 @@ impl NotePage {
 
 impl Render for NotePage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let frame_started = std::time::Instant::now();
         let t = Theme::get(cx).clone();
         let p = t.p;
         let placement = cx.global::<Store>().settings.placement;
@@ -4793,7 +4794,9 @@ impl Render for NotePage {
         });
 
         // Margin tags: folded tabs that drop open on a spring toward their target.
+        let started = std::time::Instant::now();
         let (threads, slots, anchor_boxes) = self.margin_layout(placement, m, cx);
+        crate::perf::span("margin layout", started.elapsed());
         let mut unfolding = false;
         for th in &threads {
             let target = self.unfold_target(th);
@@ -4828,6 +4831,7 @@ impl Render for NotePage {
             window.request_animation_frame();
         }
         let owner: AnyView = cx.entity().into();
+        let started = std::time::Instant::now();
         let mut cards = vec![];
         if !jmw {
             for slot in &slots {
@@ -4846,6 +4850,7 @@ impl Render for NotePage {
                 );
             }
         }
+        crate::perf::span("cards", started.elapsed());
 
         // Marks-only placement: a small ? after each quote opens its tag; a correction gets
         // the × its tab would show, and a thread being tied off its knot.
@@ -4888,6 +4893,7 @@ impl Render for NotePage {
         }
 
         // The threads: one rope per visible tag, kept between frames.
+        let started = std::time::Instant::now();
         let mut ropes: Vec<(Rope, f32, Option<f32>, Hsla)> = vec![];
         let mut holes: Vec<(Point<Pixels>, f32)> = vec![];
         if !jmw && placement != Placement::Marks {
@@ -4940,6 +4946,7 @@ impl Render for NotePage {
         if self.ropes.values().any(|r| r.moving) || !self.snipped.is_empty() || !self.tying.is_empty() {
             window.request_animation_frame();
         }
+        crate::perf::span("ropes", started.elapsed());
         let shadow = p.shadow;
         let hole_color = p.graphite.opacity(0.5);
         let tethers = canvas(
@@ -5093,7 +5100,7 @@ impl Render for NotePage {
                 .bg(linear_gradient(180., linear_color_stop(p.shadow, 0.), linear_color_stop(p.shadow.opacity(0.), 1.)))
         });
 
-        div()
+        let root = div()
             .size_full()
             .flex()
             .flex_row()
@@ -5141,7 +5148,9 @@ impl Render for NotePage {
                     .children(hem)
                     .children(enlarged),
             )
-            .children(chat)
+            .children(chat);
+        crate::perf::span("page render", frame_started.elapsed());
+        root
     }
 }
 

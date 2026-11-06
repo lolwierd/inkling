@@ -342,10 +342,17 @@ pub(crate) fn tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl
 
 /// Script steps that act on the window itself, as the platform would: keystrokes and
 /// the pointer.
+/// Where a script's `press` put the left button down, while it is held: `point` steps
+/// until `release` are then a drag, as the platform would report them.
+static HELD: std::sync::Mutex<Option<(f32, f32)>> = std::sync::Mutex::new(None);
+
 fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
     use crate::script::Step;
     let none = Modifiers::default();
-    let move_to = |position: Point<Pixels>| PlatformInput::MouseMove(MouseMoveEvent { position, pressed_button: None, modifiers: none });
+    let held = *HELD.lock().unwrap_or_else(|e| e.into_inner());
+    let move_to = |position: Point<Pixels>| {
+        PlatformInput::MouseMove(MouseMoveEvent { position, pressed_button: held.map(|_| MouseButton::Left), modifiers: none })
+    };
     match step {
         Step::Key(keys) => {
             for k in keys {
@@ -366,6 +373,23 @@ fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
         }
         Step::Pointer(x, y) => {
             window.dispatch_event(move_to(point(px(*x), px(*y))), cx);
+            if held.is_some() {
+                *HELD.lock().unwrap_or_else(|e| e.into_inner()) = Some((*x, *y));
+            }
+        }
+        Step::Press(x, y) => {
+            let position = point(px(*x), px(*y));
+            window.dispatch_event(move_to(position), cx);
+            window.dispatch_event(PlatformInput::MouseDown(MouseDownEvent { button: MouseButton::Left, position, modifiers: none, click_count: 1, first_mouse: false }), cx);
+            *HELD.lock().unwrap_or_else(|e| e.into_inner()) = Some((*x, *y));
+        }
+        Step::Release => {
+            if let Some((x, y)) = HELD.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                let position = point(px(x), px(y));
+                window.dispatch_event(PlatformInput::MouseUp(MouseUpEvent { button: MouseButton::Left, position, modifiers: none, click_count: 1 }), cx);
+            } else {
+                log::warn!("script: release without a press");
+            }
         }
         _ => {}
     }
@@ -652,7 +676,7 @@ impl AppView {
                     }
                     // Input goes to the window as the platform would send it, outside any
                     // view's update, so the views it reaches can update themselves.
-                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) => {
+                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) | Step::Press(..) | Step::Release => {
                         cx.update(|window, cx| window_step(&step, window, cx)).is_ok()
                     }
                     _ => this.update_in(cx, |app, window, cx| app.script_step(step, window, cx)).is_ok(),

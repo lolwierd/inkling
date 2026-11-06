@@ -110,6 +110,8 @@
 //! ```text
 //! key: cmd-k                # a keystroke (several, space separated: `key: cmd-a backspace`)
 //! click: 640, 300           # click at a point in the window (logical pixels)
+//! press: 900, 300           # the left button goes down there; `point:` steps then drag
+//! release                   # the button comes up where the pointer is
 //! point: 640, 300           # move the pointer there (`hover: n` rests it on thread n's tag)
 //! size: 900x620             # resize the window to this width and height
 //! set: appearance=dark      # also size=small|default|large, ink=madder|indigo|…,
@@ -190,7 +192,7 @@ pub enum Step {
     Key(Vec<String>),
     /// A left click at a point in the window.
     Click(f32, f32),
-    /// The pointer moves to a point in the window.
+    /// The pointer moves to a point in the window (dragging, after `press`).
     Pointer(f32, f32),
     /// Let thread n stand, with the words typed into its tag's box first as the reason.
     Stand(usize, String),
@@ -222,6 +224,10 @@ pub enum Step {
     Knot(usize),
     /// Rest the pointer on thread n's knot (0 = on none): its answer washes.
     HoverKnot(usize),
+    /// The left button goes down at a point; `pointer` steps then drag until `release`.
+    Press(f32, f32),
+    /// The left button comes up where the pointer is.
+    Release,
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -360,8 +366,9 @@ pub fn parse(src: &str) -> Vec<Step> {
                 }
                 "back-reopen" => Step::BackReopen(n()),
                 "back-show" => Step::BackShow(n()),
-                "click" | "point" => match point_arg(&arg) {
+                "click" | "point" | "press" => match point_arg(&arg) {
                     Some((x, y)) if cmd == "click" => Step::Click(x, y),
+                    Some((x, y)) if cmd == "press" => Step::Press(x, y),
                     Some((x, y)) => Step::Pointer(x, y),
                     None => {
                         log::warn!("script: {cmd} needs `x, y`: {l:?}");
@@ -371,6 +378,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "follow" => Step::Follow(n()),
                 "delete" => Step::Delete(arg),
                 "undo-delete" => Step::UndoDelete,
+                "release" => Step::Release,
                 _ => {
                     log::warn!("script: unknown step {l:?}");
                     return None;

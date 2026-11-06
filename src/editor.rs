@@ -3355,6 +3355,7 @@ impl Element for EditorElement {
         window: &mut Window,
         cx: &mut App,
     ) {
+        let paint_started = Instant::now();
         let theme = Theme::get(cx).clone();
         let p = theme.p;
         let ed = self.editor.read(cx);
@@ -3730,6 +3731,7 @@ impl Element for EditorElement {
             let caret = Bounds::new(origin + pt + point(px(0.), (lh - h) / 2.), size(px(1.5), h));
             window.paint_quad(fill(caret, p.ink));
         }
+        crate::perf::span("editor paint", paint_started.elapsed());
     }
 }
 

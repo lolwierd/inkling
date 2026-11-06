@@ -211,6 +211,13 @@ fn thread_markdown(t: &Thread) -> String {
     for m in &t.messages {
         let who = if m.role == Role::Mind { name } else { "Me" };
         out.push_str(&format!(">\n> *{who}:* {}\n", m.text.replace('\n', "\n> ")));
+        // the check a correction carries, struck through once it was taken back
+        if let Some(c) = &m.check {
+            let strike = if c.taken_back { "~~" } else { "" };
+            for (label, body) in crate::working::parts(c) {
+                out.push_str(&format!(">\n> *{label}:* {strike}{body}{strike}\n"));
+            }
+        }
     }
     if t.drawing.is_some() {
         out.push_str(">\n> *(drawing)*\n");
@@ -247,6 +254,12 @@ fn thread_html(t: &Thread) -> String {
     for m in &t.messages {
         let class = if m.role == Role::Mind { "mind" } else { "me" };
         out.push_str(&format!("<p class=\"{class}\">{}</p>\n", esc(&m.text).replace('\n', "<br>")));
+        if let Some(c) = &m.check {
+            let (open, close) = if c.taken_back { ("<s>", "</s>") } else { ("", "") };
+            for (label, body) in crate::working::parts(c) {
+                out.push_str(&format!("<p class=\"working\">{}: {open}{}{close}</p>\n", esc(&label), esc(&body)));
+            }
+        }
     }
     if t.drawing.is_some() {
         out.push_str("<p class=\"on\">(drawing)</p>\n");
@@ -532,6 +545,25 @@ mod tests {
         collapsed.end = collapsed.start;
         note.threads = vec![collapsed, dismissed, on_item, drawn, on_cache, on_title];
         note
+    }
+
+    #[std::prelude::v1::test]
+    fn the_working_goes_under_its_correction() {
+        let mut note = Note::new("Race", Mode::ThinksWithYou, None);
+        note.blocks = vec![b(BlockKind::Title, "Race"), b(BlockKind::Paragraph, "At 5:30 a km I finish under 50.")];
+        let mut t = thread(&note, "I finish under 50", ThreadStatus::Open, &[(Role::Mind, "At 5:30 a km, 10 km takes 55:00.")]);
+        t.kind = ThoughtKind::Correction;
+        t.messages[0].check = crate::working::from_wire(&serde_json::json!({
+            "sum": [{"sum": "5:30 × 10", "is": "55:00"}], "givens": [{"value": "5:30", "words": "At 5:30"}],
+        }));
+        note.threads = vec![t];
+        let md = to_markdown(&note, true);
+        assert!(md.contains("> *Editor:* At 5:30 a km, 10 km takes 55:00.\n>\n> *Working:* 5:30 × 10 = 55:00 (from your words: “At 5:30”)\n"), "{md}");
+        assert!(to_html(&note, true).contains("<p class=\"working\">Working: 5:30 × 10 = 55:00 (from your words: “At 5:30”)</p>"));
+        note.threads[0].messages[0].check.as_mut().unwrap().taken_back = true;
+        assert!(to_markdown(&note, true).contains("> *Working, taken back:* ~~5:30 × 10 = 55:00"));
+        assert!(to_html(&note, true).contains("Working, taken back: <s>5:30"));
+        assert!(!to_markdown(&note, false).contains("Working"));
     }
 
     #[std::prelude::v1::test]

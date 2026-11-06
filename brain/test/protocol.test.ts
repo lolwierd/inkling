@@ -322,10 +322,46 @@ describe("what each task sends back", () => {
 
   test("a probe always speaks; an empty one is bad_output", async () => {
     const b = brain();
-    b.send(run("r", { task: "probe", ctx: ctx(fake(thought(false, "a", "Why a?", { kind: "correction" }))), target: "a b" }));
-    expect((await b.end("r")).data).toEqual({ speak: true, kind: "correction", quote: "a", text: "Why a?", sketch: false });
+    b.send(run("r", { task: "probe", ctx: ctx(fake(thought(false, "a", "Why a?"))), target: "a b" }));
+    expect((await b.end("r")).data).toEqual({ speak: true, kind: "question", quote: "a", text: "Why a?", sketch: false });
     b.send(run("r2", { task: "probe", ctx: ctx(fake(thought(false, "", ""))), target: "a b" }));
     expect(await b.end("r2")).toMatchObject({ ev: "error", kind: "bad_output" });
+  });
+
+  describe("a correction shows its working", () => {
+    const target = "My pace is 5:30 per km, so the 10k takes 50 minutes.";
+    const sum = { sum: [{ sum: "5:30 × 10", is: "55:00" }], givens: [{ value: "5:30", words: "5:30 per km" }, { value: "10", words: "the 10k" }] };
+    const correction = (check: object, question = "How long is 10 km at 5:30?") =>
+      thought(true, "so the 10k takes 50 minutes", "At 5:30 a km the 10k takes 55:00.", { kind: "correction", check, question });
+
+    test("a backed correction carries its check", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake(correction(sum)) + "\n" + target), target }));
+      expect((await b.end("r")).data).toEqual({
+        speak: true,
+        kind: "correction",
+        quote: "so the 10k takes 50 minutes",
+        text: "At 5:30 a km the 10k takes 55:00.",
+        sketch: false,
+        check: { sum: [{ sum: "5:30 × 10", is: "55:00", rounded: false }], givens: sum.givens, words: [] },
+      });
+    });
+
+    test("one that does not add up arrives as its question", async () => {
+      const b = brain();
+      const wrong = { ...sum, sum: [{ sum: "5:30 × 10", is: "50:00" }] };
+      b.send(run("r", { task: "read", ctx: ctx(fake(correction(wrong)) + "\n" + target), target }));
+      expect((await b.end("r")).data).toEqual({ speak: true, kind: "question", quote: "so the 10k takes 50 minutes", text: "How long is 10 km at 5:30?", sketch: false });
+      expect(b.stderr).toContain("correction became a question: line 1: 5:30 × 10 is 55:00, not 50:00");
+    });
+
+    test("with no question to fall back on, a read is silent and a probe is bad_output", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake(correction({}, "")) + "\n" + target), target }));
+      expect((await b.end("r")).data).toEqual({ speak: false });
+      b.send(run("p", { task: "probe", ctx: ctx(fake(correction({}, "")) + "\n" + target), target }));
+      expect(await b.end("p")).toMatchObject({ ev: "error", kind: "bad_output" });
+    });
   });
 
   test("a non-object structured answer is bad_output", async () => {

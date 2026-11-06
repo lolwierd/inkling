@@ -200,6 +200,15 @@ const STOOD = [
   { quote: "four days a week", point: "Why four? You walked after 7 km last year; is it the days that matter, or the last 3 km?", kind: "question", mind: "Skeptic", reason: null },
 ];
 const planCtx = (paragraphs: string[]) => ctx(paragraphs.slice(1), { noteTitle: PLAN[0], letStand: STOOD });
+// Show its working: the running plan's arithmetic slip, a fact only memory could settle,
+// and a contradiction inside the note.
+const WORKING_PLAN = [
+  "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes.",
+  "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I’ll come in just under 50.",
+  "Sunday is the long run. I’ll add a kilometre every week until I reach 16.",
+];
+const WEEK = ["I run four days a week, Monday to Thursday, and rest at the weekend.", "With three runs a week, Sunday stays free for the long run."];
+const demotions = () => stderr.split("\n").filter((l) => l.includes("correction became a question"));
 
 const scenarios: Record<string, () => Promise<unknown>> = {
   // Four calls: the same paragraph again, the same point in new words, a different point on
@@ -229,6 +238,35 @@ const scenarios: Record<string, () => Promise<unknown>> = {
     check(e.ev === "status", `status answered ${e.ev}: ${e.message}`);
     const a = e.data?.account ?? {};
     return { ms: Date.now() - t0, ev: e.ev, account: { hasEmail: Boolean(a.email), subscriptionType: a.subscriptionType, tokenSource: a.tokenSource, apiKeySource: a.apiKeySource, apiProvider: a.apiProvider }, models: Array.isArray(e.data?.models) ? e.data.models.map((m: any) => m.value) : e.data?.models };
+  },
+  async working_sum() {
+    const target = WORKING_PLAN[1];
+    const r = await call(LIGHT, { task: "read", ctx: ctx(WORKING_PLAN, { noteTitle: "Sub-50 10k by March" }), target });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") {
+      checkThought(r.e.data, target, true);
+      check(r.e.data.kind === "correction" && (r.e.data.check?.sum?.length ?? 0) > 0, `expected a correction with a sum, got ${r.e.data.kind}`);
+    }
+    return { ...r, demotions: demotions() };
+  },
+  async working_memory() {
+    const paras = ["The far side of the Moon is dark because sunlight never reaches it.", "That is why the first photographs of it, in 1959, were such a surprise."];
+    const r = await call(LIGHT, { task: "read", ctx: ctx(paras, { noteTitle: "The Moon" }), target: paras[0] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") {
+      checkThought(r.e.data, paras[0], true);
+      check(r.e.data.kind === "question", `a fact from memory came as a ${r.e.data.kind}`);
+    }
+    return { ...r, demotions: demotions() };
+  },
+  async working_words() {
+    const r = await call(LIGHT, { task: "read", ctx: ctx(WEEK, { noteTitle: "Training week" }), target: WEEK[1] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") {
+      checkThought(r.e.data, WEEK[1], true);
+      check(r.e.data.kind !== "correction" || (r.e.data.check?.words?.length ?? 0) > 0, "a correction without the writer's words");
+    }
+    return { ...r, demotions: demotions() };
   },
   async read_note() {
     const target = LIMITER[1];

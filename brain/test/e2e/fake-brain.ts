@@ -32,6 +32,15 @@
 // the quote it would use (or a probe's whole selection) is exactly the quote of one of
 // `ctx.letStand`, it answers {speak: false, repeats: n}, n counting from 1.
 //
+//   With [[correction]], a check for it, which goes through the real brain's checks
+//   (src/working.ts): a sum that does not add up, or words not in the note, turn the
+//   correction into its [[question:...]] (or silence, or bad_output for a probe):
+//   [[sum:5:30 × 10 = 55:00]]   a line of the working (repeat for more lines)
+//   [[given:5:30@5:30 per km]]  a number the sum takes from the writer, and their words
+//   [[words:PASSAGE]]           a passage from elsewhere in the note (repeatable)
+//   [[question:TEXT]]           the question to ask instead;  [[nocheck]] none of these
+//   A bare [[correction]] is passed through unchecked, as before.
+//
 // Prefix a directive with a task to scope it: [[draw>badsvg]], [[reply>resolved]],
 // [[chat>error:overloaded]]. Directives are only read from the request's own
 // fields (never the whole note), so they cannot leak between requests.
@@ -51,6 +60,7 @@
 
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
+import { withWorking } from "../../src/working.ts";
 
 type Any = Record<string, any>;
 
@@ -181,15 +191,25 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): { data?:
       if (n >= 0 && !has("again")) return { data: { speak: false, repeats: n + 1 } };
       const text = has("empty") ? "" : `[${id}] ${task === "read" ? "Read" : "Probe"}: what about “${clean(quote)}”?`;
       if (task === "read" && !text.trim()) return { data: { speak: false } };
-      return {
-        data: {
-          speak: true,
-          kind: has("correction") ? "correction" : "question",
-          quote,
-          text,
-          sketch: has("sketch"),
-        },
+      const thought = { speak: true as const, kind: has("correction") ? ("correction" as const) : ("question" as const), quote, text, sketch: has("sketch") };
+      const checked = ["sum", "given", "words", "question", "nocheck"].some(has);
+      if (thought.kind !== "correction" || !checked) return { data: thought };
+      // The check goes through the real brain's rules, against the text without directives.
+      const all = (name: string) => p.ds.filter((d) => d.name === name).map((d) => d.arg ?? "");
+      const check = {
+        sum: all("sum").map((l) => {
+          const at = l.lastIndexOf("=");
+          return { sum: at < 0 ? l : l.slice(0, at).trim(), is: at < 0 ? "" : l.slice(at + 1).trim() };
+        }),
+        givens: all("given").map((g) => ({ value: g.split("@")[0].trim(), words: g.split("@").slice(1).join("@").trim() })),
+        words: all("words"),
       };
+      const bare = (v: unknown) => (typeof v === "string" ? v.replace(/\[\[[^\]]*\]\]/g, "") : "");
+      const ctx = input.ctx ?? {};
+      const writer = { title: bare(ctx.noteTitle), note: bare(ctx.noteText), brief: ctx.brief ? bare(ctx.brief) : null, target: bare(target), quote: bare(quote) };
+      const settled = withWorking(thought, { check: has("nocheck") ? undefined : check, question: arg("question") ?? "" }, writer, (why) => log(why));
+      if (settled) return { data: settled };
+      return task === "read" ? { data: { speak: false } } : { error: ["bad_output", "a correction came without a check or a question"] };
     }
     case "sketch": {
       const raw = arg("rawquote");

@@ -75,6 +75,21 @@ function noteBlock(ctx: Context): string {
   ].join("\n");
 }
 
+// Show its working: a correction carries a check the writer can do themselves, and the
+// brain re-checks it (working.ts); one it cannot back becomes the fallback question.
+const CHECK_RULES = [
+  "- kind: \"correction\" only when something is plainly wrong and check shows how you know; otherwise \"question\".",
+  "- check (corrections only): how the writer can check it themselves. Either",
+  "  sum: the arithmetic, 1 to 4 lines, each {\"sum\": \"5:30 × 10\", \"is\": \"55:00\"}: numbers, durations (5:30, 1:05:00) and percentages with + − × ÷ and brackets, no units or words. Every number in a sum is one of givens, an earlier line's \"is\", or 1, 2, 7, 12, 24, 52, 60, 100, 365 or 1000; with",
+  "  givens: each number you took from the writer, {\"value\": \"5:30\", \"words\": \"hold 5:30\"}, words being their exact words that contain it (1 to 6 words);",
+  "  or words: 1 or 2 passages copied exactly from elsewhere in the note that this paragraph contradicts.",
+  "  Every number in text is the writer's or is in your sum: a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}.",
+  "- question (corrections only): what to ask instead if your check does not hold up, at most 45 words.",
+];
+
+const NO_SOURCES =
+  "You cannot open any source from here: no web, no books, no files. A fact that rests only on what you remember is a question, not a correction; say what you remember inside the question.";
+
 export function readPrompt(ctx: Context, target: string): string {
   return [
     noteBlock(ctx),
@@ -86,10 +101,11 @@ export function readPrompt(ctx: Context, target: string): string {
     "If you speak:",
     "- quote: copy the exact words from the paragraph that your note is about, the shortest span that makes sense (often 3 to 15 words). It must match the paragraph character for character.",
     "- text: your margin note, at most 45 words, usually ending in one question.",
-    "- kind: \"correction\" when a fact is wrong, otherwise \"question\".",
+    ...CHECK_RULES,
     "- sketch: true only when a small step-by-step drawing would make it click (a process, a structure, a flow, a comparison) and they seem to be struggling to picture it.",
     REPEATS,
     "If you stay silent, set quote and text to empty strings and repeats to 0.",
+    NO_SOURCES,
   ].join("\n");
 }
 
@@ -103,9 +119,10 @@ export function probePrompt(ctx: Context, target: string): string {
     "Find the single most useful thing to ask or point out about it: a hidden assumption, a claim that needs evidence, a step that does not follow, an edge case, a fact that is wrong. If it is genuinely solid, ask the question that would take it one level deeper. If the most useful point is one the writer let stand, find the next most useful one.",
     "- quote: the exact words from the selection your note is about (the whole selection is fine).",
     "- text: at most 50 words, usually ending in one question.",
-    "- kind: \"correction\" when a fact is wrong, otherwise \"question\".",
+    ...CHECK_RULES,
     "- sketch: true only when a small drawing would make it click.",
     REPEATS,
+    NO_SOURCES,
   ].join("\n");
 }
 
@@ -203,6 +220,24 @@ export function chatPrompt(ctx: Context, history: ThreadMessage[], message: stri
     .join("\n");
 }
 
+// A correction's check (see CHECK_RULES). Optional, so a question or a silence spends no
+// tokens on it.
+const CHECK_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    sum: {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["sum", "is"], properties: { sum: { type: "string" }, is: { type: "string" } } },
+    },
+    givens: {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["value", "words"], properties: { value: { type: "string" }, words: { type: "string" } } },
+    },
+    words: { type: "array", items: { type: "string" } },
+  },
+} as const;
+
 export const THOUGHT_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -213,6 +248,8 @@ export const THOUGHT_SCHEMA = {
     quote: { type: "string" },
     text: { type: "string" },
     sketch: { type: "boolean" },
+    check: CHECK_SCHEMA,
+    question: { type: "string" },
     // last, so it is written after the note it checks
     repeats: { type: "integer" },
   },
@@ -228,6 +265,8 @@ export const PROBE_SCHEMA = {
     quote: { type: "string" },
     text: { type: "string" },
     sketch: { type: "boolean" },
+    check: CHECK_SCHEMA,
+    question: { type: "string" },
     repeats: THOUGHT_SCHEMA.properties.repeats,
   },
 } as const;

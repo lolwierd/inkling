@@ -256,12 +256,59 @@ pub struct Message {
     pub text: String,
     #[serde(default)]
     pub at: DateTime<Utc>,
+    /// How a correction shows it is right (`src/working.rs`). Only the brain's checked
+    /// answer fills it; a check this build cannot read is left out, not the message.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "check_or_none")]
+    pub check: Option<Check>,
 }
 
 impl Message {
     pub fn new(role: Role, text: impl Into<String>) -> Self {
-        Self { role, text: text.into(), at: Utc::now() }
+        Self { role, text: text.into(), at: Utc::now(), check: None }
     }
+}
+
+/// Show its working: what a correction carries so you can check it yourself, a sum made
+/// from your own numbers or your own words from elsewhere in the note.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Check {
+    /// The working, line by line.
+    pub sum: Vec<SumLine>,
+    /// The numbers the sum took from your words, and those words.
+    pub givens: Vec<Given>,
+    /// Your words, from elsewhere in the note, that the corrected words contradict.
+    pub words: Vec<Passage>,
+    /// The mind agreed the check was wrong and took the correction back.
+    pub taken_back: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct SumLine {
+    pub sum: String,
+    pub is: String,
+    /// `is` is the result rounded, so the tag shows ≈ rather than =.
+    pub rounded: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Given {
+    pub value: String,
+    pub words: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Passage {
+    pub words: String,
+    /// Another note's id when the words are there; `None` for this note.
+    pub note: Option<String>,
+}
+
+fn check_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Check>, D::Error> {
+    Ok(serde_json::from_value::<Option<Check>>(Value::deserialize(d)?).ok().flatten())
 }
 
 /// Fields with a sensible empty value default when a file lacks them, so a note
@@ -1184,6 +1231,27 @@ mod tests {
         assert_eq!((t.status, t.kind, t.side, t.messages.len()), (ThreadStatus::Open, ThoughtKind::Question, Side::Right, 0));
         // Newest first.
         assert_eq!(store.notes[0].id, "t");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_message_keeps_its_check_and_an_unreadable_one_costs_only_the_check() {
+        let plain: Message = serde_json::from_str(r#"{"role": "mind", "text": "Why 50?"}"#).unwrap();
+        assert_eq!(plain.check, None);
+        // a message without a check is written exactly as before
+        assert!(!serde_json::to_string(&plain).unwrap().contains("check"));
+        let garbled: Message = serde_json::from_str(r#"{"role": "mind", "text": "x", "check": {"sum": 5}}"#).unwrap();
+        assert_eq!((garbled.text.as_str(), garbled.check), ("x", None));
+        let from_later: Message = serde_json::from_str(r#"{"role": "mind", "text": "x", "check": {"sum": [{"sum": "5:30 × 10", "is": "55:00"}], "source": {"url": "u"}}}"#).unwrap();
+        assert_eq!(from_later.check.as_ref().unwrap().sum[0], SumLine { sum: "5:30 × 10".into(), is: "55:00".into(), rounded: false });
+        let mut m = Message::new(Role::Mind, "At 5:30 a km, 10 km takes 55:00.");
+        m.check = Some(Check {
+            sum: vec![SumLine { sum: "5:30 × 10".into(), is: "55:00".into(), rounded: false }],
+            givens: vec![Given { value: "5:30".into(), words: "hold 5:30".into() }],
+            words: vec![Passage { words: "run four days a week".into(), note: None }],
+            taken_back: true,
+        });
+        let back: Message = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.check, m.check);
     }
 
     #[std::prelude::v1::test]

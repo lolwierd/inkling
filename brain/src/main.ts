@@ -25,6 +25,7 @@ import {
   SKETCH_SCHEMA,
 } from "./prompts.ts";
 import type { Context, Event, Frequency, LetStandPoint, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
+import { withWorking } from "./working.ts";
 
 const VERSION = "0.1.0";
 const running = new Map<string, AbortController>();
@@ -202,16 +203,17 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
       }
       // Read may stay silent; a probe was asked for, so it always says something.
       if (input.task === "read" && !(d.speak === true && text(d.text).trim())) return { data: { speak: false }, usage };
-      return {
-        data: {
-          speak: true,
-          kind: d.kind === "correction" ? "correction" : "question",
-          quote: snapQuote(text(d.quote), input.target),
-          text: nonEmpty(d.text, "an empty note"),
-          sketch: d.sketch === true,
-        },
-        usage,
-      };
+      const quote = snapQuote(text(d.quote), input.target);
+      const thought = withWorking(
+        { speak: true, kind: d.kind === "correction" ? "correction" : "question", quote, text: nonEmpty(d.text, "an empty note"), sketch: d.sketch === true },
+        d,
+        { title: input.ctx.noteTitle, note: input.ctx.noteText, brief: input.ctx.brief, target: input.target, quote },
+        log,
+      );
+      // A correction with neither a check nor a question to fall back on is never shown.
+      if (!thought && input.task === "read") return { data: { speak: false }, usage };
+      if (!thought) throw new ProviderError("bad_output", "a correction came without a check or a question");
+      return { data: thought, usage };
     }
     case "sketch": {
       const { data, usage } = await runStructured<unknown>(sys, sketchPrompt(input.ctx, input.target), SKETCH_SCHEMA, settings, signal, onLimit);

@@ -1,0 +1,32 @@
+# Show its working with your own words: a correction backed by words from elsewhere in the
+# note shows them as a link that selects them; Disagree sends the next reply as a dispute
+# of the working, and when the mind agrees the correction is taken back.
+# tags: working
+note: Training week
+type: [[silent]] I run four days a week, Monday to Thursday.
+settle
+type: [[correction]][[quote:three runs a week]][[words:I run four days a week]][[question:How many runs a week is it?]] With three runs a week, Sunday stays free for the long run.
+settle
+dump: backed
+expect: d.threads.length === 1 && d.threads[0].kind === "Correction" && d.threads[0].check === "words:1"
+set: appearance=light
+activate: 1
+see: 1 1
+wait: 400
+dump: seen
+expect: d.selection[0] === "Training week\n[[silent]] ".length && d.selection[1] === d.selection[0] + "I run four days a week".length
+expect: d.active === d.threads[0].id
+disagree: 1
+wait: 300
+dump: disputing
+expect: d.active === d.threads[0].id && d.focus === "reply"
+reply: Those are two different weeks. [[reply>resolved]]
+settle
+dump: taken-back
+expect: d.threads[0].status === "Resolved" && d.threads[0].check === "words:1:taken back"
+shot: taken-back
+export: md
+quit
+expect: requests.some(r => r.input.task === "reply" && r.input.message.startsWith("I don’t think your working holds: “Those are two different weeks."))
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> *In your note, taken back:* ~~“I run four days a week”~~"))
+expect: note("Training week").threads[0].messages[0].check.taken_back === true && note("Training week").threads[0].status === "resolved"

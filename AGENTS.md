@@ -76,6 +76,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
       editor.rs (text, anchors, layout)           claude.ts  Agent SDK calls, errors, limits
         code.rs (lexer)  sewn.rs (your blocks)
       margin.rs  stitch.rs  drawing.rs            output.ts  snap quotes, clean SVG
+                                                  working.ts a correction's check, re-worked
     brain.rs  ⇄ JSON lines on stdin/stdout ⇄      protocol.ts the wire types
   store.rs: notes/<id>.json, settings.json, minds.json, folders.json in INKLING_DATA_DIR
 ```
@@ -90,6 +91,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/code.rs` | code blocks' languages, a small lexer per language (a comment or string carries across lines), each token's thread, the contrast test on the code ground | `lex_block`, `color` |
 | `src/sewn.rs` | your blocks, sewn: the checklist box and its cross-stitch (and its timing), a callout's patch, a quote's seam, the block geometry the editor lays out and hit-tests | `patch`, `check_box`, `cross_at`, `lay_along` |
 | `src/margin.rs` | where tags go without overlapping (`place`), and the `Measured` wrapper that reports their heights | |
+| `src/working.rs`, `src/note_page/show_working.rs` | Show its working: a correction's check (a sum from your numbers, or your words) off the wire, in words for Copy, exports and the minds, and drawn under its correction in the tag with Disagree | `from_wire`, `parts`, `place`; `working_block`, `dispute_message` |
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
 | `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open (the bundle's `.icns` is the light Initial; per-appearance bundle icons need Xcode's `actool`) | `follow` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
@@ -103,7 +105,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/toast.rs` | every toast, in one stack at the bottom centre: a note deleted, a thread dismissed (Undo, ⌥⌘Z), a problem (ochre, closable), anything done | `show`, `Kind`, `stack`; the dump's `toasts` |
 | `src/stand.rs` | Let it stand: what every mind is told about the points you let stand (`ctx.letStand`), the Let stand button's words and toasts | `points` (which points, in what order, how short), `dismiss` (the reason from the tag's box) |
 | `src/settings.rs`, `src/settings/parts.rs` | the Settings window (its own window, ⌘,): sidebar of panes, the glass, grouped rows, the shortcut recorder, the model list from the brain's `status` | `open_window`, `Glass`, `INKLING_SETTINGS_*` |
-| `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `live.ts` (real model, by hand) | |
+| `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `working.test.ts` (a correction's check), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
 | `design/` | the brand, the three directions, the video; `design/directions/DESIGN.md` is the design record; `design/capabilities.md` lists every user-facing capability, which the welcome tour and the film must cover | |

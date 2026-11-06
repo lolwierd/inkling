@@ -24,6 +24,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 |---|---|
 | Reads each paragraph at your pause | pace Regular or Slow; a tacking stitch in the gutter marks what it read; checklist items and callouts read like paragraphs, a code block is read whole once you leave it, and a question can sit under a single line of code |
 | Speaks only when it is worth it | a question (?) or a correction (×) on a thread; sometimes with a sketch |
+| Shows its working | a correction carries a check you can do yourself, under it in the tag: the sum, worked again before it is shown and made only from your numbers (each one a link to your words), or your own words from elsewhere in the note; what it cannot show it asks as a question; Disagree, and if Inkling agrees it takes the correction back |
 | Waits while you type | a question that arrives mid-sentence stays folded until you pause |
 | Fix the words, the thread settles | edit the words an open thread is about: it reads them again and ties off when the problem is gone |
 | Your first sentence | in a new notebook, the first sentence you write always gets a question |

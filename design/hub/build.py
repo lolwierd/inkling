@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 01:55 IST"
+UPDATED = "7 Nov 2026, 02:00 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -24,16 +24,12 @@ WAITING = [
      "Copy and export carry the threads unless you turn them off; About you learns quietly; the border grows only when you go "
      "along with a question; a dismissed thread vanishes; and chat has no anchor. The full text is at the bottom of this page.",
      ("Read the manifesto", "#manifesto")),
-    ("Read it through: want it?",
-     "In a note set to wait until asked, Inkling stays quiet while you write. Read it through is one command for when the draft is done: "
-     "Inkling reads the whole note once, paragraph by paragraph, as if it had been reading along, then goes quiet again. Say yes or no.",
-     ("Read the feature", "#manifesto")),
 ]
 
 RUNNING = [
-    ("Eight features from the manifesto, being designed",
-     "Six agents, one per feature or pair: Answer in the note with Write it in; Let it stand with Turn it over; Threads of your own; "
-     "Show its working; Loose ends; Threads between notes. Each writes a design first. They build once the polish and code-health "
+    ("Nine features from the manifesto, being designed",
+     "Seven agents, one per feature or pair: Answer in the note with Write it in; Let it stand with Turn it over; Threads of your own; "
+     "Show its working; Loose ends; Threads between notes; Read it through. Each writes a design first. They build once the polish and code-health "
      "passes land, so nobody rewrites code another agent is changing, and then the film gets a second pass with them in it. "
      "Keep the old words is skipped for now."),
     ("The film, re-cut",

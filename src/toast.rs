@@ -200,6 +200,11 @@ pub fn live(cx: &App, kind: Kind) -> bool {
     cx.try_global::<Toasts>().is_some_and(|t| t.live(kind).is_some())
 }
 
+/// Whether any toast is on screen, leaving ones included (the corner hint waits for them).
+pub fn any(cx: &App) -> bool {
+    cx.try_global::<Toasts>().is_some_and(|t| !t.list.is_empty())
+}
+
 /// The words of the toast of `kind` that is showing.
 pub fn text_of(cx: &App, kind: Kind) -> Option<String> {
     cx.try_global::<Toasts>().and_then(|t| t.live(kind)).map(|t| t.text.clone())

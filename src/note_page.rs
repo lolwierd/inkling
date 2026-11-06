@@ -1297,7 +1297,15 @@ impl NotePage {
                     }
                     // The sidecar itself is down: say so, rather than blame the model.
                     if matches!(Brain::global(cx).read(cx).state, crate::brain::BrainState::Failed(_)) {
-                        format!("Inkling's brain isn't running ({m}). Settings \u{203a} Model has more.")
+                        // "the brain stopped (exit status: 3)" reads as one sentence, not nested
+                        // in another's brackets
+                        match m.strip_prefix("the brain stopped") {
+                            Some(rest) => {
+                                let end = if rest.ends_with('\u{2026}') { "" } else { "." };
+                                format!("Inkling's brain stopped{}{end} Settings \u{203a} Model has more.", rest.trim_end_matches('.'))
+                            }
+                            None => format!("Inkling's brain isn't running ({m}). Settings \u{203a} Model has more."),
+                        }
                     } else {
                         format!("Couldn't reach the model: {m}")
                     }

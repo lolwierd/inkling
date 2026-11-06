@@ -7,7 +7,7 @@ select: this sentence
 ask: What is it? [[exitmid]]
 wait: 1500
 dump: after-exit
-expect: d.error.includes("the brain stopped") && d.pending.length === 0
+expect: d.error.includes("brain stopped") && d.pending.length === 0
 keys: \nInkling, are you back now?
 wait: 2700
 dump: after-restart

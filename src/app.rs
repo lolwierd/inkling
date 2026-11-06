@@ -761,8 +761,9 @@ impl AppView {
         // The corner hint is for a quiet page; once threads hang in the margin it would
         // sit on top of their tags, so it steps aside.
         let threads_out = self.page.read(cx).note.threads.iter().any(|t| t.status == ThreadStatus::Open);
-        // Nor does it belong on top of a dialog or the drawer.
-        let covered = self.sidebar_open || self.palette.is_some() || self.settings.is_some() || self.export.is_some();
+        // Nor does it belong on top of a dialog or the drawer, or beside a toast, which
+        // sits on the same line along the bottom (and runs into it in a narrow window).
+        let covered = self.sidebar_open || self.palette.is_some() || self.settings.is_some() || self.export.is_some() || crate::toast::any(cx);
         if !self.listening && (chat_open || threads_out || covered) {
             return div().into_any_element();
         }

@@ -4,8 +4,8 @@ Manifesto items 1 and 6 (`design/manifesto.md`, section 2), designed 7 Nov 2026 
 `feat-answer`. Both move what you worked out into the note itself, and both end the same way:
 a thread whose knot points at your words in the note.
 
-**State (7 Nov 2026):** rebased onto master with Let it stand, Show its working, Loose ends
-and Turn it over; the shared part and Answer in the note are built on `feat-answer`
+**State (7 Nov 2026):** rebased onto master with Let it stand, Show its working, Loose ends,
+Turn it over, Threads between notes and Read it through; the shared part and Answer in the note are built on `feat-answer`
 (scenarios t40 to t44; six live checks against the real model, below). Write it in
 is being built by a second agent on top of the shared part. Screenshots, light and dark:
 `design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, and the back of
@@ -399,7 +399,7 @@ dominates a cold call, on any task).
 | **Show its working** (a correction carries a check) | A correction's check helps `settle` judge whether your answer is right. Both change the read's schema: they add to `THOUGHT_SCHEMA`; mine is built from theirs. | `THOUGHT_SCHEMA` in `prompts.ts`. |
 | **Loose ends** (every open thread in one list) | A thread tied off by an answer leaves the list at once. Nothing else is shared. | None. |
 | **Threads between notes** | Landed first. A thread between notes lives in its home note; the note at its other end shows a visiting copy and sends its state home on save. Only words in the home note tie such a thread off: the visiting end goes to the minds with `open: false`, the app never ties it by an answer there, and its `answer` (the home note's words) is left as it is, so saving sends it home unchanged and no knot is drawn in the wrong note (`visiting_ids`, `answerable_here`; scenario t44). A later version could keep an answer in either note with `note: Option<String>` on `Answer`. | `ThreadSummary` (their `elsewhere`, my `open`); `Thread` (copied home whole by `send_home`). |
-| **Read it through** (a waiting note read once, whole) | It reads with `read`'s rules, so it names answers for free; its read results should go through the same `take_answers` hook as reading along. | The read's `done` handling. |
+| **Read it through** (a waiting note read once, whole) | Landed first. Its reads go through `read_line`, so the threads a paragraph answers are taken there as when reading along (`take_answers`). With `through`, the note rides in the cached system prompt; the answers block goes in the read's own prompt, so the cache holds. Paragraphs a waiting note only read for answers are not marked read, so a pass still reads them. | The read's `done` handling; `read` carries both `through` and `answersOnly`. |
 
 Exactly which shared types change, all of them:
 

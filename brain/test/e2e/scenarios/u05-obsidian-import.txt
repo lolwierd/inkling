@@ -25,7 +25,8 @@ settle
 dump: daily
 expect: log.some(r => r.msg === "import: Imported 1 note from obsidian-vault; 3 already here")
 expect: d.note.title === "2026-11-06" && d.left_alone === 4 && d.read_hashes === 0   // no # heading: the file name
-expect: textOf(note("2026-11-06")) === "2026-11-06\n#daily\nMet Sam about the import.\nNext: try it on a real vault.\n[ ] Ask about tags"   // a line each, as Obsidian shows them
+expect: textOf(note("2026-11-06")) === "2026-11-06\n#daily\nMet Sam about the import.\nNext: try it on a real vault.\nAsk about tags" && note("2026-11-06").blocks[4].kind.check === false   // a line each, as Obsidian shows them; the task is a checklist item
+expect: note("Inkling design").blocks.some(b => b.kind.callout === "tip" && b.text === "Imported words are left alone, so a vault costs no model calls.") && note("Inkling design").blocks.filter(b => b.kind.code === "rust").length === 4   // a callout, and the fence as a code block
 expect: folders.map(f => f.name).join() === "Daily,Projects,Projects / Archive" && folders.every(f => f.collapsed)   // a folder before the ones inside it
 expect: note("Old plan").folder === folders.find(f => f.name === "Projects / Archive").id && note("Rate limiter").folder === folders.find(f => f.name === "Projects").id
 expect: notes.length === 6 && !notes.some(n => /must never be imported|A drawing, not a note/.test(textOf(n)))   // the tour, four notes, one again

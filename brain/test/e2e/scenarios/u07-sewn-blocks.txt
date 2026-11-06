@@ -1,0 +1,65 @@
+# Your blocks, typed as Markdown shortcuts: a checklist, a callout of each kind, a block of
+# code, inline code and a quote. ⌘L checks an item off; checklist items and callouts are read
+# like paragraphs, the code block is read once, whole, after the caret leaves it, and its
+# question sits on the exact characters it asks about. Export writes - [x], > [!note] and
+# fenced code in Markdown, checkboxes and <pre><code> in HTML, and ☑ ☐ for Word.
+# env: FAKE_READ_DEFAULT=silent
+# timeout: 120
+wait: 1500
+note: Race week
+keys: The check is finish() for 10 km.
+select: finish()
+key: cmd-e
+caret: end
+# a checklist: "[ ] " at a line start; Return adds an item, Return on an empty one leaves
+keys: \n[ ]
+keys: \s
+keys: Pick up the bib on Friday\nEasy 5 km on Thursday, nothing faster\n\n
+# callouts: "> " makes a quote, then "[!note] " makes it a note
+keys: >
+keys: \s
+keys: [!note]
+keys: \s
+keys: The course has one hill, at 6 km.\n\n>
+keys: \s
+keys: [!warning]
+keys: \s
+keys: Nothing new on race day: not the shoes, not the gel.\n\n>
+keys: \s
+keys: [!tip]
+keys: \s
+keys: Start 10 seconds a km slower than goal pace.\n\n```rust
+settle
+dump: before-code
+expect: d.kinds.join() === "title,paragraph,check,check,callout:note,callout:warning,callout:tip,paragraph"
+# code: ``` and a language, then Return; Return keeps the indentation, Shift-Tab takes it off,
+# Return twice at the end leaves the block
+enter
+keys: fn finish(pace_secs: u32) -> u32 {\n    10 * pace_secs // [[speak]] [[quote:10 * pace_secs]]\n
+key: shift-tab
+keys: }\n\n>
+keys: \s
+keys: Run the mile you are in.\n\n
+settle
+# ⌘L checks the item under the caret
+caret: Easy 5 km
+key: cmd-l
+settle
+dump: typed
+expect: d.kinds.join() === "title,paragraph,check,check:done,callout:note,callout:warning,callout:tip,code:rust,code:rust,code:rust,quote,paragraph"
+expect: textOf(note("Race week")).includes("\nfn finish(pace_secs: u32) -> u32 {\n    10 * pace_secs // [[speak]] [[quote:10 * pace_secs]]\n}\nRun the mile you are in.\n")
+expect: ["Pick up the bib on Friday", "Easy 5 km on Thursday, nothing faster", "The course has one hill, at 6 km.", "Nothing new on race day: not the shoes, not the gel.", "Start 10 seconds a km slower than goal pace.", "Run the mile you are in."].every(t => requests.some(r => r.input.task === "read" && r.input.target === t))   // items and callouts read like paragraphs
+expect: requests.filter(r => (r.input.target || "").includes("pace_secs")).map(r => r.input.target).join("|") === "fn finish(pace_secs: u32) -> u32 {\n    10 * pace_secs // [[speak]] [[quote:10 * pace_secs]]\n}"   // the code block, once and whole
+expect: d.threads.length === 1 && d.threads[0].quote === "10 * pace_secs" && d.threads[0].status === "Open"
+expect: rangeText(note("Race week"), note("Race week").threads[0]) === "10 * pace_secs" && blockOf(note("Race week"), "10 * pace_secs") === 8   // on the exact characters, in the code's second line
+expect: note("Race week").marks.some(m => m.mark === "code" && textOf(note("Race week")).slice(m.start, m.end) === "finish()")
+shot: typed
+export: md
+export: html
+export: word
+quit
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("The check is `finish()` for 10 km.\\n\\n- [ ] Pick up the bib on Friday\\n- [x] Easy 5 km on Thursday, nothing faster\\n\\n> [!note]\\n> The course has one hill, at 6 km.\\n\\n> [!warning]\\n> Nothing new"))
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> [!tip]\\n> Start 10 seconds a km slower than goal pace.\\n\\n```rust\\nfn finish(pace_secs: u32) -> u32 {\\n    10 * pace_secs // [[speak]] [[quote:10 * pace_secs]]\\n}\\n```\\n\\n> **Inkling** on “10 * pace_secs”"))
+expect: log.some(r => r.msg.startsWith("script export html:") && r.msg.includes('<li class=\\"done\\"><input type=\\"checkbox\\" disabled checked> Easy 5 km') && r.msg.includes('<div class=\\"callout tip\\">') && r.msg.includes('<pre><code class=\\"language-rust\\">fn finish(pace_secs: u32) -&gt; u32 {'))
+expect: log.some(r => r.msg.startsWith("script export word:") && r.msg.includes("<p>☐ Pick up the bib on Friday</p>") && r.msg.includes("<p>☑ Easy 5 km on Thursday, nothing faster</p>"))
+expect: note("Race week").blocks[3].kind.check === true && note("Race week").blocks[7].kind.code === "rust" && note("Race week").blocks[4].kind.callout === "note"

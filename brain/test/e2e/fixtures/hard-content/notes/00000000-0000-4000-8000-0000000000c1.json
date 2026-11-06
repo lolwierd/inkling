@@ -1,0 +1,323 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000c1",
+ "title": "Quarterly planning for the platform reliability and developer experience groups, with an honestly far too long title",
+ "folder": "f-long",
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Quarterly planning for the platform reliability and developer experience groups, with an honestly far too long title"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Supercalifragilisticexpialidocious-hyphenated-compound-words-that-never-end sit next to a path with no spaces: /Users/someone/Projects/a-very-long-folder-name/with/many/nested/levels/and/a/file-name-that-goes-on-and-on.txt"
+  },
+  {
+   "kind": "paragraph",
+   "text": "We will move the build cache to the new storage cluster in March, which should cut cold starts in half without any extra cost."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The on-call rotation stays at four people, and nobody carries the pager two weeks in a row."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Incident reviews happen within five working days, and every action item gets an owner and a date."
+  },
+  {
+   "kind": "paragraph",
+   "text": "We measure developer experience with a quarterly survey and the median time from merge to production."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Hiring two more engineers lets us finish the migration by June, assuming nothing else slips."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Every service gets an error budget, and a team that spends it stops shipping features until it recovers."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Short."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The last paragraph closes the plan: we review it again at the end of the quarter, with the numbers."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "h01",
+   "start": 419,
+   "end": 442,
+   "quote": "cut cold starts in half",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "That depends on where the cold starts come from. If most of them are image pulls, a faster cache helps; if they are scheduler waits, it changes nothing. Do you have the split from the last month, and how would you check it before March?",
+     "at": "2026-11-06T12:00:00Z"
+    },
+    {
+     "role": "you",
+     "text": "We have the split for October: about seventy percent of the time is the image pull, and the rest is the scheduler and the network setup put together.",
+     "at": "2026-11-06T12:00:00Z"
+    },
+    {
+     "role": "mind",
+     "text": "Then the cache is the right lever, but say so in the plan, with the October number.",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h02",
+   "start": 443,
+   "end": 465,
+   "quote": "without any extra cost",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Moving to a new cluster has a cost: the cluster itself, and the migration time.",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h03",
+   "start": 497,
+   "end": 508,
+   "quote": "four people",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "The extraordinarily meticulous principal engineer who reads every line",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Four people means each one is on call one week in four. Is that sustainable with the new services?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h04",
+   "start": 514,
+   "end": 557,
+   "quote": "nobody carries the pager two weeks in a row",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Who covers when someone is on leave?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h05",
+   "start": 583,
+   "end": 607,
+   "quote": "within five working days",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Why five? What happens on day six?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h06",
+   "start": 613,
+   "end": 655,
+   "quote": "every action item gets an owner and a date",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Staff engineer",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Who checks that the dates are met?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h07",
+   "start": 696,
+   "end": 712,
+   "quote": "quarterly survey",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Investor",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "A quarterly survey has four data points a year. Is that enough to steer by?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h08",
+   "start": 721,
+   "end": 757,
+   "quote": "median time from merge to production",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Socratic tutor",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Why the median and not the tail?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h09",
+   "start": 793,
+   "end": 821,
+   "quote": "finish the migration by June",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Two new engineers take about three months to be productive, so June is tight.",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h10",
+   "start": 823,
+   "end": 850,
+   "quote": "assuming nothing else slips",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Skeptic",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "What usually slips?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h11",
+   "start": 914,
+   "end": 937,
+   "quote": "stops shipping features",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Who decides when it has recovered?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "start": 874,
+   "end": 886,
+   "quote": "error budget",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Editor",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Define error budget once, for readers outside the team.",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h13",
+   "start": 1046,
+   "end": 1062,
+   "quote": "with the numbers",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Which numbers?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "h14",
+   "start": 957,
+   "end": 963,
+   "quote": "Short.",
+   "kind": "question",
+   "status": "dismissed",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Short what?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-11-06T12:00:00Z",
+ "updated_at": "2026-11-06T12:00:00Z"
+}

@@ -1,0 +1,18 @@
+[
+ {
+  "id": "longmind",
+  "name": "The extraordinarily meticulous principal engineer who reads every line",
+  "description": "Reads every line as if it will be on call for it at three in the morning, twice.",
+  "how_it_thinks": "Question everything.",
+  "voice": "plain",
+  "frequency": "when_it_matters"
+ },
+ {
+  "id": "skeptic-1",
+  "name": "Skeptic",
+  "description": "Asks for the evidence.",
+  "how_it_thinks": "Question claims.",
+  "voice": "plain",
+  "frequency": "when_it_matters"
+ }
+]

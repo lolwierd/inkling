@@ -1,0 +1,17 @@
+[
+ {
+  "id": "f-long",
+  "name": "A folder with a remarkably long name that should truncate in the sidebar",
+  "collapsed": false
+ },
+ {
+  "id": "f-work",
+  "name": "Work",
+  "collapsed": true
+ },
+ {
+  "id": "f-empty",
+  "name": "Empty folder",
+  "collapsed": false
+ }
+]

@@ -1,0 +1,24 @@
+# Hard content: a title that wraps three times, words with no spaces, a mind with a long
+# name and twelve open threads on one page. The tags stack in reading order without
+# overlapping, an open tag keeps its header in view, and a narrow window keeps the
+# gutter's marks on the paper.
+# fixture: hard-content
+wait: 1500
+settle
+dump: wide
+expect: d.slots.length === 12 && overlaps(d) === 0
+expect: d.slots.findIndex(s => s.id === "h12") < d.slots.findIndex(s => s.id === "h11")   // "error budget" before "stops shipping" on one line: its tag comes first, as it is numbered
+expect: d.slots.find(s => s.id === "h12").top < d.slots.find(s => s.id === "h11").top
+activate: 3
+wait: 900
+dump: long-mind
+expect: d.active === "h03"
+shot: long-mind
+escape
+width: 760
+wait: 900
+dump: narrow
+expect: !d.metrics.both && d.metrics.column_left >= 14   // one margin: the column keeps paper for the gutter beside it
+expect: d.slots.length === 12 && overlaps(d) === 0
+shot: narrow
+quit

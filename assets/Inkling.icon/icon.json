@@ -16,7 +16,15 @@
     {
       "layers" : [
         {
-          "glass" : true,
+          "glass-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
           "image-name-specializations" : [
             {
               "value" : "knot.svg"
@@ -77,7 +85,15 @@
     {
       "layers" : [
         {
-          "glass" : true,
+          "glass-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
           "image-name-specializations" : [
             {
               "value" : "i.svg"

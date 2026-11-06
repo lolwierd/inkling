@@ -115,7 +115,8 @@ pub fn init(cx: &mut App) {
         },
         Menu {
             name: "Window".into(),
-            items: vec![MenuItem::action("Minimize", Minimize), MenuItem::action("Zoom", Zoom)],
+            // spelt as the rest of Inkling is (Colour, kilometre), as macOS spells it in British English
+            items: vec![MenuItem::action("Minimise", Minimize), MenuItem::action("Zoom", Zoom)],
             disabled: false,
         },
         Menu {

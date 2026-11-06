@@ -335,7 +335,14 @@ impl NotePage {
     /// visiting from another note keeps its answer in its home note's words, so only words
     /// written there tie it off.
     fn answerable_here(&self, t: &Thread) -> bool {
-        rules::answerable(t) && !self.note.elsewhere_of(&t.id).is_some_and(|e| e.visiting)
+        rules::answerable(t) && !self.visiting_here(&t.id)
+    }
+
+    /// Thread `id` is visiting this note from its home in another (threads between notes):
+    /// its answer is kept in the home note's words, so nothing here may set it (Write it
+    /// in included).
+    pub(super) fn visiting_here(&self, id: &str) -> bool {
+        self.note.elsewhere_of(id).is_some_and(|e| e.visiting)
     }
 
     /// A paragraph of a note that waits to be asked, finished while a thread is open: read

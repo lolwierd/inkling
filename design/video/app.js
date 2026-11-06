@@ -19,6 +19,7 @@
     io: (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2),
     sine: (k) => 0.5 - 0.5 * Math.cos(Math.PI * k),
     quint: (k) => 1 - Math.pow(1 - k, 5),
+    smooth: (k) => k * k * k * (k * (k * 6 - 15) + 10), // smootherstep: starts and stops at rest
   };
   /** A spring from 0 to 1 from rest after `s` seconds (stiffness k, damping c, mass 1). */
   function spring(s, k, c) {
@@ -265,7 +266,7 @@
     const r = st.r;
     for (; st.k < steps; st.k++) {
       const ts = t0 + ((st.k + 1) * R.DT) / speed;
-      if (track.carry) { const e = E.out(clamp((ts - t0) / (track.carry || 0.5))); r.b = [lerp(a[0] + 0.5, b[0], e), lerp(a[1] + 0.5, b[1], e)]; }
+      if (track.carry) { const e = E.smooth(clamp((ts - t0) / (track.carry || 0.5))); r.b = [lerp(a[0] + 0.5, b[0], e), lerp(a[1] + 0.5, b[1], e)]; }
       if (track.b) r.b = track.b(ts);
       if (track.tieAt != null && ts >= track.tieAt) r.slackTo = 0;
       if (track.cutAt != null && ts >= track.cutAt) r.pinB = false;
@@ -659,6 +660,7 @@
       pn.style.height = fx(h) + "px";
       const id = pn.dataset.id;
       if (geo.tags[id]) { geo.tags[id].panel = { h, natural, w: parseFloat(pn.style.width), x: parseFloat(pn.style.left) + parseFloat(pn.parentNode.style.left), y: parseFloat(pn.parentNode.style.top) }; }
+      pn.querySelectorAll(".wl[data-w]").forEach((el) => { (geo.links ||= {})[el.dataset.w] = rel(el.getBoundingClientRect()); });
       // a tag that would hang below the window slides up (tag_panel `lift`)
       const tg = pn.parentNode, y0 = parseFloat(tg.style.top);
       const below = 860 - 8 - y0;
@@ -716,6 +718,26 @@
     reply: (text, focus, caretOn) => `<div class="reply"><span class="tx">${text ? esc(text) : '<span class="ph">Write back…</span>'}${focus && caretOn ? '<span class="icaret"></span>' : ""}</span>${icon("send", 13, "var(--graphite)")}</div>`,
     acts: (tied, hov) => `<div class="acts"><span class="${hov === "resolve" ? "hov" : ""}">${tied ? "Reopen" : "Resolve"}</span><span class="${hov === "dismiss" ? "hov" : ""}">Dismiss</span><span class="grow"></span><span class="${hov === "note" ? "hov" : ""}">Make a note</span><span class="${hov === "copy" ? "hov" : ""}">${icon("copy", 12, hov === "copy" ? "var(--ink)" : "var(--faint)")}</span></div>`,
     short: (text) => `<div class="short">${esc(text.length > 64 ? text.slice(0, 64) + "…" : text)}</div>`,
+    /** Show its working (note_page/show_working.rs): under a correction, behind a dashed
+     *  seam in the thread's colour, the label, the sum set like a sum (expressions right
+     *  aligned, the sign, the results), and the writer's own words each number came from,
+     *  each a link to them; words no longer in the note read "(changed)". */
+    working: (c, o = {}) => {
+      if (!c) return "";
+      const label = c.sum && c.sum.length ? "Working" : "In your note";
+      let h = `<div class="wk"><div class="wk-h"><span>${label}</span>${o.open ? '<span class="wk-d">Disagree</span>' : ""}</div>`;
+      if (c.sum && c.sum.length) {
+        h += `<div class="wk-sum">` + c.sum.map((l) => `<span class="e">${esc(l.sum)}</span><span class="s">${l.rounded ? "≈" : "="}</span><span class="r">${esc(l.is)}</span>`).join("") + `</div>`;
+        if (c.givens && c.givens.length) {
+          h += `<div class="wk-from"><span class="f">From your words:</span>` + c.givens.map((g, j) => {
+            const changed = (o.changed || []).includes(g.words);
+            return (j ? '<span class="f">·</span>' : "") + `<span class="wl${changed ? " ch" : ""}${o.hov === g.words ? " hov" : ""}" data-w="${esc(g.words)}">“${esc(g.words)}”${changed ? " (changed)" : ""}</span>`;
+          }).join("") + `</div>`;
+        }
+      }
+      for (const w of c.words || []) h += `<div class="wk-from"><span class="wl">“${esc(typeof w === "string" ? w : w.words)}”</span></div>`;
+      return h + `</div>`;
+    },
     replies: (n) => `<div class="faint">${n === 1 ? "1 reply" : n + " replies"}</div>`,
   };
 

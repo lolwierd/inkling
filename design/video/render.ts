@@ -1,14 +1,15 @@
 // Renders the film with headless Chrome, driven over the DevTools protocol (no packages).
 //
-//   bun run render.ts stills <scratch> 0.5,12,30.2 [--res=1080]   one PNG per time, into <scratch>/stills
+//   bun run render.ts stills <scratch> 0.5,12,30.2 [--res=720]    one PNG per time, into <scratch>/stills
 //   bun run render.ts audio <scratch>                               the score's stems, into audio/music.wav and fx.wav
 //   bun run render.ts frames <scratch> [--workers=8] [--only=3,4]   the picture, chapter by chapter (see below)
-//   bun run render.ts page <scratch>                                segments + audio/mix.wav -> page/film.mp4 (720p)
-//   bun run render.ts coverage <scratch>                            coverage.md from the cut
+//   bun run render.ts page <scratch> [--kbps=N]                     segments + audio/mix.wav -> page/film.mp4, under 20 MiB
+//   bun run render.ts moments <scratch>                             coverage.md and page/moments.json from the cut
+//   bun run render.ts paths <scratch>                               how smoothly the camera, threads, knots and pointer move
 //   bun run render.ts eval <scratch> '<expression>'                 a value from the page, for tuning
 //
-// The picture is rendered straight at 720p, the size the page plays, in segments that follow
-// the film's plan (film.js PLAN): one per chapter, cut into chunks of at most 12 s so eight
+// The picture is rendered at 1080p and the film's own rate (60 fps), in segments that follow
+// the film's plan (film.js PLAN): one per moment, cut into chunks of at most 360 frames so eight
 // Chromes can share the work. segments/manifest.json remembers each chunk's chapter, frames
 // and signature (the chapter's moments and their lengths, and the look of the rebuild:
 // app.js, settings.js, film.html). `frames` renders only the chunks whose signature or
@@ -17,8 +18,7 @@
 // `page` joins the chunks in the plan's order with ffmpeg (stream copy, no re-encode) and
 // encodes the page's film from them in two passes. So a second cut re-renders only what it
 // touched:   bun run render.ts frames <scratch> --only=3 && bun run render.ts page <scratch>
-// A transition that crosses a chapter boundary (the unfolding tag into chapters 2 and 6, the
-// stitch into 7) shows both sides: name both chapters in --only when either side changes.
+// No transition crosses a moment's edge in the core cut, so a moment re-renders on its own.
 //
 // Every Chrome gets its own --user-data-dir under <scratch>, so nothing touches a real profile.
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, statSync } from "node:fs";
@@ -30,12 +30,12 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const FFMPEG = "/opt/homebrew/bin/ffmpeg";
 const [mode, scratch, ...rest] = process.argv.slice(2);
 if (!mode || !scratch) {
-  console.error("usage: bun run render.ts <stills|audio|frames|page|coverage|eval|worker> <scratch> ...");
+  console.error("usage: bun run render.ts <stills|audio|frames|page|moments|paths|eval|worker> <scratch> ...");
   process.exit(2);
 }
 mkdirSync(scratch, { recursive: true });
 const opt = (k: string, d?: string) => rest.find((a) => a.startsWith(`--${k}=`))?.split("=")[1] ?? d;
-const RES = +(opt("res", "720") as string); // 720 renders the page's size; 1080 the full frame
+const RES = +(opt("res", "1080") as string); // the full frame; 720 draws a third fewer pixels
 const SCALE = RES / 1080;
 const W = Math.round(1920 * SCALE), H = Math.round(1080 * SCALE);
 
@@ -120,17 +120,19 @@ async function stills(times: number[]) {
  *  encoded alike (one keyframe at its start), so they join with a stream copy. */
 async function worker(f0: number, f1: number, out: string, profile: string) {
   const tab = await Tab.open(profile, PAGE);
-  const ff = Bun.spawn([FFMPEG, "-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", "30", "-c:v", "png", "-i", "-",
-    "-vf", `scale=${W}:${H}:flags=lanczos,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p`, "-c:v", "libx264", "-preset", "faster", "-crf", "14", "-profile:v", "high",
-    "-g", "9999", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-r", "30", out], { stdin: "pipe", stderr: "inherit" });
   try {
     await tab.ready();
     const fps = await tab.eval("FILM.FPS");
+    // frame n is drawn at exactly t = n / fps; every segment is encoded alike (one keyframe
+    // a second, the first at its start), so they join with a stream copy
+    const ff = Bun.spawn([FFMPEG, "-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "png", "-i", "-",
+      "-vf", `scale=${W}:${H}:flags=lanczos,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p`, "-c:v", "libx264", "-preset", "faster", "-crf", "12", "-profile:v", "high",
+      "-g", String(fps), "-bf", "2", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-r", String(fps), out], { stdin: "pipe", stderr: "inherit" });
     const t0 = Date.now();
     for (let f = f0; f < f1; f++) {
-      await tab.eval(`FILM.renderAt(${(f / fps).toFixed(6)})`);
+      await tab.eval(`FILM.renderAt(${f} / ${fps})`);
       ff.stdin.write(await tab.png());
-      if ((f - f0) % 90 === 89) console.log(`[${out.split("/").pop()}] ${f + 1 - f0}/${f1 - f0} · ${((Date.now() - t0) / (f - f0 + 1)).toFixed(0)} ms/frame`);
+      if ((f - f0) % 120 === 119) console.log(`[${out.split("/").pop()}] ${f + 1 - f0}/${f1 - f0} · ${((Date.now() - t0) / (f - f0 + 1)).toFixed(0)} ms/frame`);
     }
     ff.stdin.end();
     await ff.exited;
@@ -191,20 +193,28 @@ async function frames() {
   console.log(`frames: ${todo.length} chunks in ${((Date.now() - t0) / 1000).toFixed(1)} s with ${workers} workers`);
 }
 
-/** The page's film: the chunks joined (stream copy), with the mix, two-pass x264 at about
- *  620 kbit/s and AAC at 96 kbit/s, under 20 MiB. */
+/** The page's film: the chunks joined (stream copy), with the mix, two-pass x264 and AAC at
+ *  96 kbit/s, under 20 MB. The artifact host takes 20,000,000 bytes a file (decimal), not
+ *  20 MiB: a 20.2 MB file was refused. */
 async function page() {
   const segDir = join(scratch, "segments");
   const joined = join(scratch, "joined.mp4");
   await run(["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(segDir, "list.txt"), "-c", "copy", joined]);
   const outFile = join(HERE, "page", "film.mp4"), log = join(scratch, "x264-2pass");
-  const v = ["-c:v", "libx264", "-preset", "slow", "-b:v", opt("kbps", "620") + "k", "-maxrate", "1400k", "-bufsize", "2800k", "-profile:v", "high", "-pix_fmt", "yuv420p",
+  // the bitrate that fills about 19.2 MB (decimal) with the video, after 96 kbit/s of audio
+  const probe = Bun.spawn(["/opt/homebrew/bin/ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", joined], { stdout: "pipe" });
+  const dur = +(await new Response(probe.stdout).text()).trim();
+  const kbps = opt("kbps") ?? String(Math.floor((19.2 * 8 * 1000) / dur - 96));
+  console.log(`page: ${dur.toFixed(1)} s at ${kbps} kbit/s video + 96 kbit/s audio`);
+  const v = ["-c:v", "libx264", "-preset", "slow", "-b:v", kbps + "k", "-maxrate", String(Math.round(+kbps * 2)) + "k", "-bufsize", String(Math.round(+kbps * 4)) + "k", "-profile:v", "high", "-pix_fmt", "yuv420p",
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-passlogfile", log];
   await run(["-loglevel", "error", "-y", "-i", joined, ...v, "-pass", "1", "-an", "-f", "mp4", "/dev/null"]);
+  // the mix's reverb rings past the picture: fade it with the picture's last 0.6 s, so the
+  // film ends in silence rather than on a cut tail
   await run(["-loglevel", "error", "-y", "-i", joined, "-i", join(HERE, "audio", "mix.wav"), "-map", "0:v", "-map", "1:a", ...v, "-pass", "2",
-    "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-shortest", "-movflags", "+faststart", outFile]);
+    "-af", `afade=t=out:st=${(dur - 0.6).toFixed(3)}:d=0.6`, "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-shortest", "-movflags", "+faststart", outFile]);
   const size = statSync(outFile).size;
-  console.log(`→ ${outFile}: ${(size / 1048576).toFixed(2)} MiB${size >= 20 * 1048576 ? " (over 20 MiB: lower --kbps)" : ""}`);
+  console.log(`→ ${outFile}: ${(size / 1e6).toFixed(2)} MB${size >= 20e6 ? " (over the host's 20 MB: lower --kbps)" : ""}`);
 }
 
 async function audio() {
@@ -235,28 +245,76 @@ else if (mode === "eval") {
   const tab = await Tab.open(join(scratch, "chrome-eval"), PAGE);
   try { await tab.ready(); console.log(JSON.stringify(await tab.eval(rest[0]), null, 1)); } finally { tab.close(); }
 }
-else if (mode === "coverage") {
-  // writes coverage.md from FILM.coverage, so every row of design/capabilities.md is listed
-  // with the moment the cut shows it
-  const tab = await Tab.open(join(scratch, "chrome-cov"), PAGE);
+else if (mode === "moments") {
+  // writes coverage.md (what the film shows, moment by moment) and page/moments.json from the cut
+  const tab = await Tab.open(join(scratch, "chrome-mom"), PAGE);
   try {
     await tab.ready();
-    const { rows, chapters, dur, mark } = await tab.eval("({ rows: FILM.coverage, chapters: FILM.chapters.map((c) => ({ n: c.n, name: c.name, t: c.t })), dur: FILM.DUR, mark: FILM.CHS[8] })");
+    const { moments, dur, fps } = await tab.eval("({ moments: FILM.moments, dur: FILM.DUR, fps: FILM.FPS })");
     const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
-    const caps = readFileSync(join(HERE, "..", "capabilities.md"), "utf8");
-    const listed = [...caps.matchAll(/^\| ([^|]+?) \| [^|]+ \|$/gm)].map((m) => m[1].trim()).filter((r) => r !== "Capability" && !/^-+$/.test(r));
-    const missing = listed.filter((r) => !rows.some((x: any) => x.row.replace(/’/g, "'") === r.replace(/’/g, "'")));
-    let md = `# The walkthrough film: what it covers\n\nEvery row of \`design/capabilities.md\`, with the moment the film (\`page/film.mp4\`) shows it (m:ss). ` +
-      `Generated from \`film.js\` by \`bun run render.ts coverage <scratch>\`, so the times are the cut's own.\n\n` +
-      `Length ${mmss(dur)}. Chapters: ` + chapters.map((c: any) => `${c.n} ${c.name} (${mmss(Math.max(0, c.t))})`).join(", ") + `, then the mark (${mmss(mark)}).\n`;
-    let section = "";
-    for (const r of rows) {
-      if (r.section !== section) { section = r.section; md += `\n## ${section}\n\n| Capability | At | On screen |\n|---|---|---|\n`; }
-      md += `| ${r.row} | ${mmss(r.t)} | ${r.what.replace(/\|/g, "\\|")} |\n`;
-    }
-    md += missing.length ? `\n## Not shown\n\n${missing.map((m) => `- ${m}`).join("\n")}\n` : `\nAll ${listed.length} rows of capabilities.md are covered.\n`;
+    let md = `# The walkthrough film: what it shows\n\nThe core cut: one note, the notes only. Generated from \`film.js\` by \`bun run render.ts moments <scratch>\`, so the times are the cut's own. ` +
+      `Length ${mmss(dur)}, ${fps} fps.\n\n| At | Moment | Caption |\n|---|---|---|\n`;
+    for (const m of moments) md += `| ${mmss(m.t)} | ${m.name} | ${m.caption ?? ""} |\n`;
     writeFileSync(join(HERE, "coverage.md"), md);
-    console.log(`coverage.md: ${rows.length} rows, ${listed.length} in capabilities.md, missing: ${missing.length ? missing.join("; ") : "none"}`);
+    writeFileSync(join(HERE, "page", "moments.json"), JSON.stringify({ length: mmss(dur), fps, moments: moments.map((m: any) => ({ ...m, at: mmss(m.t) })) }, null, 1) + "\n");
+    console.log(`coverage.md and page/moments.json: ${moments.length} moments, ${mmss(dur)}`);
+  } finally { tab.close(); }
+}
+else if (mode === "paths") {
+  // How smoothly everything that moves on its own moves, from the timeline itself: the camera
+  // (the world point under the frame's centre), and on screen the threads (every point of a
+  // rope), the knots (from the tie through the flight to the border) and the pointer. For
+  // each, the largest step, acceleration and jerk in 1080p px per frame: a jump, a snap or a
+  // bounce shows as a spike in the last two. tools/motion.ts checks the encoded film.
+  const tab = await Tab.open(join(scratch, "chrome-paths"), PAGE);
+  try {
+    await tab.ready();
+    const out = await tab.eval(`(() => {
+      const F = FILM, T = F.T, fps = F.FPS, N = Math.round(F.DUR * fps), S = { camera: [], threads: [], knots: [], pointer: [] };
+      const flights = [[T.knot5, T.fly5], [T.knot7, T.fly7]];
+      for (let n = 0; n < N; n++) {
+        const t = n / fps, c = F.camAt(t), scr = (x, y) => [960 + (x - c.x) * c.z, 540 + (y - c.y) * c.z];
+        F.renderAt(t);
+        S.camera.push([c.x, c.y, c.z]);
+        const p = document.querySelector('#sceneA svg.ov path[style*="stroke-width:1.75"]');
+        let rope = null;
+        if (p) {
+          const g = p.parentNode.parentNode, m = (g.getAttribute("transform") || "").match(/translate\\(([-\\d.]+)[ ,]+([-\\d.]+)\\)/), ly = m ? +m[2] : 0;
+          const v = (p.getAttribute("d").match(/-?\\d+(?:\\.\\d+)?/g) || []).map(Number);
+          rope = []; for (let i = 0; i + 1 < v.length; i += 2) rope.push(scr(v[i], v[i + 1] + ly));
+        }
+        S.threads.push(rope);
+        const fly = document.querySelector("#film svg.fly circle"), end = document.querySelector("#film g.endknot circle");
+        const on = [...document.querySelectorAll("#sceneA svg.ov circle")].find((e) => +e.getAttribute("r") > 2);
+        const xy = (e) => [+e.getAttribute("cx"), +e.getAttribute("cy")];
+        S.knots.push(fly ? [xy(fly)] : end ? [xy(end)] : on && flights.some(([k, f]) => t >= k && t < f[0]) ? [scr(...xy(on))] : flights.some(([k, f]) => t >= f[1] && t < f[1] + 0.5) ? [scr(660, 68)] : null);
+        const el = document.getElementById("cursor"), tm = el.style.display !== "none" && el.style.transform.match(/translate\\(([-\\d.]+)px,\\s*([-\\d.]+)px\\)/);
+        S.pointer.push(tm ? [[+tm[1], +tm[2]]] : null);
+      }
+      return S;
+    })()`);
+    // the camera as the motion of the world point under the centre; the rest as positions
+    const cam: number[][] = out.camera;
+    const vel = cam.map((c, i) => (i ? [(cam[i - 1][0] - c[0]) * c[2], (cam[i - 1][1] - c[1]) * c[2]] : [0, 0]));
+    const stats = (pos: (number[][] | null)[], v?: number[][]) => {
+      let step = 0, acc = 0, jerk = 0, at = 0;
+      const d = (a: number[][], b: number[][]) => a.map((p, k) => [p[0] - b[k][0], p[1] - b[k][1]]);
+      const big = (a: number[][]) => Math.max(...a.map((p) => Math.hypot(p[0], p[1])));
+      for (let i = 3; i < pos.length; i++) {
+        let v0, v1, v2;
+        if (v) [v0, v1, v2] = [[v[i - 2]], [v[i - 1]], [v[i]]];
+        else {
+          const w = pos.slice(i - 3, i + 1);
+          if (w.some((x) => !x || x.length !== w[0]!.length)) continue;
+          [v0, v1, v2] = [d(w[1]!, w[0]!), d(w[2]!, w[1]!), d(w[3]!, w[2]!)];
+        }
+        const a1 = d(v2, v1), a0 = d(v1, v0), j = big(d(a1, a0));
+        step = Math.max(step, big(v2)); acc = Math.max(acc, big(a1));
+        if (j > jerk) { jerk = j; at = i / 60; }
+      }
+      return { maxStep: +step.toFixed(1), maxAccel: +acc.toFixed(2), maxJerk: +jerk.toFixed(2), maxJerkAt: +at.toFixed(2) };
+    };
+    console.log(JSON.stringify({ camera: stats(cam.map(() => [[0, 0]]), vel), threads: stats(out.threads), knots: stats(out.knots), pointer: stats(out.pointer) }));
   } finally { tab.close(); }
 }
 else { console.error(`unknown mode ${mode}`); process.exit(2); }

@@ -157,7 +157,7 @@
     const changes = []; // [time, chord]
     for (const ch of F.PLAN) {
       const t0 = F.CHS[ch.n], ids = ch.moments.map((m) => F.MOMENT[`${ch.n}.${m.id}`]);
-      const prog = PROG[ch.n] || ["Fmaj9"];
+      const prog = ch.chords || PROG[ch.n] || ["Fmaj9"];
       if (ch.moments.length <= 2 || ch.n === 6 || ch.n === 7) {
         // few moments, or a montage of beats: spread the chords evenly, on the nearest beat
         const t1 = ids[ids.length - 1].t1;

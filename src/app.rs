@@ -1616,7 +1616,7 @@ impl AppView {
     fn copy_note(&mut self, cx: &mut Context<Self>) {
         // on the back of the note, ⇧⌘C copies the back
         if let Some(md) = self.page.update(cx, |p, cx| p.back.shown.then(|| crate::back::to_markdown(&p.note_snapshot(cx)))) {
-            cx.write_to_clipboard(ClipboardItem::new_string(md));
+            crate::back::copy(md, cx);
             return self.toast("Copied the back as Markdown", cx);
         }
         let md = self.page.update(cx, |p, cx| p.markdown(true, cx));

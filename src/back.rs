@@ -242,7 +242,7 @@ impl Entry {
             ended: t.ended_at,
             mind: t.mind_name.clone(),
             kind: t.kind,
-            before: t.first_quote.clone().filter(|b| *b != t.quote),
+            before: Some(t.words_before()).filter(|b| *b != t.quote).map(str::to_string),
             after: t.quote.clone(),
             messages: t.messages.clone(),
             reason: t.reason.clone(),
@@ -378,6 +378,16 @@ pub fn dump_into(state: &mut Value, page: &NotePage, window: &Window, cx: &App) 
 /// message; and the reason for a point let stand.
 pub fn to_markdown(note: &Note) -> String {
     markdown_in(note, &Local, Local::now().year())
+}
+
+/// Put the back's Markdown on the clipboard. While a script plays, it is logged instead
+/// (`script copy back: "…"`) and the clipboard is left alone, as the `copy:` step does.
+pub fn copy(md: String, cx: &mut App) {
+    if std::env::var_os("INKLING_SCRIPT").is_some() {
+        log::info!("script copy back: {md:?}");
+    } else {
+        cx.write_to_clipboard(ClipboardItem::new_string(md));
+    }
 }
 
 fn one_line(s: &str) -> String {
@@ -644,10 +654,10 @@ pub fn view(page: &mut NotePage, own: &str, left: f32, column: f32, width: f32, 
         .text_size(px(ts::UI))
         .opacity(page.chrome.get())
         .child(div().text_color(p.faint).child("Every thread, oldest first"))
-        .child(div().flex_1())
         .child(
             div()
                 .id("turn-back")
+                .ml_auto()
                 .h(px(24.))
                 .flex()
                 .items_center()

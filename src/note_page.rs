@@ -971,6 +971,9 @@ impl NotePage {
         }
         if reopen {
             self.set_status(id, ThreadStatus::Open, cx);
+            // Let stand left its reason in the reply box (for Undo): the thread opens on an empty one
+            self.replies.remove(id);
+            self.reply_subs.remove(id);
         }
         self.show_thread(id, window, cx);
     }
@@ -1069,7 +1072,8 @@ impl NotePage {
     }
 
     pub fn last_typed(&self) -> Option<std::time::Instant> {
-        self.last_typed
+        // nothing is written on the back of the note, so the controls are not kept out of the way there
+        self.last_typed.filter(|_| !self.back.shown)
     }
 
     fn typing_recently(&self) -> bool {

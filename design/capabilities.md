@@ -50,6 +50,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Hide threads | ⇧⌘. leaves just your words |
 | Where threads go | both margins, the right margin, or marks only (a ? in the text, × for a correction, that opens on click) |
 | How many are open | "N loose threads" above the title |
+| Turn it over | Turn over above the title, ⇧⌘B or View › Turn Over: the back of the note lists every thread it has had, oldest first, with how each ended (tied off, let stand, snipped, still open) and when, the words before and after, what was said, and your reasons; add or change a reason, Reopen a thread on its words, or Show it on the page; ⇧⌘C copies the back as Markdown; Turn back, ⇧⌘B or Esc returns |
 
 ## Asking
 

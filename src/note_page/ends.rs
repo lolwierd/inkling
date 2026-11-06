@@ -78,10 +78,10 @@ impl NotePage {
         }
     }
 
-    /// A note has just opened (`open`). A thread followed here opens with its reply box
-    /// taking the keyboard, as ⌥⌘↓ leaves it, and its words come into view once the note
-    /// is laid out. The thread dismissed last, if it has an end here, is put back on this
-    /// note's words by Undo.
+    /// A note has just opened (`open`). A thread followed here opens, the caret at its
+    /// words; once the note is laid out they come into view and its reply box takes the
+    /// keyboard (`reveal_followed`). The thread dismissed last, if it has an end here, is put
+    /// back on this note's words by Undo.
     pub(super) fn arrive(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some((id, range, _)) = self.last_dismissed.as_mut() {
             if let Some(t) = self.note.threads.iter().find(|t| t.id == *id) {
@@ -92,28 +92,34 @@ impl NotePage {
         let Some(start) = self.editor.read(cx).anchor(&id).map(|a| a.range.start) else { return };
         self.activate(Some(id.clone()), window, cx);
         self.editor.update(cx, |e, cx| e.move_cursor_to(start, cx));
-        if let Some(input) = self.replies.get(&id).cloned() {
-            input.update(cx, |i, cx| i.focus(window, cx));
-        }
         self.ends.reveal = Some(id);
     }
 
-    /// Bring a followed thread's words into view once the editor has laid the note out
-    /// (called as the page renders): about a third of the way down the window, so the open
-    /// tag has room under them.
-    pub(super) fn reveal_followed(&mut self, window: &mut Window, cx: &App) {
+    /// Once the editor has laid out a note a thread was followed into (called as the page
+    /// renders), bring its words about a third of the way down the window, so its open tag
+    /// has room under them, and give its reply box the keyboard, as ⌥⌘↓ leaves it. (Before
+    /// the layout its tag is not drawn, and a box that is not drawn cannot keep the keyboard.)
+    pub(super) fn reveal_followed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.ends.reveal.clone() else { return };
-        let ed = self.editor.read(cx);
-        let Some(origin) = ed.layout.as_ref().map(|l| l.origin) else {
+        let (origin, top) = {
+            let ed = self.editor.read(cx);
+            let origin = ed.layout.as_ref().map(|l| l.origin);
+            (origin, origin.and_then(|o| ed.anchor_rects(&id).first().map(|r| (o.y + r.origin.y).as_f32())))
+        };
+        if origin.is_none() {
             // laid out in this frame: look again in the next
             window.request_animation_frame();
             return;
-        };
-        let top = ed.anchor_rects(&id).first().map(|r| (origin.y + r.origin.y).as_f32());
+        }
         self.ends.reveal = None;
         if let Some(dy) = top.and_then(|top| reveal_by(top, window.viewport_size().height.as_f32())) {
             let offset = self.scroll.offset();
             self.scroll.set_offset(point(offset.x, (offset.y + px(dy)).min(px(0.))));
+        }
+        if self.active.as_deref() == Some(id.as_str()) {
+            if let Some(input) = self.replies.get(&id).cloned() {
+                input.update(cx, |i, cx| i.focus(window, cx));
+            }
         }
     }
 

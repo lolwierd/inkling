@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "6 Nov 2026, 22:50 IST"
+UPDATED = "6 Nov 2026, 23:40 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -31,16 +31,14 @@ WAITING = [
 ]
 
 RUNNING = [
-    ("The audit's leftovers, keyboard focus, and toasts",
-     "Nine small findings, a stitched focus ring with a Tab order, and toasts as one quiet stack in the thread look, "
-     "with Undo and errors in the same place."),
-    ("A README for people",
-     "Written, with the film at the top; it gets a last pass when the two branches above land."),
-    ("A fresh UI critique, last of all",
-     "Once everything above has landed: a new pair of eyes on every screen, for consistency, overflows, borders and polish."),
+    ("A fresh UI critique, now",
+     "Everything else has landed. A new pair of eyes is going through every screen and state, light and dark, at four window "
+     "sizes and with awkward content, fixing what is not polished: overflows, borders, spacing, type, focus, motion."),
 ]
 
 DONE = [
+    ("Toasts and keyboard focus", "One stack of stitched labels at the bottom, ochre for problems with a close button, Undo inside; hovering pauses it. A dashed focus ring in your thread colour and a Tab order through everything."),
+    ("The README", "Written for people, with the film at the top."),
     ("Sewn blocks", "Checklists that take a cross-stitch, callouts sewn on as patches (note, warning, tip), code blocks with line numbers and thread-colour syntax, and quotes on a back-stitched seam. Type [ ], > [!note] or three backticks."),
     ("The film, re-cut", "3:28, all 44 capabilities on screen, a camera that moves with the thread, and a score made from needle, thread and cloth. It has its own page, linked under The film."),
     ("The logo: Darn · Border", "Your pick. It is the app icon now, and the wordmark in the app dots its i with one cross-stitch."),
@@ -75,6 +73,8 @@ DOTS = [
 ]
 
 SHOTS = [
+    ("toasts", "Toasts: one stack at the bottom; a problem in ochre with a close button, Undo under it."),
+    ("focus-ring", "Keyboard focus: a dashed ring in your thread colour, only when you use the keyboard."),
     ("sewn-blocks", "New: a checklist, the three callouts, a code block with a thread on its last line, and a quote on its seam."),
     ("sewn-blocks-dark", "The same blocks in Lamplight."),
     ("start-here", "Start here: a new notebook opens on a working tour, with real threads to try."),

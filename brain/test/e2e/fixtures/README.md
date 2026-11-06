@@ -16,6 +16,7 @@ from an empty notebook, which opens the first-run note ("Start here").
 - `stale`: a note whose thread quote ("alpha beta") appears twice, stored nearest the second.
 - `loose-ends`: for Loose ends (`le*` scenarios): "Sub-50 10k by March" in folder Running (open, threads `t1`, `t2`), "Q3 budget" in the folded folder Work, waiting to be asked, its mind the Skeptic (`b1` open and oldest, `b2` tied off, `b3` dismissed), an untitled note whose open thread is also called `t2`, and "Groceries" with none; ids `…d1` to `…d4`. Written by `design/tools/loose_ends_notebook.py`.
 - `loose-ends-many`: forty notes in four folders, 200 open threads (`m00-0` … `m39-4`) opened a day apart through 2026, and 40 tied off; same script.
+- `read-through`: "Build cache: NFS to object storage", a six-paragraph draft that fits the window in a note that waits to be asked, nothing read yet, one open question (`d1`, a real model's, on "rounds to nothing next to the disks we stop buying"); for looking at Read it through; fixed id `00000000-0000-4000-8000-0000000000d1`.
 
 Ids and timestamps are fixed so runs compare. Thread `start`/`end` are byte offsets in the
 note's blocks joined by `\n` (title included): edit a fixture's text and they must move

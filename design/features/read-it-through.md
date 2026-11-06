@@ -21,7 +21,7 @@ then goes back to whatever the note was doing.
 
 - **The mode menu**, the place where the writer chose "Waits to be asked". Below the two modes,
   under a rule, a third item: **Read it through**, with its key on the right and a line that
-  says how much it will read ("Reads the 14 paragraphs it hasn't read, one at a time."). It
+  says how much it will read ("Reads the 14 paragraphs it hasn’t read, one at a time."). It
   is an action, not a mode, so it carries no check mark. Icon: `arrow-down-to-line`, the
   needle's path down the page.
 - **A key: ⇧⌘R.** It is free in the app and the editor, and it sits with the other note-wide
@@ -45,12 +45,18 @@ it matters most; nothing in the design needs the restriction (open question 2).
   and each paragraph it finishes gets its **tacking stitch** in the gutter. So progress is
   the needle walking down the gutter with stitches appearing behind it. Paragraphs it has
   not reached have no mark, as unread paragraphs have today.
-- The header shows where it is, after the mode control: **Reading it through, 6 of 14**
-  and a **Stop** control. The count is the paragraph being read and how many the pass
-  expects; it is counted again at each step, so it stays true if you add or change
-  paragraphs while it reads.
-- The page never scrolls to follow the needle. The writer's view is theirs; the header count
-  says how far it has got when the needle is off screen.
+- A pill in the window's top band, centred over the page, says where it is: **Reading it
+  through, 6 of 14** and **Stop**, styled like the Chat pill beside it. The count is the
+  paragraph being read and how many the pass expects; it is counted again at each step, so
+  it stays true if you add or change paragraphs while it reads.
+- Why the band and not the header row: the first build put the count after the mode
+  control, and at the default window width the row wrapped, so the title jumped down when a
+  pass began and back when it ended; the header also scrolls away on a long note, which is
+  where the count matters most. The band never moves the page and stays in view however
+  far you scroll. It fades while you type and comes back with the pointer, like the rest of
+  the window's controls.
+- The page never scrolls to follow the needle. The writer's view is theirs; the pill says
+  how far it has got when the needle is off screen.
 
 ### How threads arrive
 
@@ -82,7 +88,7 @@ paragraph:
 
 ### Stopping it
 
-**Stop** in the header, ⇧⌘R again, or the mode menu's third item, which reads **Stop
+**Stop** on the pill, ⇧⌘R again, or the mode menu's third item, which reads **Stop
 reading it through** while a pass runs. The read in flight is cancelled and its paragraph
 stays unread; every paragraph already read keeps its stitch and its threads. Running it
 again goes on from where it stopped, because read paragraphs are skipped.
@@ -93,7 +99,7 @@ see.
 
 ### How it ends
 
-When the needle passes the last paragraph, the header's count goes and a toast says what
+When the needle passes the last paragraph, the pill goes and a toast says what
 happened, in the mind's name, without counting what it caught (belief 7 rules out any
 count of what Inkling caught; the header already shows how many threads are open):
 
@@ -109,16 +115,16 @@ The page does not jump to the first new thread; ⌥⌘↓ already does that.
 
 | Where | When | Words |
 |---|---|---|
-| Mode menu, third item | before a pass | **Read it through**, ⇧⌘R at the right; under it "Reads the 14 paragraphs it hasn't read, one at a time." (one: "Reads the one paragraph it hasn't read."; none: "Nothing new to read.") |
+| Mode menu, third item | before a pass | **Read it through**, ⇧⌘R at the right; under it "Reads the 14 paragraphs it hasn’t read, one at a time." (one: "Reads the one paragraph it hasn’t read."; none: "Nothing new to read.") |
 | Mode menu, third item | during a pass | **Stop reading it through**; under it "Reading 6 of 14." |
-| Header, after the mode control | during a pass | "Reading it through, 6 of 14" and **Stop** |
+| Pill in the window's top band, centred over the page | during a pass | "Reading it through, 6 of 14" and **Stop** |
 | Toast | nothing to read | "Nothing new to read." |
 | Toast | finished, nothing said | "Inkling read it through. Nothing to ask." |
 | Toast | finished, new threads | "Inkling read it through. New threads are in the margin." |
 | Toast | finished, new threads, threads hidden | "Inkling read it through. Show threads to see what it asked." |
 | Toast | you stopped it | "Stopped after 6 of 14. Read it through again to go on." |
 | Toast | you left the note | "Read it through stopped when you left “Draft”." |
-| Toast, problem (ochre) | a read failed | "Read it through stopped after 6 of 14. " followed by the usual sentence for the failure, e.g. "You've reached your Claude usage limit. It resets at 14:00." Before any paragraph was read: "Couldn't read it through. " and the usual sentence. |
+| Toast, problem (ochre) | a read failed | "Read it through stopped after 6 of 14. " followed by the usual sentence for the failure, e.g. "You've reached your Claude usage limit. It resets at 14:00." Before any paragraph was read: "Couldn’t read it through. " and the usual sentence. |
 | Settings › Shortcuts | | **Read it through** (Threads), hint "Reads every paragraph not read yet, once. Press it again to stop." |
 
 Plain words on every control (DESIGN.md guardrail 3); none of Riddled's words.
@@ -127,15 +133,15 @@ Plain words on every control (DESIGN.md guardrail 3); none of Riddled's words.
 
 | State | What happens |
 |---|---|
-| Linen and Lamplight | Nothing new is drawn: the needle (graphite), the tacking stitch (faint), knots in the mind's thread, the header text in graphite with Stop lit to ink under the pointer, the menu card. All use the theme's tokens, which already meet 4.5:1 for text and 3:1 for marks in both. Screenshots of both are part of the build (`design/features/shots/read-it-through-*`). |
-| A long note (60 or more paragraphs) | One read at a time, about 3 s each, so about 3 minutes for 60. The header count is how you follow it when the needle is off screen; threads arrive as it goes. The menu line shows the count before you start ("Reads the 60 paragraphs…"), so a big pass is never a surprise. Cost below. |
+| Linen and Lamplight | Nothing new is drawn: the needle (graphite), the tacking stitch (faint), knots in the mind's thread, the pill (paper over the cloth like the Chat pill, its words in graphite, Stop in ink), the menu card. All use the theme's tokens, which already meet 4.5:1 for text and 3:1 for marks in both. Screenshots of both are part of the build (`design/features/shots/read-it-through-*`). |
+| A long note (60 or more paragraphs) | One read at a time, about 3 s each, so about 3 minutes for 60. The pill in the top band is how you follow it when the needle is off screen; threads arrive as it goes. The menu line shows the count before you start ("Reads the 60 paragraphs…"), so a big pass is never a surprise. Cost below. |
 | Text that is left alone | The guide's own words ("Start here") are never read: they are the app's, and Inkling does not question its own tour. Words brought in from Obsidian are read on request: they are the writer's own draft, the import only promised that reading along would not read the whole vault unasked. To tell them apart, an import from this build on marks the note (`Note.imported`); notes imported before it keep their words unread (open question 1). Neither gets a stitch until it is read. |
 | Paragraphs already read and unchanged | Skipped, by the same rule as reading along (`note.read_hashes`: a paragraph is read once). So a pass costs nothing for them, and a second pass reads only what changed. |
 | Existing open threads | They go to the mind with every read, as today ("Never repeat a point that an existing margin thread already makes"), so the pass does not ask again what a thread already asks. Their paragraphs keep their knot and number. A thread whose words you fix during the pass settles as it does today. |
 | Several minds | One pass, one mind: the note's own, in its own colour, as reading along. Threads other minds left (Ask the room) are in the margin it is shown, so it does not repeat them. Switching the note's mind mid-pass means the rest is read by the new mind. A second mind cannot read the same words through again, because read marks belong to the note, not to a mind; Ask the room is the way to a second opinion on chosen words. |
-| A stopped brain | The first read fails at once and the pass ends with the problem toast: "Couldn't read it through. Inkling's brain isn't running (…). Settings › Model has more." A brain that dies mid-pass ends it the same way, saying how far it got. Usage limit, sign-in, overload and timeouts all end the pass with their usual sentence; carrying on would only fail every paragraph in turn. |
+| A stopped brain | The first read fails at once and the pass ends with the problem toast: "Couldn’t read it through. Inkling's brain isn't running (…). Settings › Model has more." A brain that dies mid-pass ends it the same way, saying how far it got. Usage limit, sign-in, overload and timeouts all end the pass with their usual sentence; carrying on would only fail every paragraph in turn. |
 | Running it again | Reads what is unread now: paragraphs changed since, new ones, ones a stop or failure left. Right after a full pass it says "Nothing new to read." Threads from the first pass are in the margin it is shown, so they are not asked again. |
-| Threads hidden | The pass runs (the writer asked for it); the header's controls are hidden with the rest of Inkling, so the count is too. The end toast says to show threads when there are new ones. |
+| Threads hidden | The pass runs (the writer asked for it). The gutter and the margin are hidden with the rest of Inkling; the pill stays in the band, like Chat, so the writer can still see and stop it. The end toast says to show threads when there are new ones. |
 | The first sentence of a new notebook | The same rule as reading along: if the guide's first-run sentence is still unread when the pass reaches it, it gets its question (`probe`). |
 | A paragraph that calls a mind by name | Answered, as reading along does, and the pass moves on while the answer streams. |
 | Code blocks | Read whole, as one unit, as reading along does once you leave them. |
@@ -288,136 +294,60 @@ Not changed: `Thread`, `Context`, `THOUGHT_SCHEMA`, the toast kinds, the palette
 
 ## Tests
 
+Built and passing on 7 Nov.
+
 **Rust unit tests** (`src/note_page/read_through.rs`):
 
-- `a_pass_reads_what_reading_along_would_have`: given paragraphs read, unread, empty, under
-  four words, a call by name, a code block and one being typed, the plan reads, answers and
-  skips the right ones.
-- `the_guides_words_are_left_alone_and_imported_ones_are_read`: left-alone words are skipped
-  unless the note is imported.
-- `a_paragraph_mid_sentence_waits`: the caret's paragraph is skipped only while you type.
-- `the_menu_counts_what_it_will_read`: the count for the menu line and the header.
-- `the_words_on_screen`: every string in the table above, singular and plural, with a
-  mind's name, stop and failure prefixes.
+- `a_pass_reads_what_reading_along_would_have`: paragraphs read, unread, empty, under four
+  words, without a full stop, a call by name and a code block; the plan reads, answers and
+  skips the right ones, and the count agrees.
+- `the_guides_words_are_left_alone_and_imported_ones_are_read`: left-alone words, a
+  left-alone code block, and words already read.
+- `a_paragraph_mid_sentence_waits_only_while_you_type`: the caret's paragraph is skipped only
+  while you type and only when it is unfinished.
+- `the_words_on_screen`: every string in the table above, one and many, with a mind's name,
+  the stop, leave and failure lines.
 
-**Store and import**: an old note file without `imported` loads as not imported; an
+**Store and import** (`store.rs`, `import.rs`): an old note file loads as not imported; every
 imported note is marked.
 
-**Brain**: `unit.test.ts` checks that `readPrompt(…, true)` has the pass's opening and
-silence line and not the note, that `readPrompt` without it is unchanged, and that
-`throughSystemPrompt` is `systemPrompt` plus the note and its margin. `protocol.test.ts`
-checks a `read` with `through: true` answers with the same shape as a read (snapped quote,
-silence). `parity.test.ts` needs nothing (no new task).
+**Brain**: `brain/test/read-through.test.ts` checks that reading along's prompt is
+unchanged, that a pass's prompt has its opening and silence line and not the note, that
+every rule of a read is kept in the same order, and that `throughSystemPrompt` is
+`systemPrompt` with the note and its margin after it, the same for every paragraph.
+`protocol.test.ts` drives the real `main.ts` (fake SDK): a `read` with `through: true`
+answers like a read, and its note is no longer in the prompt. `parity.test.ts` needs
+nothing (no new task).
 
-**Scenarios** (the fake brain, `brain/test/e2e`), with a script step `read-through` that
+**Scenarios** (fake brain), tagged `read-through`, with a script step `read-through` that
 does what ⇧⌘R does:
 
-`u12-read-through.txt`: a waiting note read through, run again, ⇧⌘R, and a failure.
-
-```text
-note: Draft
-mode: ask
-type: The importer ships on Friday once the review is done. [[silent]]
-type: We keep one Redis counter per user and reset it every minute. [[quote:reset it every minute]]
-type: Short one.
-type: Everything else stays as it is, including the old export path. [[silent]]
-settle
-dump: before
-expect: d.read_hashes === 0 && d.threads.length === 0   // a waiting note read nothing
-read-through
-dump: started
-expect: d.read_through !== null && d.read_through.total === 3   // "Short one." is under four words
-settle: 30000
-dump: after
-expect: d.read_through === null && d.read_hashes === 3
-expect: d.threads.length === 1 && d.threads[0].quote === "reset it every minute"
-expect: d.toasts.some(t => t.text === "Inkling read it through. New threads are in the margin.")
-key: cmd-shift-r
-dump: again
-expect: d.toasts.some(t => t.text === "Nothing new to read.")
-type: Rollback runs on its own when the error rate passes two percent. [[error:rate_limit]]
-type: This paragraph is never reached because the one before it fails. [[silent]]
-read-through
-settle: 30000
-dump: failed
-expect: d.read_through === null && d.toasts.some(t => t.text.startsWith("Couldn't read it through. You've reached your Claude usage limit"))
-expect: requests.filter(r => r.input.task === "read").every(r => r.input.through === true)
-expect: requests.filter(r => r.input.task === "read").length === 4
-quit
-```
-
-`u13-read-through-long.txt`: the sixty-paragraph note, stopped and resumed, with
-screenshots.
-
-```text
-# fixture: hard-content
-# env: FAKE_READ_DEFAULT=silent FAKE_DELAY_READ_MS=150
-# timeout: 150
-switch: A very long note
-mode: ask
-read-through
-wait: 2000
-dump: midway
-expect: d.read_through.done > 0 && d.read_through.done < 60 && d.read_through.total === 60
-expect: d.reading !== null
-shot: read-through-midway
-read-through
-dump: stopped
-expect: d.read_through === null && d.reading === null && d.read_hashes > 0 && d.read_hashes < 60
-expect: d.toasts.some(t => /^Stopped after \d+ of 60\. Read it through again to go on\.$/.test(t.text))
-read-through
-settle: 90000
-dump: done
-expect: d.read_hashes === 60 && d.read_through === null
-expect: d.toasts.some(t => t.text === "Inkling read it through. Nothing to ask.")
-expect: new Set(requests.filter(r => r.input.task === "read").map(r => r.input.target)).size === 60
-expect: events.filter(e => e.ev === "error" && e.kind === "cancelled").length === 1   // the read Stop cancelled
-quit
-```
-
-`u14-read-through-imported.txt`: the guide's words are left alone; an imported note is read
-on request.
-
-```text
-wait: 1500
-mode: ask
-read-through
-dump: guide
-expect: d.note.title === "Start here" && d.toasts.some(t => t.text === "Nothing new to read.") && d.read_hashes === 0
-import: ../fixtures/obsidian-vault
-settle
-switch: <an imported note's title>
-mode: ask
-read-through
-settle: 30000
-dump: imported
-expect: d.read_hashes > 0   // its imported paragraphs were read
-expect: note("<that title>").imported === true
-quit
-```
-
-The exact lines will move a little when the scenarios first run (which note of the vault to
-open, how the dump names its fields); what they check will not.
+| Scenario | What it proves |
+|---|---|
+| `u12-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; the mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass; a read that fails ends the pass with "Couldn’t read it through. You've reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
+| `u13-read-through-long` | The sixty-paragraph note (`hard-content`): the needle is on the paragraph being read; Stop keeps what was read and says "Stopped after N of 60…"; ⇧⌘R goes on with only what is left; opening another note stops it ("Read it through stopped when you left “A very long note”."); the last pass finishes, every paragraph read exactly once (60 distinct reads, two cancelled). |
+| `u14-read-through-imported` | The guide's words are left alone ("Nothing new to read."); the writer's first sentence in it still gets its question (`probe`, with `through`); an imported Obsidian note is read on request (6 of its units: not headings, not two-word code) and is marked `imported`. |
+| `u15-read-through-look` | The screenshots in `design/features/shots/`: the menu and a pass midway, in Linen and Lamplight, from the new `read-through` fixture (a six-paragraph draft in a waiting note with one open question). |
 
 ## Files and functions
 
-| File | Change | Lines |
-|---|---|---|
-| `src/note_page/read_through.rs` (new) | `Pass`; the plan (which units to read, the count); `toggle_read_through`, `step_through`, `pass_failed`, `leave_pass`, `finish_pass`; the header status, the menu item; every string; unit tests | ~300 with tests |
-| `src/note_page.rs` | `mod read_through;`; `NotePage.read_through` (end of the struct and of `new`); hooks: `note_edit` (move the pass's line), `after_read` (take the next step), `read_line` (`through` in the request; a failure goes to `pass_failed`), `open` (leaving stops it), `settled` (a pass is something in flight), `header` (the status), `menu_card`, `menu_len`, `choose` (the third item), `script_step`, `debug_state` | ~25 |
-| `src/app.rs` | the `ReadThrough` action and its handler | 2 |
-| `src/shortcuts.rs` | ⇧⌘R and its label | 3 |
-| `src/script.rs` | the `read-through` step | 4 |
-| `src/store.rs`, `src/import.rs` | `Note.imported`; set on import; tests | 8 |
-| `brain/src/protocol.ts`, `prompts.ts`, `main.ts` | `through`; `throughSystemPrompt`; `readPrompt(…, through)`; picking them | ~25 |
-| `brain/test/unit.test.ts`, `protocol.test.ts` | the tests above | ~40 |
-| `brain/test/e2e/scenarios/u12…u14` | three scenarios | ~70 |
-| `design/capabilities.md`, `AGENTS.md` | the capability; the import row amended; the new module on the map | 4 |
+| File | Change |
+|---|---|
+| `src/note_page/read_through.rs` (new) | `Pass`, `Unit`, `next_for` and `count` (the plan, by `judge`); `toggle_read_through`, `step_through`, `finish_read_through`, `stop_read_through`, `pass_failed`, `leave_read_through`, `shift_read_through`, `reads_through`; the pill, the menu item; every string; unit tests |
+| `src/note_page.rs` | `mod read_through;`; `NotePage.read_through` (end of the struct and of `new`); hooks of one to four lines in `note_edit`, `after_read`, `read_line`, `open`, `settled`, `menu_card`, `menu_len`, `choose`, `script_step`, `debug_state` |
+| `src/app.rs` | the `ReadThrough` action and its handler; the pill in `chrome_layer` |
+| `src/shortcuts.rs` | ⇧⌘R and its label |
+| `src/script.rs` | the `read-through` step |
+| `src/store.rs`, `src/import.rs` | `Note.imported`; set on import; tests |
+| `brain/src/protocol.ts`, `prompts.ts`, `main.ts` | `through`; `throughSystemPrompt`; `readPrompt(…, through)`; picking them |
+| `brain/test/read-through.test.ts` (new), `protocol.test.ts` | the tests above |
+| `brain/test/e2e/scenarios/u12…u15`, `fixtures/read-through` (new) | four scenarios, one fixture |
+| `design/capabilities.md`, `AGENTS.md` | the capability; the import row amended; the new module on the map |
 
 Not touched: `src/welcome.rs` (the film agent's). The guide needs one sentence about Read it
 through for `design/capabilities.md` to stay true; that is the film agent's to write.
 
-Size: **S**, as the manifesto sized it: about a day with the scenarios.
+Size: **S**, as the manifesto sized it.
 
 ## Open questions
 

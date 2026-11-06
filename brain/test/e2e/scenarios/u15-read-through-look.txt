@@ -1,0 +1,41 @@
+# How Read it through looks, in Linen and Lamplight: the mode menu's last item with its key
+# and what it will read, then a pass midway, the needle at work down the gutter with the
+# tacking stitches behind it and the header saying how far it has got. Each shot's state is
+# held a few seconds, since a capture can land a moment after its step.
+# fixture: read-through
+# env: FAKE_READ_DEFAULT=silent FAKE_DELAY_READ_MS=2500
+# timeout: 150
+# tags: read-through
+wait: 1500
+set: appearance=light
+dump: before
+expect: d.note.mode === "WhenYouAsk" && d.read_hashes === 0 && d.threads.length === 1 && d.read_through === null && d.scrolled === 0
+shot: read-through-before
+wait: 2500
+caret: end
+key: shift-tab shift-tab shift-tab
+key: enter
+key: down
+dump: menu
+expect: d.menu === "Mode" && d.focus === "menu:2" && d.scrolled === 0   // the third item: Read it through
+shot: read-through-menu
+wait: 3000
+set: appearance=dark
+wait: 1500
+shot: read-through-menu-dark
+wait: 3000
+set: appearance=light
+key: enter
+wait: 6000
+dump: midway
+expect: d.menu === null && d.read_through !== null && d.read_through.total === 6 && d.read_through.done >= 1 && d.reading !== null
+shot: read-through-midway
+wait: 3000
+set: appearance=dark
+wait: 1500
+shot: read-through-midway-dark
+wait: 3000
+settle: 60000
+dump: done
+expect: d.read_through === null && d.read_hashes === 6 && d.toasts.some(t => t.text === "Inkling read it through. Nothing to ask.")
+quit

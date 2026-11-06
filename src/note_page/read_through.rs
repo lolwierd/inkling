@@ -84,8 +84,8 @@ fn at(done: usize, total: usize) -> (usize, usize) {
     (done + 1, total)
 }
 
-/// The header, while a pass runs.
-pub(crate) fn header_words(done: usize, total: usize) -> String {
+/// The pill in the window's top band, while a pass runs.
+pub(crate) fn status_words(done: usize, total: usize) -> String {
     let (n, of) = at(done, total);
     format!("Reading it through, {n} of {of}")
 }
@@ -294,8 +294,11 @@ impl NotePage {
         self.read_through.as_ref().map_or(Value::Null, |p| json!({"done": p.done, "total": p.total, "next": p.next}))
     }
 
-    /// In the header, after the mode control, while a pass runs: how far it has got, and Stop.
-    pub(super) fn read_through_status(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// While a pass runs: how far it has got, and Stop, on a pill in the window's top band,
+    /// centred over the page (`app::chrome_layer` places it). The header row has no room
+    /// for it without wrapping, which would move the page when a pass starts and ends; and
+    /// the band stays in view however far the page is scrolled, which a long note needs.
+    pub(crate) fn read_through_status(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (done, total) = self.read_through.as_ref().map(|p| (p.done, p.total))?;
         let t = Theme::get(cx).clone();
         let p = t.p;
@@ -303,21 +306,29 @@ impl NotePage {
             div()
                 .flex()
                 .items_center()
-                .gap(px(10.))
-                .child(div().text_size(px(ts::UI)).text_color(p.graphite).child(header_words(done, total)))
+                .gap(px(6.))
+                .pl(px(11.))
+                .pr(px(3.))
+                .py(px(2.))
+                .rounded_full()
+                .border_1()
+                .border_color(p.rule)
+                .bg(p.paper.opacity(0.6))
+                .text_size(px(ts::SMALL))
+                .text_color(p.graphite)
+                .child(status_words(done, total))
                 .child(
                     div()
                         .id("read-through-stop")
-                        .flex()
-                        .items_center()
-                        .h(px(24.))
-                        .text_size(px(ts::UI))
-                        .text_color(p.graphite)
+                        .px(px(8.))
+                        .py(px(1.))
+                        .rounded_full()
+                        .text_color(p.ink)
                         .cursor_pointer()
-                        .hover(move |s| s.text_color(p.ink))
+                        .hover(move |s| s.bg(p.hover))
                         .active(|s| s.opacity(0.7))
                         .child("Stop")
-                        .keyed_as("header:stop-reading", 4., t.voice_ink, cx, |this, _, cx| this.stop_read_through(cx)),
+                        .keyed_as("chrome:stop-reading", 10., t.voice_ink, cx, |this, _, cx| this.stop_read_through(cx)),
                 )
                 .into_any_element(),
         )
@@ -411,8 +422,8 @@ mod tests {
         assert_eq!(menu_line(0), "Nothing new to read.");
         assert_eq!(menu_line(1), "Reads the one paragraph it hasn\u{2019}t read.");
         assert_eq!(menu_line(14), "Reads the 14 paragraphs it hasn\u{2019}t read, one at a time.");
-        assert_eq!(header_words(5, 14), "Reading it through, 6 of 14");
-        assert_eq!(header_words(0, 0), "Reading it through, 1 of 1", "never past its own count");
+        assert_eq!(status_words(5, 14), "Reading it through, 6 of 14");
+        assert_eq!(status_words(0, 0), "Reading it through, 1 of 1", "never past its own count");
         assert_eq!(menu_progress(5, 14), "Reading 6 of 14.");
         assert_eq!(end_words("Inkling", false, false), "Inkling read it through. Nothing to ask.");
         assert_eq!(end_words("Skeptic", true, false), "Skeptic read it through. New threads are in the margin.");

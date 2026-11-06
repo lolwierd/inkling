@@ -2894,7 +2894,6 @@ impl NotePage {
         };
         let mind_menu = (menu == Some(Menu::Mind)).then(|| self.menu_card(Menu::Mind, cx));
         let mode_menu = (menu == Some(Menu::Mode)).then(|| self.menu_card(Menu::Mode, cx));
-        let pass = self.read_through_status(cx);
         // Each menu hangs so its words line up with its button's: the mind's dot and name
         // over the button's dot and name; a mode's title under "Reads along", its icon
         // out to the left (the card's edge, an item's inset, then a 12 px icon and a gap).
@@ -2950,7 +2949,6 @@ impl NotePage {
                         )
                         .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
                 )
-                .children(pass)
             })
             // the open count and Hide threads wrap together, and keep to the right edge on
             // whichever line they land (a spacer that wrapped with them, or did not, put

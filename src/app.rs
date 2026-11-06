@@ -1089,7 +1089,7 @@ impl AppView {
                                     .border_1()
                                     .border_color(p.rule)
                                     .bg(p.paper.opacity(0.6))
-                                    .text_size(px(11.5))
+                                    .text_size(px(ts::SMALL))
                                     .text_color(p.ink)
                                     .cursor_pointer()
                                     .hover(move |s| s.border_color(p.faint))

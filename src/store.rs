@@ -543,6 +543,11 @@ pub struct Note {
     /// The far ends of this note's threads between notes, one per such thread.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elsewhere: Vec<Elsewhere>,
+    /// The note came from File > Import from Obsidian: its left-alone words are the
+    /// writer's own, so Read it through reads them when asked (reading along still leaves
+    /// them alone). The guide's left-alone words are the app's, and are never read.
+    #[serde(default)]
+    pub imported: bool,
 }
 
 fn default_mind_id() -> String {
@@ -572,6 +577,7 @@ impl Note {
             created_at: now,
             updated_at: now,
             elsewhere: vec![],
+            imported: false,
         }
     }
 
@@ -1328,6 +1334,8 @@ mod tests {
         assert_eq!(m.mode, Mode::ThinksWithYou);
         assert_eq!(m.mind_id, DEFAULT_MIND);
         assert!(m.threads.is_empty() && m.marks.is_empty() && m.read_hashes.is_empty());
+        // a note from before Read it through was not imported, as far as it knows
+        assert!(!m.imported);
         let t = &store.note("t").unwrap().threads[0];
         assert_eq!((t.status, t.kind, t.side, t.messages.len()), (ThreadStatus::Open, ThoughtKind::Question, Side::Right, 0));
         // Newest first.

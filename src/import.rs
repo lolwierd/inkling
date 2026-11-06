@@ -230,6 +230,8 @@ pub fn add_to_store(store: &mut Store, vault: Vault, mode: Mode) -> Summary {
         }
         let mut note = Note::new(blocks.first().map_or("", |b| b.text.as_str()), mode, folder);
         note.left_alone = left_alone(&blocks);
+        // its left-alone words are the writer's own: Read it through reads them when asked
+        note.imported = true;
         note.blocks = blocks;
         note.updated_at = modified.unwrap_or(now);
         note.created_at = created.unwrap_or(note.updated_at);
@@ -1285,6 +1287,7 @@ mod tests {
             let body: Vec<u64> = n.blocks[1..].iter().map(|b| hash_text(b.text.trim())).collect();
             assert_eq!(n.left_alone, body, "{title}");
             assert!(n.read_hashes.is_empty() && !n.first_run);
+            assert!(n.imported, "{title}: marked, so Read it through reads its words when asked");
         }
 
         // on disk, and in the order the notebook opens in

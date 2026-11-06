@@ -1,0 +1,92 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000d1",
+ "title": "Sub-50 10k, answered",
+ "folder": null,
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Sub-50 10k, answered"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I’ll come in just under 50."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Sunday is the long run. I’ll add a kilometre every week until I reach 16."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Strength work twice a week, mostly calves and hips, because that’s where it fell apart last year."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The long run starts at 8 km on 6 December, so it reaches 16 km by late January, seven weeks before the race, and the last week is easy."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "t1",
+   "start": 262,
+   "end": 326,
+   "quote": "If I hold 5:30 for the whole race, I’ll come in just under 50.",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "At 5:30 a km, 10 km takes 55:00. Under 50 needs 5:00 a km or faster; 4:55 leaves a little room. Which do you want to change: the pace or the goal?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  },
+  {
+   "id": "t2",
+   "start": 358,
+   "end": 401,
+   "quote": "add a kilometre every week until I reach 16",
+   "kind": "question",
+   "status": "resolved",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "Starting from how far? If you start at 8 km, 16 km is eight weeks out. Is the race at least eight weeks away, with an easier week before it?",
+     "at": "2026-11-06T12:00:00Z"
+    },
+    {
+     "role": "mind",
+     "text": "Starting at 8 km you reach 16 seven weeks out, with an easy week before the race.",
+     "at": "2026-11-06T12:05:00Z"
+    }
+   ],
+   "tied_by": "answer",
+   "answer": {
+    "start": 503,
+    "end": 638,
+    "quote": "The long run starts at 8 km on 6 December, so it reaches 16 km by late January, seven weeks before the race, and the last week is easy."
+   }
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-11-06T12:00:00Z",
+ "updated_at": "2026-11-06T12:00:00Z"
+}

@@ -35,6 +35,7 @@ mod between;
 mod ends;
 mod read_through;
 pub(crate) mod own;
+mod answers;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -690,7 +691,8 @@ impl NotePage {
                 }
                 Anchor { id: t.id.clone(), range: t.start..t.end, open: t.status == ThreadStatus::Open }
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let anchors = [anchors, answers::load_answers(&mut self.note, &text)].concat();
         let marks = self.note.marks.clone();
         self.playbacks.clear();
         for t in &self.note.threads {
@@ -785,6 +787,7 @@ impl NotePage {
                 }
             }
         }
+        answers::sync_answers(&mut self.note, text, ed.anchors());
     }
 
     pub fn flush(&mut self, cx: &mut Context<Self>) {
@@ -1193,6 +1196,9 @@ impl NotePage {
                     page.push_message(&tid, Role::Mind, body, cx);
                 }
                 if v["resolved"].as_bool() == Some(true) {
+                    if let Some(t) = page.thread_mut(&tid) {
+                        t.tied_by = Some(crate::store::TiedBy::Edit);
+                    }
                     page.set_status(&tid, ThreadStatus::Resolved, cx);
                 }
                 cx.notify();
@@ -2142,6 +2148,7 @@ impl NotePage {
                 }
                 if v["resolved"].as_bool() == Some(true) {
                     if let Some(t) = page.thread_mut(&tid) {
+                        t.tied_by = Some(crate::store::TiedBy::Reply);
                         t.set_status(ThreadStatus::Resolved);
                     }
                     let id = tid.clone();
@@ -2168,6 +2175,7 @@ impl NotePage {
     }
 
     fn set_status(&mut self, id: &str, status: ThreadStatus, cx: &mut Context<Self>) {
+        self.before_status(id, status, cx);
         // a mind's open point is let stand, with what you typed in its tag's box as your reason
         let typed = self.replies.get(id).map(|i| i.read(cx).value().to_string()).unwrap_or_default();
         let mut said = crate::stand::DISMISSED;
@@ -2708,6 +2716,7 @@ impl NotePage {
             },
             Step::ReadThrough => self.toggle_read_through(cx),
             Step::Log(text) => log::info!("script log: {text}"),
+            Step::Knot(n) => self.click_knot(*n, window, cx),
             Step::Export(format) => {
                 self.sync_from_editor(cx);
                 let text = match format.as_str() {
@@ -2858,6 +2867,7 @@ impl NotePage {
         self.between_state(&mut state, cx);
         state["read_through"] = self.read_through_state();
         state["room"] = json!(self.asking.as_ref().map(|a| a.room.iter().map(|m| m.name.clone()).collect::<Vec<_>>()).unwrap_or_default());
+        self.dump_answers(&mut state, cx);
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -3727,6 +3737,7 @@ impl NotePage {
             if let Some(Pending::Streaming(s)) = &pending {
                 body = body.child(self.thread_message(thread, &self.partial(&id, s.clone()), &t, cx));
             }
+            body = body.children(is_active.then(|| self.answer_row(thread, thread_color, cx)).flatten());
             if let Some(d) = self.drawing_block(&id, width - 36., cx) {
                 body = body.child(d);
             }
@@ -4988,6 +4999,7 @@ impl Render for NotePage {
         let ask = self.ask_box(cx);
         let enlarged = self.enlarged_drawing(cx);
         let chat = self.chat_open.then(|| self.chat_panel(cx));
+        let knots = if jmw { vec![] } else { self.answer_knots(m, cx) };
         let body = div()
             .relative()
             .w(px(m.page()))
@@ -4998,6 +5010,7 @@ impl Render for NotePage {
             }))
             .children(cards)
             .children(marks)
+            .children(knots)
             .children(toolbar)
             .children(ask);
 

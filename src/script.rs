@@ -43,6 +43,7 @@
 //!                               `stand: 2` lets it stand with no reason)
 //! makenote: 1
 //! retry: 1        (Try again on a thread whose question or reply got no answer)
+//! knot: 1         (click the knot after thread 1's answer in the note: it opens at its question)
 //! hover: 2        (the pointer rests on thread 2's tag, which unfolds; `hover: 0` moves away)
 //! drag: 1 -40 120 (move thread 1's tag by that many pixels, as a finished drag would)
 //! see: 1 2        (click the 2nd words thread 1's check rests on: they are selected)
@@ -210,6 +211,8 @@ pub enum Step {
     AskYourself(String),
     /// Call a mind into the open thread of yours (the note's mind when no name is given).
     Call(String),
+    /// Click the knot after thread n's answer in the note: its tag opens at its question.
+    Knot(usize),
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -273,6 +276,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                     let (n, reason) = arg.split_once(char::is_whitespace).unwrap_or((arg.as_str(), ""));
                     Step::Stand(n.parse().unwrap_or(1), reason.trim().to_string())
                 }
+                "knot" => Step::Knot(n()),
                 "clear" => Step::ClearChat,
                 "switch" => Step::Switch(arg),
                 "import" => Step::Import(arg),

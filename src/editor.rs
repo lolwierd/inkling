@@ -1799,6 +1799,10 @@ pub struct NoteEditor {
     _blink: Option<Task<()>>,
     was_focused: bool,
     pub hide_anchors: bool,
+    /// Anchors whose words are washed in a colour for a moment, by id: an answer being
+    /// pointed at, or one just reached (`note_page/answers.rs`). Drawn like the open
+    /// thread's wash, and hidden with the threads.
+    pub washes: Vec<(String, Hsla)>,
 }
 
 impl EventEmitter<EditorEvent> for NoteEditor {}
@@ -1830,6 +1834,7 @@ impl NoteEditor {
             _blink: None,
             was_focused: false,
             hide_anchors: false,
+            washes: vec![],
         };
         this.start_blink(cx);
         this
@@ -3159,6 +3164,7 @@ impl Element for EditorElement {
         let gutter = if ed.hide_anchors { vec![] } else { ed.gutter.clone() };
         let hint = ed.placeholder_hint.clone();
         let active = ed.active_anchor.clone();
+        let washes = if ed.hide_anchors { vec![] } else { ed.washes.clone() };
         let thinking = ed.thinking.clone();
         let last_line = ed.st.kinds.len() - 1;
         let marks = ed.st.marks.clone();
@@ -3207,6 +3213,13 @@ impl Element for EditorElement {
                     let r = Bounds::new(origin + r.origin - point(px(1.), px(-2.)), size(r.size.width + px(2.), r.size.height - px(4.)));
                     window.paint_quad(fill(r, wash).corner_radii(px(2.)));
                 }
+            }
+        }
+        for (id, wash) in &washes {
+            let Some(a) = anchors.iter().find(|a| &a.id == id) else { continue };
+            for r in layout.rects(a.range.clone()) {
+                let r = Bounds::new(origin + r.origin - point(px(1.), px(-2.)), size(r.size.width + px(2.), r.size.height - px(4.)));
+                window.paint_quad(fill(r, *wash).corner_radii(px(2.)));
             }
         }
 

@@ -1852,10 +1852,11 @@ impl NotePage {
             if !self.replies.contains_key(&id) {
                 let input = cx.new(|cx| InputState::new(window, cx).placeholder("Write back…"));
                 let tid = id.clone();
-                let sub = cx.subscribe_in(&input, window, move |this, _, ev: &InputEvent, window, cx| {
-                    if let InputEvent::PressEnter { .. } = ev {
-                        this.send_reply(&tid, window, cx);
-                    }
+                let sub = cx.subscribe_in(&input, window, move |this, _, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::PressEnter { .. } => this.send_reply(&tid, window, cx),
+                    // its send arrow lights up once there is something to send, as the chat's does
+                    InputEvent::Change => cx.notify(),
+                    _ => {}
                 });
                 self.reply_subs.insert(id.clone(), sub);
                 self.replies.insert(id.clone(), input);
@@ -3448,6 +3449,7 @@ impl NotePage {
         if is_active {
             if let Some(input) = self.replies.get(&id).cloned() {
                 let id_send = id.clone();
+                let can_send = pending.is_none() && !input.read(cx).value().trim().is_empty();
                 body = body.child(
                     div()
                         .flex()
@@ -3465,9 +3467,18 @@ impl NotePage {
                         .child(
                             div()
                                 .id(SharedString::from(format!("send-{id_send}")))
-                                .cursor_pointer()
-                                .child(icon("send", 13., p.graphite))
-                                .on_click(cx.listener(move |this, _, window, cx| this.send_reply(&id_send, window, cx))),
+                                .p(px(2.))
+                                .m(px(-2.))
+                                .rounded(px(4.))
+                                .child(icon("send", 13., if can_send { p.ink } else { p.faint }))
+                                // nothing to send, or an answer on its way: quiet, as the chat's arrow is
+                                .when(!can_send, |d| d.opacity(0.6))
+                                .when(can_send, |d| {
+                                    d.cursor_pointer()
+                                        .hover(move |s| s.bg(p.hover))
+                                        .active(|s| s.opacity(0.7))
+                                        .on_click(cx.listener(move |this, _, window, cx| this.send_reply(&id_send, window, cx)))
+                                }),
                         ),
                 );
             }

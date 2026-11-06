@@ -16,6 +16,10 @@ Scripts that made the directions board. Run from this folder.
   `assets/fonts/FrauncesDisplay-Medium.ttf`. `uv run logo_directions.py` writes
   `../logo/<nn-name>/{wordmark,mark,icon,icon-dark}.svg`, then the review page
   `../logo/index.html` through `logo_page.py` and its template `logo_page.src.html`.
+- `logo_round2.py` + `logo_page_r2.py`: round 2 of the logo review (the darn, the dot on
+  the i, Tied off, Sampler, One thread in the app). The same command writes
+  `../logo/round-2/<name>/` and `../logo/round-2/dots/`, and puts round 2 at the top of the
+  page with round 1 folded below.
 - `phone.html`: headless Chrome will not make a window narrower than 500 px, so phone
   checks load a page in a 390 px iframe:
   `phone.html?src=<url-encoded file url>&h=844`, run with

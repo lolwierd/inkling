@@ -3,18 +3,16 @@
 The page's words and structure are written out here as plain HTML, so they read in the
 source. The SVGs travel once, as one JSON object that the page's script hands to every
 <img> as an object URL: each mark appears about thirty times on the page. (It was a gzip'd
-blob; a published page may not embed an archive, so it is plain JSON, about 1.2 MB.)
+blob; a published page may not embed an archive, so it is plain JSON.) A wordmark or mark
+travels once, with its own dark rules, and the page derives its light and dark versions.
 
 Called by logo_directions.py; the template is logo_page.src.html.
 """
-import base64
-import gzip
 import html
 import json
 import re
 from pathlib import Path
 
-import logo_directions as L
 from logos import superellipse
 
 HERE = Path(__file__).resolve().parent
@@ -32,15 +30,6 @@ def vb(svg):
 
 def esc(s):
     return html.escape(s, quote=True)
-
-
-def now_variants():
-    """Today's wordmark has its dark colours behind a media query; fix each version."""
-    svg = (NOW / "wordmark.svg").read_text()
-    style = re.search(r"<style>(.*?)</style>", svg, re.S).group(1)
-    m = re.search(r"@media \(prefers-color-scheme:dark\)\{(.*)\}\s*$", style, re.S)
-    light, dark = style[:m.start()], style[:m.start()] + " " + m.group(1)
-    return (svg.replace(style, light), svg.replace(style, dark))
 
 
 def wm_img(key, svg, size, cls="", extra=""):
@@ -95,15 +84,10 @@ def build_page(assets):
     data, names = {}, {}
     for d in assets:
         slug = d["slug"]
-        data[slug] = {"wl": L.fixed(d["wordmark"], L.LIGHT), "wd": L.fixed(d["wordmark"], L.DARK),
-                      "ml": L.fixed(d["mark"], L.LIGHT), "md": L.fixed(d["mark"], L.DARK),
-                      "il": d["icon"], "id": d["icon_dark"]}
+        # flat marks travel once, with their own dark rules; the page derives light and dark
+        data[slug] = {"w": d["wordmark"], "m": d["mark"], "il": d["icon"], "id": d["icon_dark"]}
         names[slug] = f"{slug[:2]} {d['name']}"
-    wl, wd = now_variants()
-    data["now"] = {"wl": wl, "wd": wd, "il": (NOW / "icon.svg").read_text(), "id": (NOW / "icon-dark.svg").read_text()}
-    # "</" would end the <script> it travels in
-    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
-
+    data["now"] = {"w": (NOW / "wordmark.svg").read_text(), "il": (NOW / "icon.svg").read_text(), "id": (NOW / "icon-dark.svg").read_text()}
     jump = "".join(f'<a href="#d-{d["slug"]}" data-slug="{d["slug"]}" title="{esc(d["name"])}">{d["slug"][:2]}</a>' for d in assets)
 
     dock = ['<button class="dk" type="button" data-slug="now" aria-label="Today\'s icon"><img data-a="now:i?" alt="">'
@@ -163,9 +147,18 @@ def build_page(assets):
             f'{finder(slug, name, "l", False)}{finder(slug, name, "d", True)}</div></div>'
             f'</section>')
 
+    # round 2 goes on top: its marks join the same JSON, its entries go first in the
+    # shortlist, so "Copy for chat" lists them first
+    import logo_page_r2
+    r2_names = {}
+    round2 = logo_page_r2.build(data, r2_names)
+    names = {**r2_names, **names}
+    # "</" would end the <script> it travels in
+    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+
     sq = superellipse(50, 50, 412 / 1024 * 100, 5.0, 96)
     page = (HERE / "logo_page.src.html").read_text()
-    for k, v in (("{{JUMP}}", jump), ("{{DOCK}}", "".join(dock)), ("{{CARDS}}", "".join(cards)),
+    for k, v in (("{{ROUND2}}", round2), ("{{JUMP}}", jump), ("{{DOCK}}", "".join(dock)), ("{{CARDS}}", "".join(cards)),
                  ("{{DIRS}}", "\n".join(dirs)), ("{{NAMES}}", json.dumps(names)), ("{{SQUIRCLE}}", json.dumps(sq)),
                  ("{{DATA}}", blob)):
         page = page.replace(k, v)

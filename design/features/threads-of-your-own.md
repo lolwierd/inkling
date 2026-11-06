@@ -260,10 +260,13 @@ instead of "You", so a mind called into your thread sees who said what.
 - **Which threads.** Your open and tied-off threads go (tied-off ones are marked resolved, so
   no mind reopens what you settled). Cut ones do not, as for every dismissed thread today.
 - **Calling a mind.** The `ask` task, as that mind (`context_with(mind)`), with `target` = the
-  thread's words as they are now, `question` = your newest line, and `history` = the lines
-  before it. With no history the prompt is today's Ask prompt word for word. With history it
-  reads: "On «…» the writer started a thread of their own. So far: … Now they have called you
-  into it and ask: …". No new task, so `parity.test.ts` is untouched.
+  thread's words as they are now (its last words if they were deleted), `question` = the
+  thread's first line, your question, and `history` = everything said since, in order, the
+  line that called last. With no history the prompt is today's Ask prompt word for word. With
+  history it reads: "On «…» the writer hung a question of their own: … What has been said in
+  that thread since: … They have now called you into the thread.", then today's Ask
+  instructions, "If their last line there is addressed to you, answer that", and "Stay on
+  this thread's point". No new task, so `parity.test.ts` is untouched.
 - **No other model call touches your thread.** No reread on edit, no tie-off, no learning from
   lines you keep to yourself.
 
@@ -293,8 +296,8 @@ Unit (Rust):
   key.
 - `note_page::own`: `called_mind` finds the mind a line calls ("Skeptic, …", "hey staff
   engineer …", "@Editor …"), prefers the longer of two names that both match, and finds
-  nothing in "Skeptics say…"; `split_call` makes your newest line the question and the rest
-  the history; `asker` is "You" for your threads and the mind otherwise; `ink` is the page's
+  nothing in "Skeptics say…"; `split_call` makes your first line the question and the rest,
+  in order, the history; `Thread::asker` is "You" for your threads and the mind otherwise; `ink` is the page's
   ink in both lights and never a thread colour.
 - `stitch`: `seed_dots` stays inside its run and keeps an even step.
 - `export`: an own thread prints `**Me** on`, its lines as `*Me:*`, a called mind's as

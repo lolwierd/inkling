@@ -421,16 +421,40 @@ pub fn apply(cx: &mut App) {
         }
         out
     };
+    // The Edit menu's items carry the keys of the editor's own commands, as you set them,
+    // so the menu shows them. They bind no context, so anything nearer (the note, a text
+    // field) keeps its keys; the item itself goes where the keyboard is (`app::edit_menu`).
+    let edit: Vec<KeyBinding> = {
+        let custom = &cx.global::<Store>().settings.shortcuts;
+        let table = &cx.global::<Shortcuts>().0;
+        let mut out = vec![];
+        for (item, command) in crate::app::EDIT_MENU {
+            let Some(s) = table.iter().find(|s| s.name == *command) else { continue };
+            for keys in bound(s, custom) {
+                let Ok(a) = cx.build_action(item, None) else { continue };
+                match KeyBinding::load(keys, a, None, false, None, cx) {
+                    Ok(b) => out.push(b),
+                    Err(e) => log::warn!("shortcuts: no Edit menu keys {keys:?} for {item}: {e}"),
+                }
+            }
+        }
+        out
+    };
     // Everything not in the table (the component library's keys, for its inputs and
     // menus) stays, in its order, ahead of ours as at launch.
     let others: Vec<KeyBinding> = {
         let table = &cx.global::<Shortcuts>().0;
         let keymap = cx.key_bindings();
         let keymap = keymap.borrow();
-        keymap.bindings().filter(|b| !table.iter().any(|s| s.name == b.action().name())).cloned().collect()
+        keymap
+            .bindings()
+            .filter(|b| !table.iter().any(|s| s.name == b.action().name()) && !crate::app::EDIT_MENU.iter().any(|(item, _)| *item == b.action().name()))
+            .cloned()
+            .collect()
     };
     cx.clear_key_bindings();
     cx.bind_keys(others);
+    cx.bind_keys(edit);
     cx.bind_keys(ours);
     refresh_menus(cx);
 }

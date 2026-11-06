@@ -3058,6 +3058,12 @@ impl NotePage {
         }
         // the sidebar: asked open, and how much of it shows (0 to 1) as it slides
         state["sidebar"] = cx.try_global::<crate::app::SidebarShown>().map_or(Value::Null, |s| json!({"open": s.open, "shown": s.shown}));
+        // which of the Edit menu's items are on where the keyboard is (as the menu bar asks)
+        state["edit"] = {
+            use crate::app::{EditCopy, EditCut, EditDelete, EditPaste, EditRedo, EditSelectAll, EditUndo};
+            let on = |a: &dyn Action| window.is_action_available(a, cx);
+            json!({"undo": on(&EditUndo), "redo": on(&EditRedo), "cut": on(&EditCut), "copy": on(&EditCopy), "paste": on(&EditPaste), "delete": on(&EditDelete), "select_all": on(&EditSelectAll)})
+        };
         // threads whose question or reply got no answer, with why (Try again in the tag)
         state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         // whether the open tag's second button reads Let stand (else Dismiss), or null with none open

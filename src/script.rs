@@ -109,6 +109,9 @@
 //!
 //! ```text
 //! key: cmd-k                # a keystroke (several, space separated: `key: cmd-a backspace`)
+//! menu: Edit > Select All   # a menu bar item, as choosing it does (an item that is off
+//!                           # is logged and left alone; under a script Copy, Cut and
+//!                           # Paste use a stand-in clipboard that the log shows)
 //! click: 640, 300           # click at a point in the window (logical pixels)
 //! press: 900, 300           # the left button goes down there; `point:` steps then drag
 //! release                   # the button comes up where the pointer is
@@ -194,6 +197,8 @@ pub enum Step {
     Click(f32, f32),
     /// The pointer moves to a point in the window (dragging, after `press`).
     Pointer(f32, f32),
+    /// A menu bar item, `Menu > Item`, chosen as the menu would choose it.
+    Menu(String, String),
     /// Let thread n stand, with the words typed into its tag's box first as the reason.
     Stand(usize, String),
     /// Click the m-th words thread n's check rests on (`see: n m`).
@@ -353,6 +358,13 @@ pub fn parse(src: &str) -> Vec<Step> {
                     }
                 },
                 "key" => Step::Key(arg.split_whitespace().map(str::to_string).collect()),
+                "menu" => match arg.split_once('>') {
+                    Some((menu, item)) => Step::Menu(menu.trim().to_string(), item.trim().to_string()),
+                    None => {
+                        log::warn!("script: menu needs `Menu > Item`: {l:?}");
+                        return None;
+                    }
+                },
                 "turn" => Step::Turn,
                 "back-reason" => {
                     let (n, reason) = arg.split_once(char::is_whitespace).unwrap_or((arg.as_str(), ""));

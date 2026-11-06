@@ -14,7 +14,7 @@
 //! activate: 1
 //! reply: Fair, what's the cheapest fix?
 //! chat: What have we figured out so far?
-//! open: settings          # or sidebar, palette, minds, model, export, jmw, welcome
+//! open: settings          # or sidebar, palette, loose (Loose ends), minds, model, export, jmw, welcome
 //! ```
 //!
 //! `wait: ms` waits on the clock. `settle` waits until the page has nothing scheduled
@@ -53,7 +53,7 @@
 //! room: Inkling, Skeptic    # minds for the next `ask:` (Ask the room, up to three)
 //! undo-dismiss              # put back the last dismissed thread
 //! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
-//! open: settings            # sidebar|palette|settings|minds|newmind|model|about|export|jmw
+//! open: settings            # sidebar|palette|loose|settings|minds|newmind|model|about|export|jmw
 //! close                     # close the sidebar and every overlay
 //! quit                      # every script should end with it
 //! ```

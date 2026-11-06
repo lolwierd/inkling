@@ -3,6 +3,7 @@
 
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::*;
+use gpui_kit::base::FocusTrapElement;
 use gpui_kit::prelude::*;
 
 use crate::store::{Folder, Note, Store};
@@ -25,6 +26,8 @@ pub struct Palette {
     current: Option<String>,
     /// The list's scroll position: the highlighted row stays in view as the arrows move it.
     scroll: ScrollHandle,
+    /// Tab stays in the palette while it is open (the arrows move through its rows).
+    trap: FocusHandle,
     _subs: Vec<Subscription>,
 }
 
@@ -49,7 +52,7 @@ impl Palette {
             _ => {}
         });
         input.update(cx, |i, cx| i.focus(window, cx));
-        Self { input, selected: 0, current, scroll: ScrollHandle::new(), _subs: vec![sub] }
+        Self { input, selected: 0, current, scroll: ScrollHandle::new(), trap: cx.focus_handle(), _subs: vec![sub] }
     }
 
     /// Give the search box the keyboard (again).
@@ -268,6 +271,7 @@ impl Render for Palette {
             .child(
                 div()
                     .id("palette")
+                    .focus_trap("palette-trap", &self.trap)
                     .w(px(460.))
                     .flex()
                     .flex_col()

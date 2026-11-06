@@ -4,8 +4,106 @@
 
 use gpui_kit::*;
 use gpui_kit::prelude::*;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::theme::{Palette, SANS, Theme, ts};
+
+// ----- the keyboard ---------------------------------------------------------------------
+
+/// Where each part of the window falls in the Tab order; within a part, its controls follow
+/// in the order they are drawn. A part is an id-less `div` with `.tab_group().tab_index(n)`:
+/// with no id it gets no focus handle of its own, so a click on it never takes the keyboard
+/// away from the note.
+pub mod tab {
+    /// ☰ and Chat, on the cloth above the sheet.
+    pub const CHROME: isize = 1;
+    /// The notes list, when it is open.
+    pub const SIDEBAR: isize = 2;
+    /// The page's header row and the brief under it.
+    pub const HEADER: isize = 3;
+    /// The note itself.
+    pub const NOTE: isize = 4;
+    /// The open tag: its reply box, Resolve, Dismiss, Make a note, Copy.
+    pub const TAG: isize = 5;
+    /// The question box and the selection toolbar.
+    pub const ASK: isize = 6;
+    /// The chat.
+    pub const CHAT: isize = 7;
+}
+
+/// Every control that takes the keyboard, by name ("header:mode", "sidebar:note-<id>"), so
+/// its focus handle lasts from frame to frame and a dump can say where the keyboard is.
+#[derive(Default)]
+pub struct Keys(HashMap<SharedString, FocusHandle>);
+
+impl Global for Keys {}
+
+/// The focus handle of the control called `name`: a Tab stop, made on first use.
+pub fn key(name: impl Into<SharedString>, cx: &mut App) -> FocusHandle {
+    let name = name.into();
+    if let Some(h) = cx.try_global::<Keys>().and_then(|k| k.0.get(&name)) {
+        return h.clone();
+    }
+    let h = cx.focus_handle().tab_stop(true);
+    cx.default_global::<Keys>().0.insert(name, h.clone());
+    h
+}
+
+/// The name of the control that has the keyboard, if one of [`key`]'s has it.
+pub fn focused_key(window: &Window, cx: &App) -> Option<SharedString> {
+    cx.try_global::<Keys>()?.0.iter().find(|(_, h)| h.is_focused(window)).map(|(n, _)| n.clone())
+}
+
+/// Return or Space, alone: what presses a control from the keyboard.
+pub fn is_press(k: &Keystroke) -> bool {
+    (k.key == "enter" || k.key == "space") && !k.modifiers.modified()
+}
+
+/// The ring that shows where the keyboard is: a running stitch in `color`, a couple of
+/// pixels outside the control, drawn while `focus` has the keyboard and the keyboard put it
+/// there (a click never leaves one behind). Its parent must be `.relative()`.
+pub fn focus_ring(focus: &FocusHandle, radius: f32, color: Hsla) -> impl IntoElement {
+    let focus = focus.clone();
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            if focus.is_focused(window) && window.last_input_was_keyboard() {
+                crate::stitch::focus_stitch(window, bounds, px(radius), color);
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+/// A control the keyboard can reach: Tab stops on it, Return or Space presses it as a click
+/// does, and the stitched ring shows it. A click still works as before and leaves the
+/// keyboard where it was, in the note.
+pub fn keyed<V: 'static>(
+    el: Stateful<Div>,
+    focus: &FocusHandle,
+    radius: f32,
+    ring: Hsla,
+    cx: &Context<V>,
+    press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+) -> Stateful<Div> {
+    let press = Rc::new(press);
+    let by_key = press.clone();
+    el.relative()
+        .track_focus(focus)
+        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| press(this, window, cx)))
+        .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
+            if is_press(&ev.keystroke) {
+                cx.stop_propagation();
+                by_key(this, window, cx);
+            }
+        }))
+        .child(focus_ring(focus, radius, ring))
+}
 
 pub fn icon(name: &str, size: f32, color: Hsla) -> Svg {
     svg()

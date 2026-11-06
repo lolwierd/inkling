@@ -406,6 +406,11 @@ pub struct NotePage {
     /// The menu a press outside it just closed, and when: a press on its own button
     /// closes it rather than opening it again.
     menu_closed: Option<(Menu, std::time::Instant)>,
+    /// An open menu has the keyboard: its card's focus, the item the arrow keys are on,
+    /// and where the keyboard goes back to when it closes.
+    menu_focus: FocusHandle,
+    menu_pick: usize,
+    menu_return: Option<FocusHandle>,
     thread_menu_for: Option<String>,
     brief_input: Option<(Entity<InputState>, Subscription)>,
     pub chat_open: bool,
@@ -517,6 +522,9 @@ impl NotePage {
             asking: None,
             menu: None,
             menu_closed: None,
+            menu_focus: cx.focus_handle(),
+            menu_pick: 0,
+            menu_return: None,
             thread_menu_for: None,
             brief_input: None,
             chat_open: false,
@@ -757,6 +765,7 @@ impl NotePage {
             cx.notify();
             return true;
         }
+        let menu_open = self.enlarged.is_none() && self.menu.is_some();
         let closed = if self.enlarged.take().is_some() || self.menu.take().is_some() || self.asking.take().is_some() || self.brief_input.take().is_some() {
             true
         } else if self.active.is_some() || !self.marks_open.is_empty() {
@@ -772,7 +781,9 @@ impl NotePage {
             false
         };
         if closed {
-            if !self.editor.read(cx).is_focused(window) {
+            if menu_open && self.menu_focus.is_focused(window) {
+                self.leave_menu(window, cx);
+            } else if !self.editor.read(cx).is_focused(window) {
                 self.editor.update(cx, |e, cx| e.focus(window, cx));
             }
             cx.notify();
@@ -2404,6 +2415,21 @@ impl NotePage {
             "toolbar": self.show_toolbar,
             "selection": [ed.selection().start, ed.selection().end],
             "editor_focused": ed.is_focused(window),
+            // the control the keyboard is on: a name from ui::key, "note", "reply", "chat",
+            // "menu" (with the item the arrow keys are on), or null
+            "focus": ui::focused_key(window, cx).map(|k| k.to_string()).or_else(|| {
+                if ed.is_focused(window) {
+                    Some("note".into())
+                } else if self.menu_focus.is_focused(window) {
+                    Some(format!("menu:{}", self.menu_pick))
+                } else if self.active.as_ref().and_then(|a| self.replies.get(a)).is_some_and(|i| i.read(cx).focus_handle(cx).is_focused(window)) {
+                    Some("reply".into())
+                } else if self.chat_input.read(cx).focus_handle(cx).is_focused(window) {
+                    Some("chat".into())
+                } else {
+                    window.focused(cx).map(|_| "elsewhere".into())
+                }
+            }),
             "menu": self.menu.map(|m| format!("{m:?}")),
             "enlarged": self.enlarged.as_deref().map(short),
             // the thread whose Copy shows its tick right now
@@ -2501,36 +2527,50 @@ impl NotePage {
                     div()
                         .relative()
                         .child(
-                            control("mind-picker", menu == Some(Menu::Mind))
-                                .gap(px(6.))
-                                .text_color(p.ink)
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(ui::small_dot(t.voice_ink, 7.))
-                                .child(mind_name)
-                                .child(icon("chevron-down", 12., p.faint))
-                                .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Mind, cx))),
+                            ui::keyed(
+                                control("mind-picker", menu == Some(Menu::Mind))
+                                    .gap(px(6.))
+                                    .text_color(p.ink)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(ui::small_dot(t.voice_ink, 7.))
+                                    .child(mind_name)
+                                    .child(icon("chevron-down", 12., p.faint)),
+                                &ui::key("header:mind", cx),
+                                4.,
+                                t.voice_ink,
+                                cx,
+                                |this, window, cx| this.toggle_menu(Menu::Mind, window, cx),
+                            ),
                         )
                         .children(mind_menu.map(|card| self.drop_down(card, cx))),
                 )
                 .when(!has_brief, |d| {
-                    d.child(
-                        control("tell", false)
-                            .child(icon("pencil", 12., p.faint))
-                            .child("Tell Inkling")
-                            .on_click(cx.listener(|this, _, window, cx| this.edit_brief(window, cx))),
-                    )
+                    d.child(ui::keyed(
+                        control("tell", false).child(icon("pencil", 12., p.faint)).child("Tell Inkling"),
+                        &ui::key("header:tell", cx),
+                        4.,
+                        t.voice_ink,
+                        cx,
+                        |this, window, cx| this.edit_brief(window, cx),
+                    ))
                 })
                 .child(
                     div()
                         .relative()
                         .child(
-                            control("mode", menu == Some(Menu::Mode))
-                                .child(match mode {
-                                    Mode::ThinksWithYou => "Reads along",
-                                    Mode::WhenYouAsk => "Waits to be asked",
-                                })
-                                .child(icon("chevron-down", 12., p.faint))
-                                .on_click(cx.listener(|this, _, _, cx| this.toggle_menu(Menu::Mode, cx))),
+                            ui::keyed(
+                                control("mode", menu == Some(Menu::Mode))
+                                    .child(match mode {
+                                        Mode::ThinksWithYou => "Reads along",
+                                        Mode::WhenYouAsk => "Waits to be asked",
+                                    })
+                                    .child(icon("chevron-down", 12., p.faint)),
+                                &ui::key("header:mode", cx),
+                                4.,
+                                t.voice_ink,
+                                cx,
+                                |this, window, cx| this.toggle_menu(Menu::Mode, window, cx),
+                            ),
                         )
                         .children(mode_menu.map(|card| self.drop_down(card, cx))),
                 )
@@ -2538,32 +2578,124 @@ impl NotePage {
             .child(
                 row()
                     .when(!jmw && open > 0, |d| {
-                        d.child(
+                        d.child(ui::keyed(
                             control("open-count", false)
                                 .gap(px(6.))
                                 .child(ui::small_dot(t.voice_ink, 7.))
-                                .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") })
-                                .on_click(cx.listener(|this, _, window, cx| this.jump_to_open(true, window, cx))),
-                        )
+                                .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") }),
+                            &ui::key("header:open-count", cx),
+                            4.,
+                            t.voice_ink,
+                            cx,
+                            |this, window, cx| this.jump_to_open(true, window, cx),
+                        ))
                     })
                     .when(jmw || self.note.visible_threads() > 0, |d| {
-                        d.child(
-                            control("hide-threads", false)
-                                .child(if jmw { "Show threads" } else { "Hide threads" })
-                                .on_click(cx.listener(move |this, _, _, cx| this.set_hidden(!jmw, cx))),
-                        )
+                        d.child(ui::keyed(
+                            control("hide-threads", false).child(if jmw { "Show threads" } else { "Hide threads" }),
+                            &ui::key("header:hide-threads", cx),
+                            4.,
+                            t.voice_ink,
+                            cx,
+                            move |this, _, cx| this.set_hidden(!jmw, cx),
+                        ))
                     }),
             )
             .into_any_element()
     }
 
     /// Open or close a header menu. A press on its own button while it is open closes it:
-    /// the press outside the menu has just closed it, and must not open it again.
-    fn toggle_menu(&mut self, menu: Menu, cx: &mut Context<Self>) {
+    /// the press outside the menu has just closed it, and must not open it again. An open
+    /// menu takes the keyboard, on the item chosen now, so the arrow keys work at once.
+    fn toggle_menu(&mut self, menu: Menu, window: &mut Window, cx: &mut Context<Self>) {
         let just_closed = self.menu_closed.is_some_and(|(m, at)| m == menu && at.elapsed() < Duration::from_millis(400));
         self.menu_closed = None;
         self.menu = if self.menu == Some(menu) || just_closed { None } else { Some(menu) };
+        if self.menu.is_some() {
+            self.menu_pick = self.menu_now(menu, cx);
+            if !self.menu_focus.is_focused(window) {
+                self.menu_return = window.focused(cx);
+            }
+            self.menu_focus.focus(window, cx);
+        } else {
+            self.leave_menu(window, cx);
+        }
         cx.notify();
+    }
+
+    /// How many items a header menu has, and which one is chosen now. The mind menu ends
+    /// with New mind and Manage.
+    fn menu_len(&self, menu: Menu, cx: &App) -> usize {
+        match menu {
+            Menu::Mind => cx.global::<Store>().minds.len() + 2,
+            _ => 2,
+        }
+    }
+
+    fn menu_now(&self, menu: Menu, cx: &App) -> usize {
+        match menu {
+            Menu::Mind => cx.global::<Store>().minds.iter().position(|m| m.id == self.note.mind_id).unwrap_or(0),
+            _ => usize::from(self.note.mode == Mode::WhenYouAsk),
+        }
+    }
+
+    /// An open menu from the keyboard: ↑ ↓ (and Home, End) move, Return or Space chooses.
+    /// Esc (through `escape`) and Tab (through the window, `close_menu`) close it.
+    fn menu_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(menu) = self.menu else { return };
+        let n = self.menu_len(menu, cx);
+        let k = &ev.keystroke;
+        match k.key.as_str() {
+            "down" => self.menu_pick = (self.menu_pick + 1) % n,
+            "up" => self.menu_pick = (self.menu_pick + n - 1) % n,
+            "home" => self.menu_pick = 0,
+            "end" => self.menu_pick = n - 1,
+            _ if ui::is_press(k) => self.choose(menu, self.menu_pick, window, cx),
+            _ => return,
+        }
+        cx.stop_propagation();
+        cx.notify();
+    }
+
+    /// Item `i` of a header menu, chosen with the keyboard or a click.
+    fn choose(&mut self, menu: Menu, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        match menu {
+            Menu::Mind => {
+                let minds = cx.global::<Store>().minds.clone();
+                match i.checked_sub(minds.len()) {
+                    None => self.set_mind(&minds[i].id, cx),
+                    Some(0) => cx.emit(PageEvent::OpenSettings(crate::settings::Tab::NewMind)),
+                    Some(_) => cx.emit(PageEvent::OpenSettings(crate::settings::Tab::Minds)),
+                }
+            }
+            _ => self.set_mode(if i == 0 { Mode::ThinksWithYou } else { Mode::WhenYouAsk }, cx),
+        }
+        self.menu = None;
+        self.leave_menu(window, cx);
+    }
+
+    /// Whether an open header menu has the keyboard.
+    pub fn menu_has_keyboard(&self, window: &Window) -> bool {
+        self.menu.is_some() && self.menu_focus.is_focused(window)
+    }
+
+    /// Close the open header menu (Tab, which then moves on from its button).
+    pub fn close_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.menu = None;
+        self.leave_menu(window, cx);
+        cx.notify();
+    }
+
+    /// A menu closed: the keyboard goes back to where it was when it opened (the button,
+    /// from the keyboard; the note, from a click).
+    fn leave_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let back = self.menu_return.take();
+        if self.menu_focus.is_focused(window) {
+            match back {
+                Some(h) => h.focus(window, cx),
+                None => self.editor.update(cx, |e, cx| e.focus(window, cx)),
+            }
+        }
     }
 
     /// A header menu, hung under the button that opened it.
@@ -2643,18 +2775,19 @@ impl NotePage {
                             .justify_end()
                             .items_center()
                             .gap(px(14.))
-                            .child(ui::ghost_button("brief-cancel", "Cancel", &t).on_click(cx.listener(|this, _, window, cx| {
+                            .child(ui::keyed(ui::ghost_button("brief-cancel", "Cancel", &t), &ui::key("brief:cancel", cx), 4., t.voice_ink, cx, |this, window, cx| {
                                 this.brief_input = None;
                                 this.editor.update(cx, |e, cx| e.focus(window, cx));
                                 cx.notify();
-                            })))
-                            .child(ui::primary_button("brief-save", "Save", &t).on_click(cx.listener(|this, _, window, cx| this.save_brief(window, cx)))),
+                            }))
+                            .child(ui::keyed(ui::primary_button("brief-save", "Save", &t), &ui::key("brief:save", cx), 12., t.voice_ink, cx, |this, window, cx| this.save_brief(window, cx))),
                     )
                     .into_any_element(),
             );
         }
         let brief = self.note.brief.clone()?;
-        Some(
+        let edit = ui::key("header:brief", cx);
+        Some(ui::keyed(
             div()
                 .id("brief")
                 .group("brief")
@@ -2676,10 +2809,14 @@ impl NotePage {
                         .child(icon("pencil", 10., p.faint))
                         .child("Tell Inkling"),
                 )
-                .child(div().min_w(px(0.)).text_size(px(ts::UI)).line_height(px(19.)).text_color(p.graphite).child(brief))
-                .on_click(cx.listener(|this, _, window, cx| this.edit_brief(window, cx)))
-                .into_any_element(),
+                .child(div().min_w(px(0.)).text_size(px(ts::UI)).line_height(px(19.)).text_color(p.graphite).child(brief)),
+            &edit,
+            4.,
+            t.voice_ink,
+            cx,
+            |this, window, cx| this.edit_brief(window, cx),
         )
+        .into_any_element())
     }
 
     /// The header's menus hang under their own buttons (see [`Self::drop_down`]), so
@@ -2700,7 +2837,9 @@ impl NotePage {
                 };
                 let current = self.note.mind_id.clone();
                 let own = self.mind.name.clone();
-                let mut c = ui::menu_card(&t).w(px(248.));
+                let pick = self.menu_pick;
+                let n = minds.len();
+                let mut c = ui::menu_card(&t).w(px(248.)).track_focus(&self.menu_focus).on_key_down(cx.listener(Self::menu_key));
                 for (i, m) in minds.iter().enumerate() {
                     if i == 1 {
                         c = c.child(div().mx(px(14.)).mt(px(6.)).mb(px(2.)).text_size(px(ts::META)).text_color(p.faint).child("Yours"));
@@ -2710,6 +2849,8 @@ impl NotePage {
                     let color = if m.id == current { t.voice_ink } else { mind_thread(&m.name, &own, chosen, &t) };
                     c = c.child(
                         ui::menu_item(SharedString::from(format!("mind-{}", m.id)), &t)
+                            .relative()
+                            .when(pick == i, |d| d.bg(p.wash).child(ui::focus_ring(&self.menu_focus, 6., color)))
                             .child(
                                 div()
                                     .flex()
@@ -2722,7 +2863,10 @@ impl NotePage {
                             .when(!m.description.is_empty(), |d| {
                                 d.child(div().pl(px(13.)).text_size(px(ts::META)).line_height(px(15.)).text_color(p.graphite).child(m.description.clone()))
                             })
-                            .on_click(cx.listener(move |this, _, _, cx| this.set_mind(&id, cx))),
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.set_mind(&id, cx);
+                                this.leave_menu(window, cx);
+                            })),
                     );
                 }
                 c.child(div().mt(px(4.)).border_t_1().border_color(p.rule))
@@ -2733,22 +2877,30 @@ impl NotePage {
                             .px(px(14.))
                             .pt(px(7.))
                             .pb(px(3.))
-                            .child(ui::ghost_button("new-mind", "New mind", &t).on_click(cx.listener(|this, _, _, cx| {
-                                this.menu = None;
-                                cx.emit(PageEvent::OpenSettings(crate::settings::Tab::NewMind));
-                            })))
-                            .child(ui::ghost_button("manage-minds", "Manage", &t).on_click(cx.listener(|this, _, _, cx| {
-                                this.menu = None;
-                                cx.emit(PageEvent::OpenSettings(crate::settings::Tab::Minds));
-                            }))),
+                            .child(
+                                ui::ghost_button("new-mind", "New mind", &t)
+                                    .relative()
+                                    .when(pick == n, |d| d.text_color(p.ink).child(ui::focus_ring(&self.menu_focus, 4., t.voice_ink)))
+                                    .on_click(cx.listener(move |this, _, window, cx| this.choose(Menu::Mind, n, window, cx))),
+                            )
+                            .child(
+                                ui::ghost_button("manage-minds", "Manage", &t)
+                                    .relative()
+                                    .when(pick == n + 1, |d| d.text_color(p.ink).child(ui::focus_ring(&self.menu_focus, 4., t.voice_ink)))
+                                    .on_click(cx.listener(move |this, _, window, cx| this.choose(Menu::Mind, n + 1, window, cx))),
+                            ),
                     )
                     .into_any_element()
             }
             Menu::Mode | Menu::Thread => {
                 let current = self.note.mode;
+                let pick = self.menu_pick;
+                let focus = self.menu_focus.clone();
                 // The same words as Settings › New notes start in.
                 let item = |id: &'static str, mode: Mode, title: &'static str, body: &'static str, cx: &mut Context<Self>| {
                     ui::menu_item(id, &t)
+                        .relative()
+                        .when(pick == usize::from(mode == Mode::WhenYouAsk), |d| d.bg(p.wash).child(ui::focus_ring(&focus, 6., t.voice_ink)))
                         .child(
                             div()
                                 .flex()
@@ -2759,10 +2911,15 @@ impl NotePage {
                                 .when(current == mode, |d| d.child(icon("check", 12., p.ink))),
                         )
                         .child(div().pl(px(19.)).text_size(px(ts::META)).line_height(px(15.)).text_color(p.graphite).child(body))
-                        .on_click(cx.listener(move |this, _, _, cx| this.set_mode(mode, cx)))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.set_mode(mode, cx);
+                            this.leave_menu(window, cx);
+                        }))
                 };
                 ui::menu_card(&t)
                     .w(px(236.))
+                    .track_focus(&self.menu_focus)
+                    .on_key_down(cx.listener(Self::menu_key))
                     .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Reads along and speaks up when something's worth a second look.", cx))
                     .child(item("mode-ask", Mode::WhenYouAsk, "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", cx))
                     .into_any_element()
@@ -3190,24 +3347,36 @@ impl NotePage {
                     .flex_wrap()
                     .items_center()
                     .gap(px(12.))
-                    .child(
-                        ui::ghost_button(SharedString::from(format!("res-{id_res}")), if tied { "Reopen" } else { "Resolve" }, &t)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                let st = if tied { ThreadStatus::Open } else { ThreadStatus::Resolved };
-                                this.set_status(&id_res, st, cx)
-                            })),
-                    )
-                    .child(
-                        ui::ghost_button(SharedString::from(format!("dis-{id_dis}")), "Dismiss", &t)
-                            .on_click(cx.listener(move |this, _, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx))),
-                    )
+                    .child(ui::keyed(
+                        ui::ghost_button(SharedString::from(format!("res-{id_res}")), if tied { "Reopen" } else { "Resolve" }, &t),
+                        &ui::key("tag:resolve", cx),
+                        4.,
+                        thread_color,
+                        cx,
+                        move |this, _, cx| {
+                            let st = if tied { ThreadStatus::Open } else { ThreadStatus::Resolved };
+                            this.set_status(&id_res, st, cx)
+                        },
+                    ))
+                    .child(ui::keyed(
+                        ui::ghost_button(SharedString::from(format!("dis-{id_dis}")), "Dismiss", &t),
+                        &ui::key("tag:dismiss", cx),
+                        4.,
+                        thread_color,
+                        cx,
+                        move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx),
+                    ))
                     .child(div().flex_1())
-                    .child(
-                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
-                            .on_click(cx.listener(move |this, _, _, cx| this.make_note_from_thread(&id_note, cx))),
-                    )
+                    .child(ui::keyed(
+                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t),
+                        &ui::key("tag:note", cx),
+                        4.,
+                        thread_color,
+                        cx,
+                        move |this, _, cx| this.make_note_from_thread(&id_note, cx),
+                    ))
                     // Copy is the least used of the four: an icon, so the row fits a margin
-                    .child(
+                    .child(ui::keyed(
                         div()
                             .id(SharedString::from(format!("copy-{id_copy}")))
                             .cursor_pointer()
@@ -3216,19 +3385,23 @@ impl NotePage {
                             .hover(move |s| s.bg(p.wash))
                             .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
                             // a tick where the pointer is, the words in the toasts (the row has no room)
-                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                let text = this.thread_text(&id_copy);
-                                cx.write_to_clipboard(ClipboardItem::new_string(text));
-                                this.show_copied(&id_copy, cx);
-                            })),
-                    ),
+                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint })),
+                        &ui::key("tag:copy", cx),
+                        4.,
+                        thread_color,
+                        cx,
+                        move |this, _, cx| {
+                            let text = this.thread_text(&id_copy);
+                            cx.write_to_clipboard(ClipboardItem::new_string(text));
+                            this.show_copied(&id_copy, cx);
+                        },
+                    )),
             );
         }
 
         // the words, laid out at full width and revealed as the tag grows
         let owner: AnyView = cx.entity().into();
-        let content = div().w(px(width)).px(px(15.)).pt(px(9.)).pb(px(13.)).font_family(SANS).child(body);
+        let content = div().w(px(width)).px(px(15.)).pt(px(9.)).pb(px(13.)).font_family(SANS).tab_group().tab_index(ui::tab::TAG).child(body);
         let h = px(TAB_H) + (natural.max(px(TAB_H)) - px(TAB_H)) * e;
         let words = ((unfold - 0.32) / 0.68).clamp(0., 1.);
         let id_hover = id.clone();
@@ -3603,8 +3776,7 @@ impl NotePage {
             let off = full && !on;
             let color = mind_thread(&mind.name, &own, chosen, &t);
             let name = mind.name.clone();
-            chips = chips.child(
-                div()
+            let chip = div()
                     .id(SharedString::from(format!("room-{}", name)))
                     .flex()
                     .items_center()
@@ -3622,11 +3794,15 @@ impl NotePage {
                         d.cursor_pointer()
                             .hover(move |s| s.border_color(if on { color } else { p.faint }).text_color(p.ink))
                             .active(|s| s.opacity(0.8))
-                            .on_click(cx.listener(move |this, _, _, cx| this.toggle_room(mind.clone(), cx)))
                     })
                     .child(ui::small_dot(color, 6.))
-                    .child(name),
-            );
+                    .child(name.clone());
+            // a mind that can sit down takes the keyboard as well as the click
+            chips = chips.child(if off {
+                chip.into_any_element()
+            } else {
+                ui::keyed(chip, &ui::key(format!("ask:room-{name}"), cx), 12., color, cx, move |this, _, cx| this.toggle_room(mind.clone(), cx)).into_any_element()
+            });
         }
         let n = room.len();
         let hint = if n > 1 { format!("{n} minds answer side by side") } else { "Add minds to ask the room".to_string() };
@@ -3634,6 +3810,8 @@ impl NotePage {
             deferred(
                 div()
                     .absolute()
+                    .tab_group()
+                    .tab_index(ui::tab::ASK)
                     .top(top - px(4.))
                     .left(px(self.m.popover_left(self.m.margin.max(236.))))
                     .w(px(self.m.margin.max(236.)))
@@ -3708,8 +3886,9 @@ impl NotePage {
                                 .into_iter()
                                 .enumerate()
                                 .map(|(i, q)| {
-                                    ui::pill(SharedString::from(format!("suggest-{i}")), q, false, &t)
-                                        .on_click(cx.listener(move |this, _, window, cx| this.send_chat(Some(q.to_string()), window, cx)))
+                                    ui::keyed(ui::pill(SharedString::from(format!("suggest-{i}")), q, false, &t), &ui::key(format!("chat:suggest-{i}"), cx), 12., t.voice_ink, cx, move |this, window, cx| {
+                                        this.send_chat(Some(q.to_string()), window, cx)
+                                    })
                                 }),
                         ),
                 );
@@ -3767,7 +3946,7 @@ impl NotePage {
                     .line_height(px(17.))
                     .text_color(p.graphite)
                     .child(err)
-                    .child(ui::ghost_button("chat-retry", "Try again", &t).on_click(cx.listener(|this, _, window, cx| this.retry_chat(window, cx)))),
+                    .child(ui::keyed(ui::ghost_button("chat-retry", "Try again", &t), &ui::key("chat:retry", cx), 4., t.voice_ink, cx, |this, window, cx| this.retry_chat(window, cx))),
             );
         }
         let input = self.chat_input.clone();
@@ -3782,6 +3961,8 @@ impl NotePage {
             .flex_none()
             .flex()
             .flex_col()
+            .tab_group()
+            .tab_index(ui::tab::CHAT)
             .border_l_1()
             .border_color(p.rule)
             .bg(p.paper)
@@ -3811,7 +3992,7 @@ impl NotePage {
                                 if self.note.chat.is_empty() {
                                     d.child(ui::ghost_button_off("Copy", &t)).child(ui::ghost_button_off("Clear", &t))
                                 } else {
-                                    d.child(ui::ghost_button("chat-copy", "Copy", &t).on_click(cx.listener(|this, _, _, cx| {
+                                    d.child(ui::keyed(ui::ghost_button("chat-copy", "Copy", &t), &ui::key("chat:copy", cx), 4., t.voice_ink, cx, |this, _, cx| {
                                         let text = this
                                             .note
                                             .chat
@@ -3821,11 +4002,13 @@ impl NotePage {
                                             .join("\n\n");
                                         cx.write_to_clipboard(ClipboardItem::new_string(text));
                                         cx.emit(PageEvent::Toast("Chat copied".into()));
-                                    })))
-                                    .child(ui::ghost_button("chat-clear", "Clear", &t).on_click(cx.listener(|this, _, _, cx| this.clear_chat(cx))))
+                                    }))
+                                    .child(ui::keyed(ui::ghost_button("chat-clear", "Clear", &t), &ui::key("chat:clear", cx), 4., t.voice_ink, cx, |this, _, cx| this.clear_chat(cx)))
                                 }
                             })
-                            .child(div().mr(px(-4.)).child(ui::icon_button("chat-close", "x", 13., &t).on_click(cx.listener(|this, _, window, cx| this.toggle_chat(window, cx))))),
+                            .child(div().mr(px(-4.)).child(ui::keyed(ui::icon_button("chat-close", "x", 13., &t), &ui::key("chat:close", cx), 5., t.voice_ink, cx, |this, window, cx| {
+                                this.toggle_chat(window, cx)
+                            }))),
                     )
                     .child(
                         div()
@@ -3911,13 +4094,14 @@ impl NotePage {
                             // A press inside is for the sketch and its controls, not a
                             // press outside that closes it.
                             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .child(
-                                div()
-                                    .mr(px(-16.))
-                                    .flex()
-                                    .justify_end()
-                                    .child(ui::icon_button("enlarged-close", "x", 14., &t).on_click(cx.listener(move |this, _, _, cx| close(this, cx)))),
-                            )
+                            .child(div().mr(px(-16.)).flex().justify_end().child(ui::keyed(
+                                ui::icon_button("enlarged-close", "x", 14., &t),
+                                &ui::key("sketch:close", cx),
+                                5.,
+                                t.voice_ink,
+                                cx,
+                                move |this, _, cx| close(this, cx),
+                            )))
                             .child(block),
                     ),
             )
@@ -4299,7 +4483,7 @@ impl Render for NotePage {
             .relative()
             .w(px(m.page()))
             .child(tethers)
-            .child(div().ml(px(m.column_left())).w(px(m.column)).child(self.editor.clone()))
+            .child(div().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::NOTE).child(self.editor.clone()))
             .children(cards)
             .children(marks)
             .children(toolbar)
@@ -4310,7 +4494,7 @@ impl Render for NotePage {
             .w(px(m.page()))
             .flex()
             .flex_col()
-            .child(div().relative().ml(px(m.column_left())).w(px(m.column)).child(header).when(!jmw, |d| d.children(brief)))
+            .child(div().relative().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::HEADER).child(header).when(!jmw, |d| d.children(brief)))
             .children(menus)
             .child(div().h(px(18.)))
             .child(body)

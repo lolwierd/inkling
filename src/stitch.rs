@@ -131,6 +131,28 @@ pub fn shared_stitches(runs: &[Run]) -> Vec<(usize, Dash)> {
     out
 }
 
+/// Where the keyboard is: a running stitch round a control, 3 px outside `bounds`, its
+/// corners following the control's own `radius`.
+pub fn focus_stitch(window: &mut Window, bounds: Bounds<Pixels>, radius: Pixels, color: Hsla) {
+    let out = px(3.);
+    let b = Bounds::new(bounds.origin - point(out, out), size(bounds.size.width + out * 2., bounds.size.height + out * 2.));
+    let r = (radius + out).min(b.size.height / 2.).min(b.size.width / 2.).max(px(0.));
+    let corner = point(r, r);
+    let mut p = PathBuilder::stroke(px(1.5)).dash_array(&[px(4.5), px(3.)]);
+    p.move_to(point(b.left() + r, b.top()));
+    p.line_to(point(b.right() - r, b.top()));
+    p.arc_to(corner, px(0.), false, true, point(b.right(), b.top() + r));
+    p.line_to(point(b.right(), b.bottom() - r));
+    p.arc_to(corner, px(0.), false, true, point(b.right() - r, b.bottom()));
+    p.line_to(point(b.left() + r, b.bottom()));
+    p.arc_to(corner, px(0.), false, true, point(b.left(), b.bottom() - r));
+    p.line_to(point(b.left(), b.top() + r));
+    p.arc_to(corner, px(0.), false, true, point(b.left() + r, b.top()));
+    if let Ok(path) = p.build() {
+        window.paint_path(path, color);
+    }
+}
+
 /// A cross-stitch: marks a correction, so a correction differs from a question in shape
 /// and not only in colour.
 pub fn cross_stitch(window: &mut Window, center: Point<Pixels>, half: Pixels, color: Hsla) {

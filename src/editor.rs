@@ -1810,7 +1810,8 @@ impl Focusable for NoteEditor {
 impl NoteEditor {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let mut this = Self {
-            focus: cx.focus_handle(),
+            // a stop in the window's Tab order (the note's place is set by the page)
+            focus: cx.focus_handle().tab_stop(true),
             st: State::new(),
             active_anchor: None,
             thinking: vec![],
@@ -2252,8 +2253,14 @@ impl NoteEditor {
         self.apply(fx, cx);
     }
 
+    /// ⇧Tab outdents a list item; anywhere else it leaves the note for the control before
+    /// it, as ⇧Tab does in any Mac text view that keeps Tab for itself.
     fn outdent_list(&mut self, _: &OutdentList, _: &mut Window, cx: &mut Context<Self>) {
         let fx = self.st.outdent();
+        if fx == Fx::default() {
+            cx.propagate();
+            return;
+        }
         self.apply(fx, cx);
     }
 

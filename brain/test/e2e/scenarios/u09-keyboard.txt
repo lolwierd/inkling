@@ -1,0 +1,73 @@
+# The keyboard reaches every control, and a running-stitch ring shows where it is. ⇧Tab
+# leaves the note for the header and Tab walks back to the note; Return or Space presses;
+# the mode and mind menus take the arrow keys and give the keyboard back to their button;
+# from the open tag's reply box Tab goes to Resolve, Dismiss, Make a note and Copy; ⌃Tab
+# leaves the note (whose Tab indents) for the controls after it; the sidebar's rows are
+# stops; Tab stays inside the export dialog.
+# fixture: running-plan
+wait: 1500
+set: appearance=light
+caret: end
+key: shift-tab
+dump: header-last
+expect: d.focus === "header:hide-threads"
+key: shift-tab shift-tab shift-tab
+dump: tell
+expect: d.focus === "header:tell"
+key: tab
+key: enter
+dump: mode-menu
+expect: d.menu === "Mode" && d.focus === "menu:0"   // the menu has the keyboard, on what is chosen now
+key: down
+shot: mode-menu-keys
+key: enter
+dump: mode-chosen
+expect: d.note.mode === "WhenYouAsk" && d.menu === null && d.focus === "header:mode"
+shot: header-ring
+set: appearance=dark
+wait: 300
+shot: header-ring-dark
+set: appearance=light
+key: shift-tab shift-tab space
+dump: mind-menu
+expect: d.menu === "Mind" && d.focus === "menu:0"
+key: down down
+key: escape
+dump: mind-escaped
+expect: d.menu === null && d.focus === "header:mind" && d.note.mind === "Inkling"
+key: tab tab tab tab tab
+dump: back-to-note
+expect: d.focus === "note"
+jump: next
+dump: reply
+expect: d.active === "t1" && d.focus === "reply"
+key: tab
+dump: resolve
+expect: d.focus === "tag:resolve"
+key: tab tab tab
+dump: copy
+expect: d.focus === "tag:copy"
+shot: tag-ring
+key: shift-tab shift-tab shift-tab enter
+wait: 400
+dump: resolved
+expect: d.statuses.includes("t1:Resolved:Inkling") && d.focus === "note"   // Return pressed Resolve; the keyboard went back to the note
+key: ctrl-tab
+dump: ctrl-tab
+expect: d.focus === "chrome:chat"   // the next control after the note (no tag is open): Chat
+key: tab
+dump: round
+expect: d.focus === "chrome:sidebar"   // round the window to ☰
+key: enter
+key: tab
+dump: sidebar
+expect: d.focus === "sidebar:close"   // the open drawer's rows come next
+escape
+open: export
+key: tab
+dump: export-first
+expect: d.focus === "export:ex-md"
+key: tab tab tab tab tab tab
+dump: export-wrapped
+expect: d.focus === "export:ex-md"   // six stops, and Tab comes round inside the dialog
+quit

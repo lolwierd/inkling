@@ -1,0 +1,56 @@
+# Threads of your own: Ask yourself hangs your question from the words, in ink, folded, and
+# no mind answers. A line you add stays yours (not even the learn task sees it); Ask <mind>
+# and a line starting with a mind's name each call one mind, once, with the thread so far;
+# editing the words starts no reread, and the read that follows is told the thread is yours;
+# only you tie it off. Asks are slowed so the call can be seen in flight.
+# fixture: running-plan
+# env: FAKE_DELAY_ASK_MS=1500
+wait: 1200
+select: four days a week
+ask-yourself: Is four too many with the long run on Sunday?
+settle
+dump: hung
+expect: d.threads.length === 3 && d.threads.filter(t => t.own).length === 1
+expect: d.threads.find(t => t.own).quote === "four days a week" && d.threads.find(t => t.own).kind === "Question"
+expect: d.threads.find(t => t.own).msgs === 1 && d.pending.length === 0
+expect: d.active === null && d.asking === false && d.focus === "note"   // it hangs folded; you keep writing
+expect: d.statuses.some(s => s.endsWith(":Open:"))   // no mind's name on it
+activate: 3
+reply: My legs need an easy day after the long run.
+settle
+dump: added
+expect: d.threads.find(t => t.own).msgs === 2 && d.pending.length === 0
+call: Inkling
+wait: 400
+dump: calling
+expect: d.pending.length === 1   // the thinking dot, then the answer streams in
+settle
+dump: called
+expect: d.threads.find(t => t.own).msgs === 3 && d.pending.length === 0
+reply: Skeptic, is two hard days enough?
+settle
+dump: by-name
+expect: d.threads.find(t => t.own).msgs === 5
+edit: four => five
+settle
+dump: edited
+expect: d.threads.find(t => t.own).quote === "five days a week" && d.rechecking.length === 0
+expect: d.threads.find(t => t.own).status === "Open"
+resolve: 3
+settle
+dump: tied
+expect: d.threads.find(t => t.own).status === "Resolved"
+quit
+# What went to the brain over the whole run: two asks (the two calls) and reads, never a
+# reply (no reread, no tie-off) and never a learn (your own lines stay yours).
+expect: tasks.filter(t => t === "ask").length === 2
+expect: !tasks.includes("reply") && !tasks.includes("learn")
+expect: requests.filter(r => r.input.task === "ask")[0].input.ctx.mind.name === "Inkling"
+expect: requests.filter(r => r.input.task === "ask")[0].input.question === "Is four too many with the long run on Sunday?"
+expect: requests.filter(r => r.input.task === "ask")[0].input.history.length === 1
+expect: requests.filter(r => r.input.task === "ask")[1].input.ctx.mind.name === "Skeptic"
+expect: requests.filter(r => r.input.task === "ask")[1].input.history.length === 3
+expect: requests.filter(r => r.input.task === "ask")[1].input.history[1].mind === "Inkling"
+expect: requests.filter(r => r.input.task === "read").pop().input.ctx.threads.some(t => t.own === true && t.quote === "five days a week")
+expect: note("Sub-50 10k by March").threads.find(t => t.own).messages.map(m => m.mind || m.role).join() === "you,you,Inkling,you,Skeptic"
+expect: note("Sub-50 10k by March").threads.find(t => t.own).mind_name === ""

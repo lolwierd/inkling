@@ -13,6 +13,11 @@ drawing, one SVG per layer into `assets/Inkling.icon/Assets/`, back to front:
     knot-shadow   the French knot's shadow
     knot          the French knot
 
+and, for the mono appearance (clear and tinted), `border-mono`, `i-mono` and
+`knot-mono`: the dark drawing in greys, each colour by its lightness, scaled so the
+thread is near white and its sheen white, the most prominent part white and the rest
+tones of grey, as the system asks. Mono has no shadows; the system casts its own.
+
 The elements are the logo's own, unchanged; only the frame moves. The logo's tile is
 824 px inside a 1024 px canvas, and an icon layer is the whole 1024 px square, which
 the system masks to the icon's shape, so every layer is scaled by 1024/824 about the
@@ -25,6 +30,7 @@ groups, picks the dark files for the dark appearance, and sets the glass and the
 mono (clear and tinted) treatment. This script never touches it.
 """
 
+import copy
 import json
 import sys
 import xml.etree.ElementTree as ET
@@ -36,6 +42,7 @@ ICON = REPO / "assets/Inkling.icon"
 SVG = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG)
 FRAME = f"scale({1024 / 824:.7f}) translate(-100 -100)"
+MONO_THREAD = 90  # the thread's lightness in mono (CIE L*); its sheen goes to white
 
 
 def tag(el):
@@ -80,6 +87,32 @@ def write(name, elements):
     return path
 
 
+def lightness(hex_color):
+    """CIE L* (0 to 100) of an sRGB colour."""
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in (int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5))]
+    y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return 116 * y ** (1 / 3) - 16 if y > 216 / 24389 else y * 24389 / 27
+
+
+def grey(l_star):
+    """The sRGB grey of lightness L*."""
+    y = ((l_star + 16) / 116) ** 3 if l_star > 8 else l_star * 27 / 24389
+    v = 12.92 * y if y <= 0.0031308 else 1.055 * y ** (1 / 2.4) - 0.055
+    return "#{0:02X}{0:02X}{0:02X}".format(round(min(1.0, v) * 255))
+
+
+def mono(elements, thread):
+    """Copies of `elements` with every colour turned grey by its lightness, scaled so
+    the `thread` colour lands at MONO_THREAD."""
+    scale = MONO_THREAD / lightness(thread)
+    out = [copy.deepcopy(e) for e in elements]
+    for node in (n for e in out for n in e.iter()):
+        for attr in ("fill", "stroke"):
+            if (c := node.get(attr, "")).startswith("#"):
+                node.set(attr, grey(min(100.0, lightness(c) * scale)))
+    return out
+
+
 def srgb(hex_color):
     r, g, b = (int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5))
     return f"srgb:{r:.5f},{g:.5f},{b:.5f},1.00000"
@@ -92,6 +125,9 @@ def main():
         fills[appearance], parts = layers(drawing)
         for name, elements in parts.items():
             print(f"wrote {write(name + suffix, elements).relative_to(REPO)}")
+    thread = next(n.get("fill") for n in parts["i"][0] if tag(n) == "path")
+    for name in ("border", "i", "knot"):
+        print(f"wrote {write(name + '-mono', mono(parts[name], thread)).relative_to(REPO)}")
     # The background is icon.json's fill, per appearance; it must be the logo's tile.
     spec = json.loads((ICON / "icon.json").read_text())
     have = {s.get("appearance"): s["value"].get("solid") for s in spec.get("fill-specializations", [])}

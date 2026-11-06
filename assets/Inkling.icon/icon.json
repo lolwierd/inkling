@@ -24,6 +24,10 @@
             {
               "appearance" : "dark",
               "value" : "knot-dark.svg"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "knot-mono.svg"
             }
           ],
           "name" : "Knot"
@@ -39,14 +43,31 @@
               "value" : "knot-shadow-dark.svg"
             }
           ],
-          "name" : "Knot shadow"
+          "name" : "Knot shadow",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0
+            }
+          ]
         }
       ],
       "name" : "Knot",
-      "shadow" : {
-        "kind" : "none",
-        "opacity" : 0.5
-      },
+      "shadow-specializations" : [
+        {
+          "value" : {
+            "kind" : "none",
+            "opacity" : 0.5
+          }
+        },
+        {
+          "appearance" : "tinted",
+          "value" : {
+            "kind" : "neutral",
+            "opacity" : 0.5
+          }
+        }
+      ],
       "specular" : true,
       "translucency" : {
         "enabled" : false,
@@ -64,6 +85,10 @@
             {
               "appearance" : "dark",
               "value" : "i-dark.svg"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "i-mono.svg"
             }
           ],
           "name" : "Satin i"
@@ -79,14 +104,31 @@
               "value" : "i-shadow-dark.svg"
             }
           ],
-          "name" : "Satin i shadow"
+          "name" : "Satin i shadow",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0
+            }
+          ]
         }
       ],
       "name" : "Satin i",
-      "shadow" : {
-        "kind" : "none",
-        "opacity" : 0.5
-      },
+      "shadow-specializations" : [
+        {
+          "value" : {
+            "kind" : "none",
+            "opacity" : 0.5
+          }
+        },
+        {
+          "appearance" : "tinted",
+          "value" : {
+            "kind" : "neutral",
+            "opacity" : 0.5
+          }
+        }
+      ],
       "specular" : true,
       "translucency" : {
         "enabled" : false,
@@ -104,6 +146,10 @@
             {
               "appearance" : "dark",
               "value" : "border-dark.svg"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "border-mono.svg"
             }
           ],
           "name" : "Hemstitch border"

@@ -199,10 +199,11 @@ impl NotePage {
         .bottom_0()
         .left_0()
         .w(px(4.));
+        let open = self.active.as_deref() == Some(thread.id.as_str());
         let go = there.then(|| {
             let id = thread.id.clone();
             let tip: SharedString = format!("Open {} at these words. The thread runs under the cloth to them.", self.other_title(&e, cx)).into();
-            div()
+            let go = div()
                 .id(SharedString::from(format!("go-{}", thread.id)))
                 .flex()
                 .flex_none()
@@ -217,8 +218,20 @@ impl NotePage {
                 .child(icon("arrow-right", 11., p.graphite))
                 .tooltip(move |window, cx| {
                     gpui_kit::component::tooltip::Tooltip::new(tip.clone()).action(&crate::app::FollowThread, None).build(window, cx)
+                });
+            // the open tag's controls take the keyboard; a tag unfolded under the pointer is
+            // clicked, and the click goes no further than Go there (not opening the tag here)
+            if open {
+                go.keyed_as("tag:go", 4., color, cx, move |this, _, cx| {
+                    cx.stop_propagation();
+                    this.follow(&id, cx)
                 })
-                .keyed_as("tag:go", 4., color, cx, move |this, _, cx| this.follow(&id, cx))
+            } else {
+                go.on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.follow(&id, cx)
+                }))
+            }
         });
         Some(
             div()
@@ -230,12 +243,16 @@ impl NotePage {
                 .gap(px(2.))
                 .child(seam)
                 .child(div().font_family(SERIF).italic().text_size(px(15.)).line_height(px(21.)).text_color(p.ink).child(e.quote.replace('\n', " ")))
+                // Go there beside the title and date when they fit on one line, else under them
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
-                        .gap(px(10.))
-                        .child(div().flex_1().min_w(px(0.)).truncate().text_size(px(ts::SMALL)).text_color(p.faint).child(line))
+                        .justify_between()
+                        .gap_x(px(10.))
+                        .gap_y(px(2.))
+                        .child(div().min_w(px(0.)).max_w_full().truncate().text_size(px(ts::SMALL)).text_color(p.faint).child(line))
                         .children(go),
                 )
                 .into_any_element(),

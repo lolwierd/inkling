@@ -47,6 +47,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Reopen, Copy, Make a note | from an open tag; Make a note turns a thread into a new note |
 | Jump between threads | ⌥⌘↓ and ⌥⌘↑ |
 | Loose ends | ⇧⌘K (or File > Loose Ends…, or the sidebar's Loose ends): every open thread in the notebook, oldest first, showing your words, the mind, the note and the age; type to narrow; Return opens the note at those words with the tag open |
+| Threads between notes | when what you write disagrees with, or builds on, words in another note, the thread quotes both: its tab has a second loop, and its tag shows the other words with that note's title and date; Go there (⌥⌘→) opens the other note at those words, where the same thread hangs; reply, tie it off or let it stand at either end |
 | Hide threads | ⇧⌘. leaves just your words |
 | Where threads go | both margins, the right margin, or marks only (a ? in the text, × for a correction, that opens on click) |
 | How many are open | "N loose threads" above the title |

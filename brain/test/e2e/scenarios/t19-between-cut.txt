@@ -1,0 +1,26 @@
+# t19-between-cut: Dismiss at the far end cuts the one thread, at both ends; Undo puts it back,
+# from that note or from the other one while its toast shows.
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race calendar
+settle
+dismiss: 1
+dump: cut
+expect: d.statuses.includes("b1:Dismissed:Inkling") && d.undo === "b1" && d.anchors.length === 0
+undo-dismiss
+dump: undone
+expect: d.statuses.includes("b1:Open:Inkling") && d.anchors.some(a => a.id === "b1" && a.open)
+dismiss: 1
+switch: Race-week plan
+settle
+dump: home-cut
+expect: d.statuses.includes("b1:Dismissed:Inkling") && d.anchors.length === 0 && d.undo === "b1"
+undo-dismiss
+dump: home-undone
+expect: d.statuses.includes("b1:Open:Inkling") && d.anchors.some(a => a.id === "b1" && a.open)
+quit
+expect: note("Race-week plan").threads.find(t => t.id === "b1").status === "open"
+expect: rangeText(note("Race-week plan"), note("Race-week plan").threads.find(t => t.id === "b1")) === "Sunday 22 March"   // back on the home words
+expect: note("Race calendar").threads.length === 0 && !("elsewhere" in note("Race calendar"))

@@ -1,0 +1,41 @@
+# t17-between-follow: Go there opens the other note at its words, with the same thread open
+# and its words in view, and comes back; ⌥⌘→ does the same from the open thread.
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race-week plan
+settle
+dump: home
+expect: d.ends.tags.length === 1 && d.ends.tags[0].thread === "b1" && d.ends.tags[0].label === "between notes"
+expect: d.ends.tags[0].line.startsWith("Race calendar · edited 3 Sep") && d.ends.tags[0].go
+expect: d.ends.sidebar["Race-week plan"] === 1 && d.ends.sidebar["Race calendar"] === 1   // one thread, counted at both ends
+follow: 1
+settle
+dump: there
+expect: d.note.title === "Race calendar" && d.active === "b1" && d.focus === "reply"
+expect: d.ends.in_view === true && d.ends.following === null
+expect: d.anchors.some(a => a.id === "b1" && a.open) && d.threads.length === 1   // the far end, stitched under the calendar's words
+expect: d.ends.tags.some(e => e.thread === "b1" && e.line.startsWith("Race-week plan · ") && e.go)
+key: alt-cmd-right
+settle
+dump: back
+expect: d.note.title === "Race-week plan" && d.active === "b1" && d.focus === "reply"
+# The far words a long way down the other note: following brings them into view.
+escape
+switch: Race calendar
+settle
+caret: start
+keys: \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n
+switch: Race-week plan
+settle
+follow: 1
+settle
+wait: 300
+dump: far-down
+expect: d.note.title === "Race calendar" && d.active === "b1"
+expect: d.scrolled > 200 && d.ends.in_view === true
+quit
+expect: note("Race-week plan").threads.length === 1 && note("Race calendar").threads.length === 0
+expect: !("elsewhere" in note("Race calendar"))   // a visiting end is never saved in the note it visits
+expect: note("Race-week plan").elsewhere[0].start === textOf(note("Race calendar")).indexOf("Sunday 15 March")   // its words moved down, and home knows

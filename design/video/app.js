@@ -77,6 +77,15 @@
     st.setProperty("--note", ((opts && opts.note) || 17) + "px");
     st.setProperty("--voicefont", opts && opts.lettering === "notes" ? '"Fraunces Text", serif' : '"Figtree", sans-serif');
     st.setProperty("--capink", mixHex(L.ink, D.ink, k));
+    // your blocks (theme.rs, code.rs, sewn.rs): the tacking thread, the code ground, its
+    // strings and numbers (sage and ochre taken 12% towards ink), inline code's chip
+    st.setProperty("--tack", mixHex("#8c8276", "#948a80", k));
+    st.setProperty("--code", mixHex("#f1eadc", "#2a272e", k));
+    const ink = mixHex(L.ink, D.ink, k).match(/\d+/g).map(Number);
+    const toward = (name) => { const c = thread(name, k).match(/\d+/g).map(Number); return `rgb(${c.map((v, i) => Math.round(v + (ink[i] - v) * 0.12)).join(",")})`; };
+    st.setProperty("--code-str", toward("sage"));
+    st.setProperty("--code-num", toward("ochre"));
+    st.setProperty("--chip", `rgba(${ink.join(",")},${fx(lerp(0.06, 0.08, k))})`);
   }
 
   // ================================================================ stitches (stitch.rs)
@@ -300,7 +309,42 @@
     chat: { colLeft: 66, col: 560, margin: 248, gap: 50, lgap: 38, sheet: [38, 44, 933], band: [66, 943], header: 94, both: false },
   };
   const TAB_W = 54, TAB_H = 26;
-  const KIND = { p: "p", h1: "h1", h2: "h2", h3: "h3", li: "li", ol: "ol", q: "q", bullet: "li", numbered: "ol", paragraph: "p", quote: "q" };
+  const KIND = { p: "p", h1: "h1", h2: "h2", h3: "h3", li: "li", ol: "ol", q: "q", bullet: "li", numbered: "ol", paragraph: "p", quote: "q", check: "ck", "check-done": "ck" };
+  /** Your blocks (sewn.rs, editor.rs): a block's kind as the film writes it, e.g. "check-done",
+   *  "callout-warning", "code-rust", as {base, value}. */
+  const sewnKind = (k) => (k.startsWith("callout-") ? { base: "callout", value: k.slice(8) } : k.startsWith("code-") || k === "code" ? { base: "code", value: k.slice(5) } : k === "check" || k === "check-done" ? { base: "check", value: k === "check-done" } : null);
+  const CALLOUT = { note: ["Note", "indigo"], warning: ["Warning", "ochre"], tip: ["Tip", "sage"] };
+
+  // ---------------------------------------------------------------- code (code.rs), for the languages the film shows
+  const LEX = {
+    rust: { kw: "as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while", types: "bool char f32 f64 i8 i16 i32 i64 i128 isize str u8 u16 u32 u64 u128 usize String Vec Option Result Box", line: "//" },
+    sh: { kw: "if then else elif fi for in do done while case esac function return export local echo exit sudo", types: "", line: "#" },
+  };
+  LEX.bash = LEX.sh; LEX.shell = LEX.sh; LEX.rs = LEX.rust;
+  /** Tokens of one line: [text, colour] pairs, coloured as code.rs `color` does. */
+  function lexLine(lang, text) {
+    const L = LEX[lang] || { kw: "", types: "", line: "//" };
+    const kw = new Set(L.kw.split(" ")), types = new Set(L.types.split(" "));
+    const out = [];
+    let i = 0;
+    const push = (t, c) => { if (t) out.push([t, c]); };
+    while (i < text.length) {
+      const rest = text.slice(i);
+      if (rest.startsWith(L.line) && (L.line !== "#" || i === 0 || /\s/.test(text[i - 1]))) { push(rest, "var(--faint)"); break; }
+      let m;
+      if ((m = /^"(?:[^"\\]|\\.)*"?|^'(?:[^'\\]|\\.)*'?/.exec(rest)) && (lang !== "rust" || rest[0] === '"')) { push(m[0], "var(--code-str)"); i += m[0].length; continue; }
+      if ((m = /^\d[\d_.]*(?:[a-z]\w*)?/i.exec(rest)) && !/\w/.test(text[i - 1] || "")) { push(m[0], "var(--code-num)"); i += m[0].length; continue; }
+      if ((m = /^[A-Za-z_][\w-]*/.exec(rest))) {
+        const w = lang === "rust" ? m[0].replace(/-.*/, "") : m[0];
+        const after = text[i + w.length] || "";
+        const c = kw.has(w) ? "var(--indigo)" : types.has(w) || (lang === "rust" && /^[A-Z]/.test(w)) ? "var(--plum)" : lang === "rust" && after === "!" ? "var(--walnut)" : "var(--ink)";
+        push(w + (c === "var(--walnut)" ? "!" : ""), c); i += w.length + (c === "var(--walnut)" ? 1 : 0); continue;
+      }
+      if (/\s/.test(rest[0])) { const ws = /^\s+/.exec(rest)[0]; push(ws, "var(--ink)"); i += ws.length; continue; }
+      push(rest[0], "var(--graphite)"); i++;
+    }
+    return out.map(([t, c]) => `<span style="color:${c}">${esc(t)}</span>`).join("");
+  }
 
   /** Text with spans for anchors, the selection and a caret marker. */
   function markup(text, ranges, caret) {
@@ -369,14 +413,39 @@
     // blocks
     let bh = "";
     let olN = 0;
-    for (const b of P.blocks) {
-      const kind = KIND[b.kind] || "p";
+    const blocks = P.blocks;
+    for (let bi = 0; bi < blocks.length; bi++) {
+      const b = blocks[bi];
+      const sk = sewnKind(b.kind || "p");
+      const kind = sk ? (sk.base === "check" ? "ck" : sk.base) : KIND[b.kind] || "p";
       olN = kind === "ol" ? olN + 1 : 0;
       const ranges = (b.ranges || []).slice();
       if (b.sel && b.sel[1] > b.sel[0]) ranges.push({ a: b.sel[0], b: b.sel[1], cls: "sel" });
+      for (const c of b.code || []) ranges.push({ a: c[0], b: c[1], cls: "ic" });
       const ph = !b.text && b.ph;
-      const gap = b.gap != null ? b.gap : kind === "h2" || kind === "h1" || kind === "h3" ? 18 : 12;
-      bh += `<div class="blk ${kind}${ph ? " ph" : ""}" data-b="${b.id}" data-n="${olN}" style="margin-top:${b.first ? 0 : gap}px${b.style ? ";" + b.style : ""}">${ph ? (b.caret != null ? '<span class="cm"></span>' : "") + esc(b.ph) : markup(b.text, ranges, b.caret)}</div>`;
+      const prev = bi ? blocks[bi - 1] : null, pk = prev ? sewnKind(prev.kind || "p") : null;
+      let gap = b.gap != null ? b.gap : kind === "h2" || kind === "h1" || kind === "h3" ? 18 : kind === "ck" && pk && pk.base === "check" ? 4 : 12;
+      const words = ph ? (b.caret != null ? '<span class="cm"></span>' : "") + esc(b.ph) : markup(b.text, ranges, b.caret);
+      if (sk && (sk.base === "callout" || sk.base === "code")) {
+        // a run of lines of one kind shares one patch (a callout) or one ground (code)
+        let end = bi;
+        while (end + 1 < blocks.length && blocks[end + 1].kind === b.kind) end++;
+        const run = blocks.slice(bi, end + 1);
+        if (sk.base === "callout") {
+          const [label, thread] = CALLOUT[sk.value] || CALLOUT.note;
+          const lines = run.map((x, j) => { const r = (x.ranges || []).slice(); if (x.sel && x.sel[1] > x.sel[0]) r.push({ a: x.sel[0], b: x.sel[1], cls: "sel" }); for (const c of x.code || []) r.push({ a: c[0], b: c[1], cls: "ic" }); return `<div class="blk co-l" data-b="${x.id}" style="margin-top:${j ? 6 : 0}px">${markup(x.text, r, x.caret)}</div>`; }).join("");
+          bh += `<div class="co" data-patch="${thread}" style="margin-top:${b.first ? 0 : gap - 8}px;--pt:var(--${thread})"><div class="co-lab">${label}</div>${lines}</div>`;
+        } else {
+          const lang = sk.value;
+          const lines = run.map((x, j) => `<div class="blk cd-l" data-b="${x.id}"><span class="cd-n">${j + 1}</span>${x.sel && x.sel[1] > x.sel[0] ? markup(x.text, [{ a: x.sel[0], b: x.sel[1], cls: "sel" }], x.caret) : (x.caret != null && x.caret <= x.text.length && x.typing ? markup(x.text, [], x.caret) : lexLine(lang, x.text))}</div>`).join("");
+          const copy = run.some((x) => x.copy) ? `<span class="cd-copy">${run.find((x) => x.copy).copy === "done" ? "Copied" : "Copy"}</span>` : "";
+          bh += `<div class="cd" style="margin-top:${b.first ? 0 : gap - 8}px"><div class="cd-head">${esc(lang)}${copy}</div>${lines}</div>`;
+        }
+        bi = end;
+        continue;
+      }
+      const extra = kind === "ck" ? ` data-done="${sk.value ? 1 : 0}"` : "";
+      bh += `<div class="blk ${kind}${ph ? " ph" : ""}${kind === "ck" && sk.value ? " done" : ""}" data-b="${b.id}" data-n="${olN}"${extra} style="margin-top:${b.first ? 0 : gap}px${b.style ? ";" + b.style : ""}">${words}</div>`;
     }
     html += `<div class="blocks" style="left:${colL}px;top:${fx(top + 54)}px;width:${G.col}px">${bh}</div>`;
     html += `<div class="caret" style="display:none"></div>`;
@@ -435,6 +504,36 @@
       else svg += dash(x0, x1);
       motifs.forEach((m, i) => { svg += motifSVG(mx0 + i * step, by, m.c, m.k == null ? 1 : m.k); });
     }
+    // your blocks, sewn (sewn.rs): a checklist's box in graphite and, done, a cross-stitch in
+    // your ink with the words tacked through; a callout's running-stitch edge; a quote's seam
+    host.querySelectorAll(".blk.ck").forEach((el) => {
+      const bb = rel(el.getBoundingClientRect());
+      const blk = P.blocks.find((x) => x.id === el.dataset.b) || {};
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 28;
+      const bx = bb.x, by = bb.y + lh / 2 - 9;
+      [[3, 3, 15, 3], [15, 3, 15, 15], [15, 15, 3, 15], [3, 15, 3, 3]].forEach(([x0, y0, x1, y1]) => { svg += capsule(bx + x0, by + y0, bx + x1, by + y1, 1.5, "var(--graphite)"); });
+      const [k1, k2] = blk.cross || (el.dataset.done === "1" ? [1, 1] : [0, 0]);
+      if (k1 > 0) svg += capsule(bx + 5.2, by + 12.8, bx + 5.2 + 7.6 * k1, by + 12.8 - 7.6 * k1, 2.3, "var(--ink)");
+      if (k2 > 0) svg += capsule(bx + 5.2, by + 5.2, bx + 5.2 + 7.6 * k2, by + 5.2 + 7.6 * k2, 2.3, "var(--ink)");
+      const tack = blk.tack != null ? blk.tack : el.dataset.done === "1" ? 1 : 0;
+      if (tack > 0) {
+        const range = document.createRange(); range.selectNodeContents(el);
+        const rows = [];
+        Array.from(range.getClientRects()).forEach((r) => { if (r.width < 1) return; const q = rel(r); const row = rows.find((w) => Math.abs(w.y - q.y) < 4); if (row) { row.x = Math.min(row.x, q.x); row.r = Math.max(row.r, q.r); } else rows.push({ ...q }); });
+        let n = 0;
+        rows.forEach((row, ri) => { const y = row.y + row.h * 0.55; runningStitch(row.x - 2, row.r + 2, y, 31 + ri, false).forEach((st) => { const k = clamp(tack * 1.25 * (rows.length * 20) / 20 - n * 0.04); n++; if (k > 0) svg += capsule(st.x0, st.y, lerp(st.x0, st.x1, clamp(k)), st.y, 1.3, "var(--tack)"); }); });
+      }
+    });
+    host.querySelectorAll(".co").forEach((el, i) => {
+      const r = rel(el.getBoundingClientRect());
+      const x0 = r.x + 5, y0 = r.y + 5, x1 = r.r - 5, y1 = r.b - 5, rr = 4.5;
+      const d = `M${fx(x0 + rr)} ${fx(y0)}H${fx(x1 - rr)}Q${fx(x1)} ${fx(y0)} ${fx(x1)} ${fx(y0 + rr)}V${fx(y1 - rr)}Q${fx(x1)} ${fx(y1)} ${fx(x1 - rr)} ${fx(y1)}H${fx(x0 + rr)}Q${fx(x0)} ${fx(y1)} ${fx(x0)} ${fx(y1 - rr)}V${fx(y0 + rr)}Q${fx(x0)} ${fx(y0)} ${fx(x0 + rr)} ${fx(y0)}Z`;
+      svg += `<path d="${d}" style="fill:none;stroke:color-mix(in srgb,var(--${el.dataset.patch}) 92%,transparent);stroke-width:1.75;stroke-linecap:round;stroke-dasharray:6 3.4;stroke-dashoffset:${(i * 2.3) % 9}"/>`;
+    });
+    host.querySelectorAll(".blk.q").forEach((el, i) => {
+      const r = rel(el.getBoundingClientRect());
+      for (let y = r.y + 3, j = 0; y < r.b - 4; y += 6, j++) svg += capsule(r.x + 3 + jitter(17 + i, j) * 0.5, y, r.x + 3 + jitter(17 + i, j) * 0.5, Math.min(y + 5.2, r.b - 3), 2, "var(--tack)");
+    });
     // gutter (editor.rs gutter marks): needle while reading, a tacking stitch once read,
     // a knot and its number beside a paragraph with an open question
     for (const b of P.blocks) {
@@ -566,7 +665,15 @@
       if (natural > below && pn.dataset.nolift !== "1") { const up = Math.min(natural - below, Math.max(0, y0 - 44)) * e; pn.style.top = fx(-up) + "px"; }
     });
     // menus anchored to words (selection toolbar, ask box, mind/mode menus)
-    if (P.menus && P.menus.length) host.querySelector(".menus").innerHTML = P.menus.map((m) => menuHTML(m, geo, P)).join("");
+    if (P.menus && P.menus.length) {
+      host.querySelector(".menus").innerHTML = P.menus.map((m) => menuHTML(m, geo, P)).join("");
+      // where the menu's rows and chips are, for the pointer
+      geo.acts = {};
+      host.querySelectorAll(".tbar .act").forEach((el, i) => { geo.acts[["find", "ask", "sketch"][i]] = rel(el.getBoundingClientRect()); });
+      geo.marks = Array.from(host.querySelectorAll(".tbar .row.m span")).map((el) => rel(el.getBoundingClientRect()));
+      geo.chips = {};
+      host.querySelectorAll(".askbox .chip").forEach((el) => { geo.chips[el.textContent.trim()] = rel(el.getBoundingClientRect()); });
+    }
     return geo;
   }
 
@@ -620,13 +727,14 @@
       // right margin beside the selection
       const lines = geo.lineRects(m.block, m.anchor);
       const y = lines.length ? lines[0].y - 4 : 200;
-      const kinds = ["T", "H1", "H2", "H3", "❝", "•", "1."].map((k, i) => `<span class="${m.kind === i ? "on" : ""}${m.hovKind === i ? " hov" : ""}">${k}</span>`).join("");
-      const marks = ["<b>B</b>", "<i>I</i>", "<u>U</u>", "<s>S</s>", "&lt;/&gt;"].map((k) => `<span>${k}</span>`).join("");
-      const cols = ["var(--ink)", "#6f6862", "#6e4b2e", "#8f6214", "#a63f32", "#4f7350", "#2e3f7a", "#6b3e62"].map((c) => `<span style="color:${c};font-weight:500">A</span>`).join("");
+      const kinds = ["T", "H1", "H2", "H3", "“", "•", "1.", "☐"].map((k, i) => `<span class="${m.kind === i ? "on" : ""}${m.hovKind === i ? " hov" : ""}">${k}</span>`).join("");
+      const sewn = [["Note", "indigo"], ["Warning", "ochre"], ["Tip", "sage"], ["Code", "ink"]].map(([k, c], i) => `<span class="w${m.kind === 8 + i ? " on" : ""}" style="${m.kind === 8 + i ? "" : `color:var(--${c})`}${k === "Code" ? ";font-family:'Spline Sans Mono';font-size:11px" : ""}">${k}</span>`).join("");
+      const marks = ["<b>B</b>", "<i>I</i>", "<u>U</u>", "<s>S</s>", "&lt;/&gt;"].map((k, i) => `<span class="${m.mark === i ? "on" : ""}">${k}</span>`).join("");
+      const cols = ["var(--ink)", "var(--graphite)", "var(--walnut)", "var(--ochre)", "var(--sage)", "var(--indigo)", "var(--plum)"].map((c) => `<span style="color:${c};font-weight:500">A</span>`).join("");
       const act = (k, b, s) => `<div class="act${m.hov === k ? " hov" : ""}"><b>${b}</b><small>${s}</small></div>`;
       return `<div class="card tbar" style="left:${G.colLeft + G.col + G.gap}px;top:${fx(y)}px;opacity:${fx(m.op == null ? 1 : m.op)};transform:translateY(${fx((1 - (m.op == null ? 1 : m.op)) * 4)}px)">` +
-        `<div class="row">${kinds}</div><div class="row">${marks}</div><div class="row">${cols}</div><hr>` +
-        act("find", "Find a loose thread", "⌘↵") + act("ask", "Ask Inkling", "Your own question") + act("sketch", "Sketch it", "Stitched out step by s…") + `</div>`;
+        `<div class="row k">${kinds}</div><div class="row s">${sewn}</div><div class="row m">${marks}</div><div class="row c">${cols}</div><hr>` +
+        act("find", "Find a loose thread", "⌘↵") + act("ask", "Ask Inkling", "Your own question") + act("sketch", "Sketch it", "Stitched step by step") + `</div>`;
     }
     if (m.type === "ask") {
       const lines = geo.lineRects(m.block, m.anchor);
@@ -668,8 +776,9 @@
     if (W.chat && W.chat.k > 0.01) html += chatHTML(W.chat, t);
     if (W.sideK > 0.005) html += sideHTML(W.side || {}, W.sideK);
     if (W.overlay) html += W.overlay;
-    if (W.toast && W.toast.op > 0.01) html += `<div class="toast" style="opacity:${fx(W.toast.op)};transform:translate(-50%,${fx((1 - W.toast.op) * 8)}px)">${esc(W.toast.text)}</div>`;
-    if (W.undo && W.undo.op > 0.01) html += `<div class="undo" style="opacity:${fx(W.undo.op)};transform:translateY(${fx((1 - W.undo.op) * 8)}px)"><span>Thread dismissed</span><b>Undo</b><span>⌥⌘Z</span></div>`;
+    const right = W.chat && W.chat.k > 0.01 ? 310 * E.out(W.chat.k) : 0;
+    if (W.toast && W.toast.op > 0.01) html += `<div class="toast" style="right:${fx(right)}px;opacity:${fx(W.toast.op)};transform:translateY(${fx((1 - W.toast.op) * 8)}px)"><span class="lab">${esc(W.toast.text)}</span></div>`;
+    if (W.undo && W.undo.op > 0.01) html += `<div class="toast" style="right:${fx(right)}px;opacity:${fx(W.undo.op)};transform:translateY(${fx((1 - W.undo.op) * 8)}px)"><span class="lab undo"><span>Thread dismissed</span><b${W.undo.hov ? ' class="hov"' : ""}>Undo</b><span class="k">⌥⌘Z</span></span></div>`;
     if (W.listen && W.listen.op > 0.01) html += `<div class="listen" style="opacity:${fx(W.listen.op)}"><span class="dot" style="width:7px;height:7px;opacity:${fx(0.35 + 0.65 * (0.5 + 0.5 * Math.sin((t / 0.9) * Math.PI * 2)))}"></span><span>${esc(W.listen.text || "Listening…")}</span></div>`;
     if (W.blots) html += `<svg class="ov" width="1320" height="860" style="z-index:45">${W.blots}</svg>`;
     host.innerHTML = html;
@@ -684,7 +793,7 @@
     const F = (S.folders || []).map((f) => row(icon(f.open ? "folderOpen" : "folder", 12, "var(--faint)"), f.name, { fold: true, hov: f.hov }) +
       (f.open ? f.notes.map((n) => row(icon("file", 12, "var(--faint)"), n.title, { indent: 14, on: n.on, dot: n.dot, hov: n.hov })).join("") : "")).join("");
     const loose = (S.loose || []).map((n) => row(icon("file", 12, "var(--faint)"), n.title, { on: n.on, dot: n.dot, hov: n.hov })).join("");
-    return `<div class="dim" style="background:color-mix(in srgb,var(--cloth) 50%,transparent);opacity:${fx(e)}"></div>` +
+    return `<div class="sdim" style="background:color-mix(in srgb,var(--cloth) 50%,transparent);opacity:${fx(e)}"></div>` +
       `<div class="side" style="transform:translateX(${fx(-240 * (1 - e))}px)"><div class="hdr"><span class="wm">${WM_HTML(18)}</span>${icon("x", 13, "var(--graphite)")}</div>` +
       row(icon("search", 12, "var(--faint)"), "Find or start a note", { dim: true, keys: "⌘K" }) + row(icon("plus", 12, "var(--faint)"), "New note", { dim: true, hov: S.hovNew }) +
       `<div style="margin-top:10px">${F}${loose}${S.extra || ""}${row(icon("folderPlus", 12, "var(--faint)"), "New folder", { dim: true, hov: S.hovFolder })}</div>` +
@@ -708,20 +817,26 @@
       `<div class="ft"><span class="tx">${C.input ? esc(C.input) + (C.caret ? '<span class="icaret"></span>' : "") : '<span class="ph">Ask about this note…</span>'}</span><span class="send">${icon("arrowUp", 12, "var(--paper)", 2)}</span></div></div>`;
   }
 
-  /** The wordmark (ui.rs `wordmark`): "ınkling" in Fraunces Display, a French knot for the dot. */
-  let I_ADV = 0.255; // the advance of "ı" in Fraunces Display Medium, per pt of size (measured at load)
+  /** The wordmark, Initial (design/logo/03-initial/wordmark.svg, picked 7 Nov 2026): "inkling"
+   *  in ink, its i satin-stitched in madder and dotted with a French knot. Drawn from the file,
+   *  in the theme's colours, `size` points to the em (the file's em is 100 units). */
+  let WM = null;
   function measureWordmark() {
-    const c = document.createElement("canvas").getContext("2d");
-    c.font = "500 100px 'Fraunces Display'";
-    I_ADV = c.measureText("ı").width / 100;
+    const doc = new DOMParser().parseFromString(window.LOGO.wordmark, "image/svg+xml").documentElement;
+    doc.querySelectorAll("style").forEach((n) => n.remove());
+    const vb = doc.getAttribute("viewBox").split(/\s+/).map(Number);
+    let inner = doc.innerHTML.replace(/clip-path="url\(#sw\)"/g, 'clip-path="url(#WMID)"').replace(/id="sw"/g, 'id="WMID"');
+    const fill = { ink: "var(--ink)", mad: "var(--madder)", "mad-hi": "color-mix(in srgb,var(--madder) 62%,#fff)", "mad-lo": "color-mix(in srgb,var(--madder) 70%,#000)" };
+    inner = inner.replace(/class="(ink|mad|mad-hi|mad-lo)"/g, (_, c) => `style="fill:${fill[c]}"`).replace(/class="s-hi"/g, 'style="stroke:color-mix(in srgb,var(--madder) 55%,#fff)"').replace(/class="s-lo"/g, 'style="stroke:color-mix(in srgb,var(--madder) 70%,#000)"');
+    WM = { vb, inner };
   }
-  function WM_HTML(size, opts) {
-    const h = size * 1.3;
-    const kx = I_ADV * size * 0.47, ky = h * 0.5 - size * 0.6;
-    return `<span style="position:relative;display:inline-block;height:${fx(h)}px;font:500 ${size}px/${fx(h)}px 'Fraunces Display';color:var(--ink)">ınkling` +
-      `<svg style="position:absolute;left:0;top:0;overflow:visible" width="1" height="1">${knotSVG(kx, ky, size * 0.13, "var(--voice)", opts && opts.knot != null ? opts.knot : 1)}</svg></span>`;
+  let wmN = 0;
+  function WM_HTML(size) {
+    if (!WM) measureWordmark();
+    const k = size / 100, id = "wm" + (wmN++ % 1000);
+    return `<svg viewBox="${WM.vb.join(" ")}" width="${fx(WM.vb[2] * k)}" height="${fx(WM.vb[3] * k)}" style="display:block;overflow:visible">${WM.inner.replace(/WMID/g, id)}</svg>`;
   }
 
-  window.APP = { measureWordmark, iAdv: () => I_ADV, fx, clamp, lerp, prog, esc, E, spring, rng, applyTheme, thread, mindThread, seedOf, capsule, runningStitch, crossSVG, knotSVG, knotScale, motifSVG,
+  window.APP = { measureWordmark, fx, clamp, lerp, prog, esc, E, spring, rng, applyTheme, thread, mindThread, seedOf, capsule, runningStitch, crossSVG, knotSVG, knotScale, motifSVG,
     NEEDLE, Rope, restRope, simRope, ropeSVG, icon, ICON, GEO, TAB_W, TAB_H, markup, renderPage, renderWindow, B, paras, WM_HTML, THREADS, THREAD_ORDER, jitter };
 })();

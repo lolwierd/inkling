@@ -21,6 +21,9 @@
 @font-face { font-family: "Figtree"; src: url("../../assets/fonts/Figtree-Medium.ttf"); font-weight: 500; font-style: normal; font-display: block; }
 @font-face { font-family: "Figtree"; src: url("../../assets/fonts/Figtree-SemiBold.ttf"); font-weight: 600; font-style: normal; font-display: block; }
 @font-face { font-family: "Figtree"; src: url("../../assets/fonts/Figtree-Bold.ttf"); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: "Spline Sans Mono"; src: url("../../assets/fonts/SplineSansMono-Regular.ttf"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Spline Sans Mono"; src: url("../../assets/fonts/SplineSansMono-Medium.ttf"); font-weight: 500; font-style: normal; font-display: block; }
+@font-face { font-family: "Spline Sans Mono Inline"; src: url("../../assets/fonts/SplineSansMonoInline-Regular.ttf"); font-weight: 400; font-style: normal; font-display: block; }
 
 html, body { margin: 0; background: #111; }
 * { box-sizing: border-box; }
@@ -82,8 +85,19 @@ html, body { margin: 0; background: #111; }
 .blk.h1 { font-family: "Fraunces Display", serif; font-weight: 600; font-size: 26px; line-height: 34px; }
 .blk.h2 { font-family: "Fraunces Display", serif; font-weight: 600; font-size: 21px; line-height: 30px; }
 .blk.h3 { font-family: "Fraunces Display", serif; font-weight: 600; font-size: 18px; line-height: 27px; }
-.blk.q { padding-left: 16px; color: var(--graphite); }
-.blk.q::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2.5px; border-radius: 2px; background: var(--rule); }
+.blk.q { padding-left: 16px; color: var(--graphite); font-style: italic; }
+/* your blocks, sewn (sewn.rs; editor.rs line_style): a checklist item, a callout's patch, a code block's ground */
+.blk.ck { padding-left: 26px; line-height: calc(var(--note) * 1.62); font-family: "Fraunces Text", serif; font-size: var(--note); }
+.blk.ck.done { color: var(--graphite); }
+.co { position: relative; padding: 10px 16px 12px; border-radius: 8px; background: color-mix(in srgb, var(--pt) 6%, var(--paper)); }
+.co-lab { font: 600 12px/19px "Figtree"; color: var(--pt); }
+.blk.co-l { font-family: "Fraunces Text", serif; font-size: var(--note); line-height: calc(var(--note) * 1.53); }
+.cd { position: relative; padding: 0 14px 10px 0; border-radius: 8px; background: var(--code); }
+.cd-head { position: relative; height: 30px; padding-left: 14px; font: 400 12px/30px "Figtree"; color: var(--faint); }
+.cd-copy { position: absolute; right: 4px; top: 4px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--card); border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); font: 500 12px/20px "Figtree"; color: var(--ink); }
+.blk.cd-l { padding-left: 40px; font-family: "Spline Sans Mono", monospace; font-size: calc(var(--note) * 0.794); line-height: calc(var(--note) * 1.294); white-space: pre-wrap; }
+.cd-n { position: absolute; left: 0; width: 26px; text-align: right; font-family: "Spline Sans Mono", monospace; font-size: 12px; line-height: inherit; color: var(--faint); }
+.ic { font-family: "Spline Sans Mono Inline", "Spline Sans Mono", monospace; background: var(--chip); border-radius: 4px; padding: 1px 3px; margin: 0 1px; }
 .blk.li { padding-left: 22px; } .blk.li::before { content: "•"; position: absolute; left: 7px; }
 .blk.ol { padding-left: 22px; } .blk.ol::before { content: attr(data-n) "."; position: absolute; left: 2px; font-variant-numeric: tabular-nums; }
 .blk.ph { color: var(--faint); }
@@ -136,7 +150,8 @@ svg.ov { position: absolute; left: 0; top: 0; overflow: visible; pointer-events:
 /* ---------------------------------------------------------------- cards: menus, the ask box, dialogs */
 .card { position: absolute; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; font-family: "Figtree";
   box-shadow: 0 8px 24px -6px rgba(0,0,0,var(--menushade)); font-size: 12.5px; color: var(--ink); }
-.tbar { width: 184px; padding: 6px 0 6px; }
+.tbar { width: 236px; padding: 6px 0 6px; }
+.tbar .row span.w { min-width: 0; padding: 0 5px; font-size: 12px; }
 .tbar .row { display: flex; gap: 1px; padding: 0 8px; align-items: center; height: 26px; }
 .tbar .row span { min-width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; color: var(--graphite); font-size: 11.5px; padding: 0 2px; }
 .tbar .row span.on { background: var(--ink); color: var(--paper); }
@@ -163,11 +178,15 @@ svg.ov { position: absolute; left: 0; top: 0; overflow: visible; pointer-events:
 .menu .foot { margin-top: 4px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; padding: 6px 14px 2px; font-size: 12px; color: var(--faint); }
 .menu svg { width: 12px; height: 12px; flex: none; }
 
-.toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 7px 14px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 12px; white-space: nowrap; z-index: 40; }
-.undo { position: absolute; left: 18px; bottom: 18px; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; background: var(--card); border: 1px solid var(--rule);
-  box-shadow: 0 8px 24px -10px rgba(var(--shade), .4); font-size: 13px; color: var(--graphite); white-space: nowrap; z-index: 40; }
-.undo b { color: var(--ink); font-weight: 600; }
-.undo span:last-child { color: var(--faint); }
+/* toasts (toast.rs): one stack of small fabric labels with a running-stitch edge, centred under the page */
+.toast { position: absolute; left: 0; bottom: 24px; display: flex; justify-content: center; z-index: 40; pointer-events: none; }
+.toast .lab { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 8px; background: var(--card); box-shadow: 0 1px 3px rgba(var(--shade), .22);
+  font: 400 13px/18px "Figtree"; color: var(--ink); white-space: nowrap; }
+.toast .lab::after { content: ""; position: absolute; inset: 3px; border-radius: 6px; border: 1px dashed color-mix(in srgb, var(--faint) 45%, transparent); }
+.toast .lab.undo { padding-right: 8px; color: var(--graphite); }
+.toast .lab.undo b { padding: 1px 6px; border-radius: 5px; font-weight: 600; color: var(--ink); }
+.toast .lab.undo b.hov { background: var(--wash); }
+.toast .lab .k { color: var(--faint); font-size: 12px; }
 .listen { position: absolute; right: 14px; bottom: 14px; max-width: 360px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--rule); font-size: 12px; color: var(--graphite); z-index: 40; }
 .hint-corner { position: absolute; right: 14px; bottom: 10px; font-size: 11px; color: var(--faint); }
 
@@ -185,7 +204,7 @@ svg.ov { position: absolute; left: 0; top: 0; overflow: visible; pointer-events:
 .side .foot .who { padding: 0 14px; font-size: 11px; color: var(--ink); }
 .side .foot .sv { padding: 0 14px; margin-bottom: 6px; font-size: 10px; color: var(--faint); }
 .side .foot .row { font-size: 11.5px; color: var(--graphite); padding: 4px 8px; }
-.dim { position: absolute; inset: 0; z-index: 27; }
+.sdim { position: absolute; inset: 0; z-index: 27; }
 
 /* chat panel (note_page.rs `chat_panel`) */
 .chatp { position: absolute; top: 0; right: 0; bottom: 0; width: 310px; background: var(--paper); border-left: 1px solid var(--rule); z-index: 26; font-family: "Figtree"; display: flex; flex-direction: column; }

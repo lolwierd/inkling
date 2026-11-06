@@ -1,19 +1,21 @@
 #!/bin/bash
 # contact.sh [film.mp4] [out.jpg]: 36 moments of the film, 6 x 6, each with its time.
 # Frames come from the encoded film itself, so the sheet shows exactly what plays; the sheet
-# is set in a page (labels in Figtree) and photographed with headless Chrome.
+# is set in a page (labels in Figtree) and photographed with headless Chrome. The moments are
+# the cut's (7 Nov 2026): the guide, the correction and its fix, each ask, the threads, the
+# minds, the montages, the mark. Its work files stay in a fresh folder under $TMPDIR.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
-film=${1:-$here/inkling-walkthrough.mp4}; out=${2:-$here/contact-sheet.jpg}
+film=${1:-$here/page/film.mp4}; out=${2:-$here/contact-sheet.jpg}
 FF=/opt/homebrew/bin/ffmpeg
 CH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-tmp=$(mktemp -d)
-times=(2.6 7.2 11.6 18.5 21.3 23.6 33.5 38.2 44.9 47.4 52.6 58.3 62.4 65.4 69.9 73.6 78.9 83.4 89.6 99.4 101.8 105.5 110 113.2 120.8 128.9 132.5 137.9 141.3 145.5 151.9 156.8 163.3 173.4 187.2 206.6)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/inkling-contact.XXXXXX")
+times=(2.60 7.20 11.75 23.15 33.95 45.50 52.20 54.90 57.22 65.50 74.25 82.25 84.05 92.15 101.25 105.20 108.35 114.35 116.45 128.00 130.90 136.82 140.25 142.45 145.45 151.05 155.50 161.35 165.55 184.62 187.72 189.82 207.20 209.70 216.15 219.30)
 cells=""
 i=0
 for t in "${times[@]}"; do
   f=$(printf %02d $i).png
-  $FF -hide_banner -loglevel error -ss "$t" -i "$film" -frames:v 1 -vf scale=480:270 "$tmp/$f"
+  $FF -hide_banner -loglevel error -ss "$t" -i "$film" -frames:v 1 -vf scale=480:270:flags=lanczos "$tmp/$f"
   label=$(python3 -c "t=$t; print(f'{int(t//60)}:{int(t%60):02d}')")
   cells="$cells<figure><img src=\"$f\"><figcaption>$label</figcaption></figure>"
   i=$((i+1))
@@ -28,8 +30,8 @@ img { display: block; width: 480px; height: 270px; }
 figcaption { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border-radius: 6px; background: rgba(38,35,43,.78); color: #FBF8F2; font: 600 15px/18px Figtree; }
 </style></head><body><main>$cells</main></body></html>
 HTML
-"$CH" --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$tmp/chrome" --allow-file-access-from-files --force-device-scale-factor=1 \
-  --window-size=2922,1662 --virtual-time-budget=4000 --screenshot="$tmp/sheet.png" "file://$tmp/sheet.html" >/dev/null 2>&1
+# (a virtual time budget makes this Chrome hang; the screenshot is written, then Chrome ends itself)
+timeout 90 "$CH" --headless --disable-gpu --hide-scrollbars --user-data-dir="$tmp/chrome" --allow-file-access-from-files --force-device-scale-factor=1 \
+  --window-size=2922,1662 --screenshot="$tmp/sheet.png" "file://$tmp/sheet.html" >/dev/null 2>&1 || test -s "$tmp/sheet.png"
 $FF -hide_banner -loglevel error -y -i "$tmp/sheet.png" -q:v 3 "$out"
-rm -rf "$tmp"
-echo "$out"
+echo "$out (work files in $tmp)"

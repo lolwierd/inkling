@@ -182,7 +182,46 @@ async function call(settings: object, input: object) {
   return { id, e, ms: Date.now() - t0 };
 }
 
+// Let it stand: the running plan, with points the writer let stand (design/features/let-it-stand.md).
+const PLAN = [
+  "Sub-50 10k by March",
+  "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes.",
+  "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 4:55 for the whole race, I'll come in just under 50.",
+  "Sunday is the long run. I'll add a kilometre every week until I reach 16, then hold there.",
+];
+const STOOD = [
+  {
+    quote: "add a kilometre every week until I reach 16",
+    point: "Starting from how far? If you start at 8 km, 16 km is eight weeks out. Is the race at least eight weeks away, with an easier week before it?",
+    kind: "question",
+    mind: "Inkling",
+    reason: "I start at 8 km and the race is ten weeks out.",
+  },
+  { quote: "four days a week", point: "Why four? You walked after 7 km last year; is it the days that matter, or the last 3 km?", kind: "question", mind: "Skeptic", reason: null },
+];
+const planCtx = (paragraphs: string[]) => ctx(paragraphs.slice(1), { noteTitle: PLAN[0], letStand: STOOD });
+
 const scenarios: Record<string, () => Promise<unknown>> = {
+  // Four calls: the same paragraph again, the same point in new words, a different point on
+  // words that have one let stand, and a probe on let-stand words. Read the texts too.
+  async letstand() {
+    const out: Record<string, unknown> = {};
+    const same = await call(LIGHT, { task: "read", ctx: planCtx(PLAN), target: PLAN[3] });
+    out.same = same.e.data ?? same.e;
+    check(same.e.ev === "done" && same.e.data.speak === false, `same paragraph spoke: ${JSON.stringify(same.e.data)}`);
+    const restated = "By race week the Sunday run is 16 km, one more kilometre each week.";
+    const reworded = await call(LIGHT, { task: "read", ctx: planCtx([...PLAN, restated]), target: restated });
+    out.reworded = reworded.e.data ?? reworded.e;
+    check(reworded.e.ev === "done" && reworded.e.data.speak === false, `the point in new words came back: ${JSON.stringify(reworded.e.data)}`);
+    const other = "Four days a week, 10 km each, is 50 km a week.";
+    const fresh = await call(LIGHT, { task: "read", ctx: planCtx([...PLAN, other]), target: other });
+    out.fresh = fresh.e.data ?? fresh.e;
+    check(fresh.e.ev === "done" && fresh.e.data.speak === true && !fresh.e.data.repeats, `a new point on let-stand words was held back: ${JSON.stringify(fresh.e.data)}`);
+    const probe = await call(HEAVY, { task: "probe", ctx: planCtx(PLAN), target: "add a kilometre every week until I reach 16" });
+    out.probe = probe.e.data ?? probe.e;
+    check(probe.e.ev === "done", `probe ${probe.e.ev}: ${probe.e.message}`);
+    return out;
+  },
   async status() {
     const t0 = Date.now();
     send({ op: "status", id: "status-1" });

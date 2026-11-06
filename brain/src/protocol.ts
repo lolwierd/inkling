@@ -24,6 +24,15 @@ export interface ThreadSummary {
   resolved: boolean;
 }
 
+// A point the writer let stand: every mind is told it, so none raises it again.
+export interface LetStandPoint {
+  quote: string; // the words, as they were when let stand
+  point: string; // the mind's first message: what it asked or corrected
+  kind: "question" | "correction";
+  mind: string; // the mind that raised it
+  reason: string | null; // the writer's one line, if they gave one
+}
+
 export interface Context {
   noteTitle: string;
   noteText: string;
@@ -32,6 +41,7 @@ export interface Context {
   aboutMe: string | null;
   threads: ThreadSummary[];
   now: string;
+  letStand: LetStandPoint[];
 }
 
 // Both are optional on the wire: a missing or unknown value leaves the runtime's default.

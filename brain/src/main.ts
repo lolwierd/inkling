@@ -24,7 +24,7 @@ import {
   THOUGHT_SCHEMA,
   SKETCH_SCHEMA,
 } from "./prompts.ts";
-import type { Context, Event, Frequency, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
+import type { Context, Event, Frequency, LetStandPoint, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
 
 const VERSION = "0.1.0";
 const running = new Map<string, AbortController>();
@@ -69,6 +69,36 @@ function messages(v: unknown): ThreadMessage[] {
   return v.filter(isObject).map((m) => ({ role: m.role === "you" ? "you" : "mind", text: text(m.text) }));
 }
 
+/** At most this many points the writer let stand reach a prompt (the app sends 12). */
+const LET_STAND_MAX = 20;
+
+/** The points the writer let stand, as the app sends them; an entry without its words or
+ * its point is left out, and long fields are cut. */
+function letStand(v: unknown): LetStandPoint[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter(isObject)
+    .map((p): LetStandPoint => {
+      // each on one line, as the prompt lists them
+      const line = (v: unknown, max: number) => clip(text(v).replace(/\s+/g, " ").trim(), max);
+      return {
+        quote: line(p.quote, 160),
+        point: line(p.point, 240),
+        kind: p.kind === "correction" ? "correction" : "question",
+        mind: line(p.mind, 60) || "Inkling",
+        reason: line(p.reason, 200) || null,
+      };
+    })
+    .filter((p) => p.quote && p.point)
+    .slice(0, LET_STAND_MAX);
+}
+
+/** The point a read or probe says it makes again, if it names one of the `count` the
+ * writer let stand; anything else is 0. */
+function repeated(v: unknown, count: number): number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= count ? v : 0;
+}
+
 const VOICES = new Set<Voice>(["plain", "warm", "blunt", "riddle"]);
 const FREQUENCIES = new Set<Frequency>(["rarely", "when_it_matters", "often"]);
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
@@ -86,6 +116,7 @@ function context(v: unknown): Context {
       ? v.threads.filter(isObject).map((t) => ({ quote: text(t.quote), messages: messages(t.messages), resolved: t.resolved === true }))
       : [],
     now: text(v.now) || new Date().toDateString(),
+    letStand: letStand(v.letStand),
     mind: {
       name: text(mind.name).trim() || "Inkling",
       description: text(mind.description),
@@ -162,6 +193,13 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
         input.task === "read" ? [readPrompt(input.ctx, input.target), THOUGHT_SCHEMA] : [probePrompt(input.ctx, input.target), PROBE_SCHEMA];
       const { data, usage } = await runStructured<unknown>(sys, prompt, schema, settings, signal, onLimit);
       const d = structured(data);
+      // A point the writer let stand is not raised again, in any words: the model says
+      // which one its note repeats, and then the note is held back.
+      const repeats = repeated(d.repeats, input.ctx.letStand.length);
+      if (repeats > 0) {
+        log(`${input.task} ${id} held back: it makes let-stand point ${repeats} again`);
+        return { data: { speak: false, repeats }, usage };
+      }
       // Read may stay silent; a probe was asked for, so it always says something.
       if (input.task === "read" && !(d.speak === true && text(d.text).trim())) return { data: { speak: false }, usage };
       return {

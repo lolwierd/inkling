@@ -39,6 +39,8 @@
 //! ```text
 //! resolve: 1      reopen: 1      dismiss: 2      mark: 1   (the "?" in Marks only)
 //! copy: 1         (logs what Copy would put on the clipboard; the clipboard is left alone)
+//! stand: 2 It is deliberate.   (types the reason into thread 2's box, then Let stand;
+//!                               `stand: 2` lets it stand with no reason)
 //! makenote: 1
 //! retry: 1        (Try again on a thread whose question or reply got no answer)
 //! hover: 2        (the pointer rests on thread 2's tag, which unfolds; `hover: 0` moves away)
@@ -164,6 +166,8 @@ pub enum Step {
     Click(f32, f32),
     /// The pointer moves to a point in the window.
     Pointer(f32, f32),
+    /// Let thread n stand, with the words typed into its tag's box first as the reason.
+    Stand(usize, String),
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -223,6 +227,10 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "copy" => Step::Copy(n()),
                 "makenote" => Step::MakeNote(n()),
                 "retry" => Step::Retry(n()),
+                "stand" => {
+                    let (n, reason) = arg.split_once(char::is_whitespace).unwrap_or((arg.as_str(), ""));
+                    Step::Stand(n.parse().unwrap_or(1), reason.trim().to_string())
+                }
                 "clear" => Step::ClearChat,
                 "switch" => Step::Switch(arg),
                 "import" => Step::Import(arg),
@@ -350,6 +358,14 @@ mod tests {
                 Step::Settle(SETTLE_MAX_MS),
                 Step::Settle(500),
             ]
+        );
+    }
+
+    #[std::prelude::v1::test]
+    fn stand_takes_a_thread_and_a_reason() {
+        assert_eq!(
+            parse("stand: 2 It is deliberate: the  team's slogan.\nstand: 3\nstand\n"),
+            vec![Step::Stand(2, "It is deliberate: the  team's slogan.".into()), Step::Stand(3, String::new()), Step::Stand(1, String::new())]
         );
     }
 

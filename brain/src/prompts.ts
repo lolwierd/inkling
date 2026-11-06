@@ -1,4 +1,4 @@
-import type { Context, Frequency, ThreadMessage, Voice } from "./protocol.ts";
+import type { Context, Frequency, LetStandPoint, ThreadMessage, Voice } from "./protocol.ts";
 
 const VOICES: Record<Voice, string> = {
   plain: "Plain and direct. Say it the simplest way.",
@@ -28,6 +28,20 @@ function threadsBlock(ctx: Context): string {
     .join("\n\n");
 }
 
+/** The points the writer let stand, numbered as `repeats` counts them. Every mind is told
+ * them, in every task: the writer decided, so none raises them again unless asked. */
+export function letStandBlock(points: LetStandPoint[]): string {
+  return [
+    "Points the writer let stand. They weighed each one and decided their words stay as they are. Never raise any of them again, in any words or about any other part of the note, unless the writer asks about it. Your point is the same one when the writer's reason, or their decision to keep the words, answers it too.",
+    ...points.map(
+      (p, i) => `${i + 1}. On «${p.quote}», ${p.mind}'s ${p.kind}: ${p.point} ${p.reason ? `Their reason: ${p.reason}` : "(No reason given.)"}`,
+    ),
+  ].join("\n");
+}
+
+const REPEATS =
+  "- repeats: after writing your note, compare it with the points the writer let stand (listed in your instructions): the number of the one it makes again, in any words; 0 when it makes none of them, or when there are none.";
+
 /** The stable part of every system prompt: who the mind is and how it behaves. */
 export function systemPrompt(ctx: Context): string {
   const m = ctx.mind;
@@ -44,6 +58,7 @@ export function systemPrompt(ctx: Context): string {
   ];
   if (ctx.brief) lines.push("", `What this note is for, in the writer's words: ${ctx.brief}`);
   if (ctx.aboutMe) lines.push("", `About the writer: ${ctx.aboutMe}`);
+  if (ctx.letStand.length > 0) lines.push("", letStandBlock(ctx.letStand));
   lines.push("", `Today is ${ctx.now}.`);
   return lines.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n");
 }
@@ -67,13 +82,14 @@ export function readPrompt(ctx: Context, target: string): string {
     "The writer just finished this paragraph:",
     `<paragraph>${target}</paragraph>`,
     "",
-    "Decide whether to say something about this paragraph. Most paragraphs deserve silence (speak = false). Never repeat a point that an existing margin thread already makes.",
+    "Decide whether to say something about this paragraph. Most paragraphs deserve silence (speak = false). Never repeat a point that an existing margin thread already makes, or one the writer let stand.",
     "If you speak:",
     "- quote: copy the exact words from the paragraph that your note is about, the shortest span that makes sense (often 3 to 15 words). It must match the paragraph character for character.",
     "- text: your margin note, at most 45 words, usually ending in one question.",
     "- kind: \"correction\" when a fact is wrong, otherwise \"question\".",
     "- sketch: true only when a small step-by-step drawing would make it click (a process, a structure, a flow, a comparison) and they seem to be struggling to picture it.",
-    "If you stay silent, set quote and text to empty strings.",
+    REPEATS,
+    "If you stay silent, set quote and text to empty strings and repeats to 0.",
   ].join("\n");
 }
 
@@ -84,11 +100,12 @@ export function probePrompt(ctx: Context, target: string): string {
     "The writer selected this passage and asked you to look at it closely:",
     `<selection>${target}</selection>`,
     "",
-    "Find the single most useful thing to ask or point out about it: a hidden assumption, a claim that needs evidence, a step that does not follow, an edge case, a fact that is wrong. If it is genuinely solid, ask the question that would take it one level deeper.",
+    "Find the single most useful thing to ask or point out about it: a hidden assumption, a claim that needs evidence, a step that does not follow, an edge case, a fact that is wrong. If it is genuinely solid, ask the question that would take it one level deeper. If the most useful point is one the writer let stand, find the next most useful one.",
     "- quote: the exact words from the selection your note is about (the whole selection is fine).",
     "- text: at most 50 words, usually ending in one question.",
     "- kind: \"correction\" when a fact is wrong, otherwise \"question\".",
     "- sketch: true only when a small drawing would make it click.",
+    REPEATS,
   ].join("\n");
 }
 
@@ -189,13 +206,15 @@ export function chatPrompt(ctx: Context, history: ThreadMessage[], message: stri
 export const THOUGHT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["speak", "kind", "quote", "text", "sketch"],
+  required: ["speak", "kind", "quote", "text", "sketch", "repeats"],
   properties: {
     speak: { type: "boolean" },
     kind: { type: "string", enum: ["question", "correction"] },
     quote: { type: "string" },
     text: { type: "string" },
     sketch: { type: "boolean" },
+    // last, so it is written after the note it checks
+    repeats: { type: "integer" },
   },
 } as const;
 
@@ -203,12 +222,13 @@ export const THOUGHT_SCHEMA = {
 export const PROBE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["kind", "quote", "text", "sketch"],
+  required: ["kind", "quote", "text", "sketch", "repeats"],
   properties: {
     kind: THOUGHT_SCHEMA.properties.kind,
     quote: { type: "string" },
     text: { type: "string" },
     sketch: { type: "boolean" },
+    repeats: THOUGHT_SCHEMA.properties.repeats,
   },
 } as const;
 

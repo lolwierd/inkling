@@ -13,6 +13,7 @@ mod script;
 mod settings;
 mod sewn;
 mod shortcuts;
+mod stand;
 mod stitch;
 mod store;
 mod theme;

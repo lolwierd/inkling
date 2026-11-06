@@ -443,3 +443,50 @@ describe("what reaches the runtime", () => {
     expect(JSON.parse((await k.end("e")).data.text).ANTHROPIC_API_KEY).toBe(true);
   });
 });
+
+describe("points the writer let stand", () => {
+  const point = { quote: "four days a week", point: "Is pace the problem?", kind: "question", mind: "Skeptic", reason: "Pace is the problem." };
+  const thought = (extra: object) => ({ structured: { speak: true, kind: "question", quote: "four days", text: "Why four?", sketch: false, ...extra } });
+
+  test("reach the system prompt one line each; bad entries are dropped and long ones cut", async () => {
+    const b = brain();
+    const letStand = [
+      { ...point, point: "Is pace\n\nthe   problem?" },
+      { quote: "", point: "no words" },
+      { quote: "no point" },
+      "junk",
+      { quote: "x".repeat(400), point: "y".repeat(400), kind: "bogus", reason: "   " },
+      ...Array.from({ length: 30 }, (_, i) => ({ quote: `q${i}`, point: `p${i}` })),
+    ];
+    b.send(run("x", { task: "ask", ctx: ctx(fake({ echo: "options" }), { letStand }), target: "t", question: "q" }));
+    const sys: string = JSON.parse((await b.end("x")).data.text).systemPrompt;
+    expect(sys).toContain("1. On «four days a week», Skeptic's question: Is pace the problem? Their reason: Pace is the problem.");
+    expect(sys).toContain(`2. On «${"x".repeat(160)}», Inkling's question: ${"y".repeat(240)} (No reason given.)`);
+    expect(sys).toContain("20. On «q17»");
+    expect(sys).not.toContain("21. On");
+    expect(sys).not.toContain("no words");
+  });
+
+  test("a missing list is none", async () => {
+    const b = brain();
+    b.send(run("x", { task: "ask", ctx: ctx(fake({ echo: "options" })), target: "t", question: "q" }));
+    expect(JSON.parse((await b.end("x")).data.text).systemPrompt).not.toContain("let stand");
+  });
+
+  test("a read whose note repeats one is held back; a number that names none is ignored", async () => {
+    const b = brain();
+    b.send(run("r", { task: "read", ctx: ctx(fake(thought({ repeats: 1 })), { letStand: [point] }), target: "Four days a week." }));
+    expect((await b.end("r")).data).toEqual({ speak: false, repeats: 1 });
+    b.send(run("r2", { task: "read", ctx: ctx(fake(thought({ repeats: 3 })), { letStand: [point] }), target: "Four days a week." }));
+    expect((await b.end("r2")).data).toMatchObject({ speak: true, quote: "Four days", text: "Why four?" });
+    b.send(run("r3", { task: "read", ctx: ctx(fake(thought({ repeats: 1 }))), target: "Four days a week." }));
+    expect((await b.end("r3")).data).toMatchObject({ speak: true });
+    expect(b.stderr).toContain("held back");
+  });
+
+  test("a probe that only finds one says so instead of speaking", async () => {
+    const b = brain();
+    b.send(run("p", { task: "probe", ctx: ctx(fake(thought({ repeats: 1 })), { letStand: [point] }), target: "four days a week" }));
+    expect((await b.end("p")).data).toEqual({ speak: false, repeats: 1 });
+  });
+});

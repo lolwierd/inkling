@@ -499,6 +499,9 @@ mod tests {
             mind_name: "Editor".into(),
             tag_offset: (0., 0.),
             created_at: chrono::Utc::now(),
+            reason: None,
+            ended_at: None,
+            first_quote: None,
         }
     }
 

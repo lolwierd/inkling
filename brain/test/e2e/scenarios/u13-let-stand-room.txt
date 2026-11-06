@@ -1,0 +1,35 @@
+# Let it stand with several minds and in Marks only: every mind in the room is told the point;
+# a mind's question opens on a card whose second button is Let stand, and the room's answers
+# (you asked) on one that still says Dismiss. Shots of the open tag, linen and lamplight.
+# fixture: running-plan
+wait: 1500
+size: 1100x760
+set: appearance=light
+set: placement=marks
+stand: 2 Ten weeks out, from 8 km.
+select: four days a week
+room: Inkling, Skeptic
+ask: Is four days enough?
+settle
+dump: room
+expect: requests.filter(r => r.input.task === "ask").length === 2
+expect: requests.filter(r => r.input.task === "ask").every(r => r.input.ctx.letStand.length === 1 && r.input.ctx.letStand[0].reason === "Ten weeks out, from 8 km.")
+expect: new Set(requests.filter(r => r.input.task === "ask").map(r => r.input.ctx.mind.name)).size === 2
+escape
+mark: 1
+dump: question
+expect: d.active === "t1" && d.lets_stand === true
+mark: 2
+dump: asked
+expect: d.active !== "t1" && d.threads.find(t => t.id === d.active).kind === "Ask" && d.lets_stand === false
+escape
+set: placement=right
+activate: 1
+dump: open
+expect: d.active === "t1" && d.lets_stand === true
+shot: tag
+set: appearance=dark
+wait: 300
+shot: tag-dark
+set: appearance=light
+quit

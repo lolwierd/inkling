@@ -735,7 +735,7 @@ impl NotePage {
                 t.start = a.range.start;
                 t.end = a.range.end;
                 if !a.range.is_empty() && a.range.end <= text.len() {
-                    t.quote = text[a.range.clone()].to_string();
+                    t.set_quote(&text[a.range.clone()]);
                 }
             }
         }
@@ -1052,7 +1052,7 @@ impl NotePage {
                 page.rechecking.remove(&tid);
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
                 if let Some(t) = page.thread_mut(&tid) {
-                    t.quote = now_text.clone();
+                    t.set_quote(&now_text);
                 }
                 if !body.is_empty() {
                     page.push_message(&tid, Role::Mind, body, cx);
@@ -1180,6 +1180,7 @@ impl NotePage {
             "aboutMe": if s.about_me.trim().is_empty() { Value::Null } else { Value::String(s.about_me.clone()) },
             "threads": threads,
             "now": chrono::Local::now().format("%A %-d %B %Y").to_string(),
+            "letStand": crate::stand::points(&self.note.threads, ed.text()),
         })
     }
 
@@ -1378,6 +1379,9 @@ impl NotePage {
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.reading = None;
+                if let Some(n) = v["repeats"].as_u64() {
+                    log::info!("read held back: it makes let-stand point {n} again");
+                }
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
                 if v["speak"].as_bool() == Some(true) && !body.is_empty() {
                     let quote = v["quote"].as_str().unwrap_or("").to_string();
@@ -1492,6 +1496,9 @@ impl NotePage {
             mind_name: self.mind.name.clone(),
             tag_offset: (0., 0.),
             created_at: Utc::now(),
+            reason: None,
+            ended_at: None,
+            first_quote: None,
         });
         self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.clone(), range, open: true }, cx));
         self.schedule_save(cx);
@@ -1681,6 +1688,11 @@ impl NotePage {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
+                if v["repeats"].as_u64().is_some_and(|n| n > 0) {
+                    page.drop_if_empty(&tid, cx);
+                    crate::toast::show(cx, crate::toast::Kind::Done, crate::stand::NOTHING_NEW);
+                    return;
+                }
                 if body.is_empty() {
                     page.drop_if_empty(&tid, cx);
                     page.notice("Inkling came back with nothing to say. Try again.".into(), cx);
@@ -1809,9 +1821,15 @@ impl NotePage {
             return;
         }
         crate::toast::close(cx, crate::toast::Kind::ThreadDismissed);
-        if let Some(t) = self.thread_mut(&id) {
-            t.status = ThreadStatus::Open;
-        }
+        let Some(quote) = self.thread_mut(&id).map(|t| {
+            t.set_status(ThreadStatus::Open);
+            t.quote.clone()
+        }) else {
+            return;
+        };
+        // the words may have moved while the toast showed: find them again, nearest to where they were
+        let text = self.editor.read(cx).text();
+        let range = if text.get(range.clone()) == Some(quote.as_str()) { range } else { nearest_match(text, &quote, range.start).map_or(range, |i| i..i + quote.len()) };
         self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.clone(), range, open: true }, cx));
         self.snipped.clear();
         self.schedule_save(cx);
@@ -1942,7 +1960,7 @@ impl NotePage {
                 }
                 if v["resolved"].as_bool() == Some(true) {
                     if let Some(t) = page.thread_mut(&tid) {
-                        t.status = ThreadStatus::Resolved;
+                        t.set_status(ThreadStatus::Resolved);
                     }
                     let id = tid.clone();
                     page.editor.update(cx, |e, cx| e.set_anchor_open(&id, false, cx));
@@ -1968,8 +1986,15 @@ impl NotePage {
     }
 
     fn set_status(&mut self, id: &str, status: ThreadStatus, cx: &mut Context<Self>) {
+        // a mind's open point is let stand, with what you typed in its tag's box as your reason
+        let typed = self.replies.get(id).map(|i| i.read(cx).value().to_string()).unwrap_or_default();
+        let mut said = crate::stand::DISMISSED;
         if let Some(t) = self.thread_mut(id) {
-            t.status = status;
+            if status == ThreadStatus::Dismissed {
+                said = crate::stand::dismiss(t, &typed);
+            } else {
+                t.set_status(status);
+            }
         }
         // A dismissed thread will never show its answer: stop asking for it.
         if status == ThreadStatus::Dismissed {
@@ -1989,7 +2014,7 @@ impl NotePage {
                 let range = self.editor.read(cx).anchors().iter().find(|a| a.id == id).map(|a| a.range.clone());
                 if let Some(range) = range {
                     self.last_dismissed = Some((id.to_string(), range, std::time::Instant::now()));
-                    crate::toast::show(cx, crate::toast::Kind::ThreadDismissed, "Thread dismissed");
+                    crate::toast::show(cx, crate::toast::Kind::ThreadDismissed, said);
                 }
                 if let Some(mut r) = self.ropes.remove(id) {
                     r.cut();
@@ -2440,6 +2465,18 @@ impl NotePage {
             Step::Dump(label) => log::info!("script dump {label}: {}", self.debug_state(window, cx)),
             Step::Room(names) => self.pending_room = names.clone(),
             Step::UndoDismiss => self.undo_dismiss(cx),
+            Step::Stand(n, reason) => {
+                let Some(id) = self.nth_thread(*n) else {
+                    log::warn!("script: no thread {n}");
+                    return;
+                };
+                // as a person does it: open the tag, type in its box, Let stand
+                self.activate(Some(id.clone()), window, cx);
+                if let Some(input) = self.replies.get(&id).cloned() {
+                    input.update(cx, |i, cx| i.set_value(reason.clone(), window, cx));
+                }
+                self.set_status(&id, ThreadStatus::Dismissed, cx);
+            }
             Step::Jump(forward) => self.jump_to_open(*forward, window, cx),
             Step::Hover(n) => {
                 let ids: Vec<String> = self.hover_tag.drain().filter_map(|k| k.split_once(':').map(|(id, _)| id.to_string())).collect();
@@ -2561,6 +2598,7 @@ impl NotePage {
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
                 "quote": t.quote, "msgs": t.messages.len(), "drawing": t.drawing.is_some(),
+                "ending": format!("{:?}", t.ending()), "reason": t.reason, "before": t.first_quote,
             })).collect::<Vec<_>>(),
             "anchors": ed.anchors().iter().map(|a| json!({"id": short(&a.id), "range": [a.range.start, a.range.end], "open": a.open})).collect::<Vec<_>>(),
             "read_hashes": self.note.read_hashes.len(),
@@ -2600,6 +2638,8 @@ impl NotePage {
         state["sidebar"] = cx.try_global::<crate::app::SidebarShown>().map_or(Value::Null, |s| json!({"open": s.open, "shown": s.shown}));
         // threads whose question or reply got no answer, with why (Try again in the tag)
         state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
+        // whether the open tag's second button reads Let stand (else Dismiss), or null with none open
+        state["lets_stand"] = json!(self.active.as_ref().and_then(|a| self.note.threads.iter().find(|t| &t.id == a)).map(crate::stand::lets_stand));
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -3518,6 +3558,7 @@ impl NotePage {
             }
             let id_res = id.clone();
             let id_dis = id.clone();
+            let lets_stand = crate::stand::lets_stand(thread);
             let id_copy = id.clone();
             let copied = self.copied.as_ref().is_some_and(|(c, at)| *c == id && at.elapsed() < COPIED_FOR);
             let id_note = id.clone();
@@ -3535,7 +3576,8 @@ impl NotePage {
                             }),
                     )
                     .child(
-                        ui::ghost_button(SharedString::from(format!("dis-{id_dis}")), "Dismiss", &t)
+                        ui::ghost_button(SharedString::from(format!("dis-{id_dis}")), if lets_stand { crate::stand::BUTTON } else { "Dismiss" }, &t)
+                            .when(lets_stand, |b| b.tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new(crate::stand::TOOLTIP).build(window, cx)))
                             .keyed_as("tag:dismiss", 4., thread_color, cx, move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx)),
                     )
                     .child(div().flex_1())

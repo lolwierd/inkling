@@ -93,6 +93,9 @@ pub fn welcome_note(mode: Mode) -> Note {
         mind_name: "Inkling".into(),
         tag_offset: (0., 0.),
         created_at: Utc::now(),
+        reason: None,
+        ended_at: None,
+        first_quote: None,
     });
     for b in note.blocks.iter().skip(1) {
         note.read_hashes.push(crate::store::hash_text(&b.text));
@@ -188,6 +191,9 @@ pub fn first_run_note(mode: Mode) -> Note {
             mind_name: mind.into(),
             tag_offset: (0., 0.),
             created_at: Utc::now(),
+            reason: None,
+            ended_at: None,
+            first_quote: None,
         }
     };
     let mind = |text: &str| Message::new(Role::Mind, text);

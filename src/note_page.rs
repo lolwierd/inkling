@@ -90,6 +90,16 @@ fn mind_thread(mind_name: &str, own: &str, chosen: crate::store::InkColor, t: &T
     crate::theme::ink_color(pick, &t.p)
 }
 
+/// What Marks only puts after a thread's words: a ? for a question, the × its tab shows
+/// for a correction, and its knot while it is being tied off.
+fn mark_glyph(th: &Thread) -> &'static str {
+    match (th.status, th.kind) {
+        (ThreadStatus::Resolved, _) => "\u{2022}",
+        (_, ThoughtKind::Correction) => "\u{d7}",
+        _ => "?",
+    }
+}
+
 /// `text` as a title of at most `max` characters: whole words, then an ellipsis.
 fn short_title(text: &str, max: usize) -> String {
     let text = text.trim();
@@ -2307,7 +2317,13 @@ impl NotePage {
         // the page's geometry as `render` works it out, so the dump matches the screen
         let m = Metrics::for_width(available - 2. * (SHEET_PAD + 14.));
         let fits = m.page() + 2. * SHEET_PAD <= available - 16.;
-        let (_, slots, _) = self.margin_layout(placement, m, cx);
+        let (shown, slots, boxes) = self.margin_layout(placement, m, cx);
+        // Marks only: what follows each thread's words
+        let marks: Vec<String> = if placement == Placement::Marks {
+            shown.iter().filter(|t| boxes.get(&t.id).is_some_and(|r| !r.is_empty())).map(|t| format!("{}:{}", short(&t.id), mark_glyph(t))).collect()
+        } else {
+            vec![]
+        };
         let ed = self.editor.read(cx);
         let error = crate::toast::text_of(cx, crate::toast::Kind::Problem);
         json!({
@@ -2337,6 +2353,7 @@ impl NotePage {
             "cursor_line": ed.line_of(ed.cursor()),
             "kinds": ed.lines().iter().map(|(k, _)| crate::store::kind_name(*k)).collect::<Vec<_>>(),
             "metrics": {"viewport": viewport, "available": available, "column": m.column, "margin": m.margin, "both": m.both, "page": m.page(), "fits": fits, "column_left": m.column_left(), "right_left": m.right_left()},
+            "marks": marks,
             "slots": slots.iter().map(|s| json!({"id": short(&s.id), "side": format!("{:?}", s.side), "anchor": s.anchor_top.as_f32(), "top": s.top.as_f32(), "h": s.height.as_f32()})).collect::<Vec<_>>(),
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
@@ -4034,23 +4051,38 @@ impl Render for NotePage {
             }
         }
 
-        // Marks-only placement: a small knot after each quote opens its tag.
+        // Marks-only placement: a small ? after each quote opens its tag; a correction gets
+        // the × its tab would show, and a thread being tied off its knot.
         let mut marks = vec![];
         if placement == Placement::Marks && !jmw {
             for th in &threads {
                 let Some(rects) = anchor_boxes.get(&th.id) else { continue };
                 let Some(last) = rects.last() else { continue };
                 let id = th.id.clone();
+                let color = color_of(&th.mind_name);
+                let glyph = if th.status == ThreadStatus::Resolved {
+                    div().size(px(6.)).rounded_full().bg(color).into_any_element()
+                } else {
+                    mark_glyph(th).into_any_element()
+                };
                 marks.push(
                     div()
                         .id(SharedString::from(format!("mark-{id}")))
                         .absolute()
-                        .top(last.origin.y + px(2.))
-                        .left(px(m.column_left()) + last.origin.x + last.size.width + px(3.))
-                        .size(px(9.))
-                        .rounded_full()
-                        .bg(thread_color)
+                        .top(last.origin.y + px(1.))
+                        .left(px(m.column_left()) + last.origin.x + last.size.width + px(1.))
+                        .h(px(18.))
+                        .px(px(3.))
+                        .flex()
+                        .items_center()
+                        .rounded(px(4.))
+                        .font_family(SANS)
+                        .text_size(px(ts::UI))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(color)
                         .cursor_pointer()
+                        .hover(move |s| s.bg(p.wash))
+                        .child(glyph)
                         .on_click(cx.listener(move |this, _, window, cx| this.toggle_mark(&id, window, cx)))
                         .into_any_element(),
                 );

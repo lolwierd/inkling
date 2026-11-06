@@ -613,7 +613,7 @@ impl SettingsView {
             let body = match v {
                 Placement::Both => "Your words in the middle, questions to either side.",
                 Placement::Right => "Every question in one column beside your writing.",
-                Placement::Marks => "A small mark after the passage. Open it when you're ready.",
+                Placement::Marks => "A small ? or \u{d7} after the passage. Open it when you're ready.",
             };
             let card = div()
                 .child(parts::page_picture(v, &p, t.voice_ink).w_full())

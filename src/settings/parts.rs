@@ -408,8 +408,11 @@ pub fn page_picture(placement: Placement, p: &Palette, thread: Hsla) -> Div {
             d = d.children(tag(w - 32., 52., second.0 + second.2, p, thread));
         }
         Placement::Marks => {
-            for (x, y) in [(first.0 + first.2 + 3., first.1 - 3.), (second.0 + second.2 + 3., second.1 - 3.)] {
-                d = d.child(div().absolute().left(px(x)).top(px(y)).size(px(6.)).rounded_full().bg(thread));
+            // the ? the page puts after a passage
+            for (x, y) in [(first.0 + first.2 + 2., first.1 - 7.), (second.0 + second.2 + 2., second.1 - 7.)] {
+                d = d.child(
+                    div().absolute().left(px(x)).top(px(y)).text_size(px(9.)).line_height(px(10.)).font_weight(FontWeight::BOLD).text_color(thread).child("?"),
+                );
             }
         }
     }

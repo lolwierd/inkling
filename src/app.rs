@@ -298,6 +298,17 @@ fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
     }
 }
 
+/// The size a script last asked the window for. The jiggle nudges around it, not around
+/// the size the window has now: that lags a resize still landing, and nudging from it
+/// undid the resize.
+static ASKED: std::sync::Mutex<Option<(f32, f32)>> = std::sync::Mutex::new(None);
+
+/// Resize the window for a script step (`size:`, `width:`).
+pub(crate) fn script_resize(window: &mut Window, w: f32, h: f32) {
+    *ASKED.lock().unwrap_or_else(|e| e.into_inner()) = Some((w, h));
+    window.resize(size(px(w), px(h)));
+}
+
 /// Folder names match ignoring case, in any script ("été" is "ÉTÉ").
 fn same_folder_name(a: &str, b: &str) -> bool {
     a.trim().to_lowercase() == b.trim().to_lowercase()
@@ -456,8 +467,10 @@ impl AppView {
                 cx.background_executor().timer(Duration::from_millis(ms)).await;
                 let ok = cx.update(|window, _| {
                     let s = window.viewport_size();
+                    let asked = *ASKED.lock().unwrap_or_else(|e| e.into_inner());
+                    let (w, h) = asked.map_or((s.width, s.height), |(w, h)| (px(w), px(h)));
                     let d = if grow { px(1.) } else { px(-1.) };
-                    window.resize(size(s.width + d, s.height));
+                    window.resize(size(w + d, h));
                 });
                 if ok.is_err() {
                     break;
@@ -542,7 +555,7 @@ impl AppView {
             }
             Step::Quit => cx.quit(),
             Step::Import(dir) => self.import_vault(crate::script::path(dir), cx),
-            Step::Size(w, h) => window.resize(size(px(*w), px(*h))),
+            Step::Size(w, h) => script_resize(window, *w, *h),
             Step::Set(..) => {
                 self.page.update(cx, |p, cx| p.script_step(&step, window, cx));
                 // Appearance, text size and threads change the theme.

@@ -31,6 +31,10 @@ const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
 /// The cloth shows around the page: this much page beyond the margins on each side.
 const SHEET_PAD: f32 = 28.;
+/// The narrowest margin: room for a folded tab.
+const NARROW_MARGIN: f32 = 60.;
+/// An open tag is at least this wide, however slim the margin it hangs from.
+const PANEL_MIN: f32 = 200.;
 /// A tied-off tag stays this long, so you can watch the thread pull taut and knot.
 const TIE_SHOW: Duration = Duration::from_millis(1700);
 /// A snipped thread falls and fades over this long.
@@ -162,7 +166,9 @@ const MAX_WAITING: usize = 16;
 /// middle and a margin on each side, sized about 4:2 column to
 /// margin, shrinking together on narrow windows). When even the narrowest
 /// pair of margins does not fit, the left one goes and every card sits on the
-/// right, so the page never runs off the window.
+/// right; narrower still (a small window with the chat open), the margin slims to
+/// a strip for the folded tabs, so the page never runs off the window or under
+/// the chat.
 #[derive(Clone, Copy, Debug)]
 struct Metrics {
     column: f32,
@@ -185,7 +191,21 @@ impl Metrics {
         }
         let margin = ((avail - gap) * 0.32).clamp(200., 280.);
         let column = (avail - gap - margin).clamp(300., 760.);
-        Self { column, margin, gap, both: false }
+        if column + gap + margin <= avail {
+            return Self { column, margin, gap, both: false };
+        }
+        // Narrower still: first the margin slims to a strip that holds the folded tabs (an
+        // open tag is drawn over the page), then the gap tightens, then the sheet takes
+        // most of the cloth kept around it, and last the column gives way.
+        let margin = (avail - gap - 300.).clamp(NARROW_MARGIN, 200.);
+        let gap = (avail - margin - 300.).clamp(24., 36.);
+        let room = avail.max((300. + gap + margin).min(available - 12.));
+        Self { column: (room - gap - margin).max(160.), margin, gap, both: false }
+    }
+    /// Where a popover of `width` hangs from the page's left: in the margin when it fits
+    /// there, else as far right as the sheet allows, over the column.
+    fn popover_left(&self, width: f32) -> f32 {
+        self.right_left().min(self.page() + SHEET_PAD - width).max(0.)
     }
     fn page(&self) -> f32 {
         if self.both { self.margin * 2. + self.gap * 2. + self.column } else { self.column + self.gap + self.margin }
@@ -2291,8 +2311,8 @@ impl NotePage {
                 cx.global::<Store>().save_settings();
             }
             Step::Width(w) => {
-                let h = window.viewport_size().height;
-                window.resize(size(px(*w), h));
+                let h = window.viewport_size().height.as_f32();
+                crate::app::script_resize(window, *w, h);
             }
             Step::Dump(label) => log::info!("script dump {label}: {}", self.debug_state(window, cx)),
             Step::Room(names) => self.pending_room = names.clone(),
@@ -2466,16 +2486,17 @@ impl NotePage {
         };
         let mind_menu = (menu == Some(Menu::Mind)).then(|| self.menu_card(Menu::Mind, cx));
         let mode_menu = (menu == Some(Menu::Mode)).then(|| self.menu_card(Menu::Mode, cx));
-        div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .gap(px(16.))
-            .h(px(24.))
+        // Two groups: the mind, the brief and the mode on the left; the open count and Hide
+        // threads on the right. A narrow column (a small window with the chat open) wraps
+        // the row, and the right-hand pair moves under the left one, together.
+        let row = || div().flex().flex_wrap().items_center().gap_x(px(16.)).gap_y(px(2.));
+        row()
+            .justify_between()
+            .min_h(px(24.))
             // the controls step back while you write, like the window's own
             .opacity(self.chrome.get())
             .font_family(SANS)
-            .when(!jmw, |d| {
+            .child(row().min_w(px(0.)).when(!jmw, |d| {
                 d.child(
                     div()
                         .relative()
@@ -2513,24 +2534,26 @@ impl NotePage {
                         )
                         .children(mode_menu.map(|card| self.drop_down(card, cx))),
                 )
-            })
-            .child(div().flex_1())
-            .when(!jmw && open > 0, |d| {
-                d.child(
-                    control("open-count", false)
-                        .gap(px(6.))
-                        .child(ui::small_dot(t.voice_ink, 7.))
-                        .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") })
-                        .on_click(cx.listener(|this, _, window, cx| this.jump_to_open(true, window, cx))),
-                )
-            })
-            .when(jmw || self.note.visible_threads() > 0, |d| {
-                d.child(
-                    control("hide-threads", false)
-                        .child(if jmw { "Show threads" } else { "Hide threads" })
-                        .on_click(cx.listener(move |this, _, _, cx| this.set_hidden(!jmw, cx))),
-                )
-            })
+            }))
+            .child(
+                row()
+                    .when(!jmw && open > 0, |d| {
+                        d.child(
+                            control("open-count", false)
+                                .gap(px(6.))
+                                .child(ui::small_dot(t.voice_ink, 7.))
+                                .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") })
+                                .on_click(cx.listener(|this, _, window, cx| this.jump_to_open(true, window, cx))),
+                        )
+                    })
+                    .when(jmw || self.note.visible_threads() > 0, |d| {
+                        d.child(
+                            control("hide-threads", false)
+                                .child(if jmw { "Show threads" } else { "Hide threads" })
+                                .on_click(cx.listener(move |this, _, _, cx| this.set_hidden(!jmw, cx))),
+                        )
+                    }),
+            )
             .into_any_element()
     }
 
@@ -3015,7 +3038,7 @@ impl NotePage {
         };
         let tied = thread.status == ThreadStatus::Resolved;
         let right = side == Side::Right;
-        let width = self.m.margin;
+        let width = self.m.margin.max(PANEL_MIN);
         let natural = self.panel_heights.borrow().get(&id).copied().unwrap_or(px(120.));
         // the spring's own position: it passes 1 by about 4% as the tag drops open
         let e = unfold.max(0.);
@@ -3027,7 +3050,8 @@ impl NotePage {
         let mut lift = px(0.);
         if let Some(b) = self.tab_bounds.borrow().get(&id).copied() {
             let vp = self.viewport;
-            let room_right = vp.width - px(8.) - b.origin.x;
+            // the chat is not room: a tag opens over the page, not under the chat
+            let room_right = vp.width - px(if self.chat_open { CHAT_WIDTH } else { 0. }) - px(8.) - b.origin.x;
             let room_left = b.origin.x + b.size.width - px(8.);
             if open_right && room_right < px(width) && room_left > room_right {
                 open_right = false;
@@ -3512,7 +3536,7 @@ impl NotePage {
             .child(action("tb-ask", ask, "Your own question".into()).on_click(cx.listener(|this, _, window, cx| this.start_ask(window, cx))))
             .child(action("tb-viz", "Sketch it".into(), "Stitched step by step".into()).on_click(cx.listener(|this, _, window, cx| this.sketch_selection(window, cx))));
         Some(
-            deferred(div().absolute().top(top - px(6.)).left(px(self.m.right_left())).occlude().child(card))
+            deferred(div().absolute().top(top - px(6.)).left(px(self.m.popover_left(236.))).occlude().child(card))
                 .with_priority(1)
                 .into_any_element(),
         )
@@ -3611,7 +3635,7 @@ impl NotePage {
                 div()
                     .absolute()
                     .top(top - px(4.))
-                    .left(px(self.m.right_left()))
+                    .left(px(self.m.popover_left(self.m.margin.max(236.))))
                     .w(px(self.m.margin.max(236.)))
                     .occlude()
                     .child(
@@ -4483,16 +4507,34 @@ mod tests {
 
     #[std::prelude::v1::test]
     fn the_page_never_runs_off_the_window() {
-        for w in [410., 520., 600., 690., 720., 800., 868., 900., 1010., 1100., 1320., 1600., 2400.] {
+        // Every width the page can get, from a 720 px window with the chat open up: what
+        // `render` passes is the window less the chat and the cloth around the sheet.
+        let narrowest = 720. - CHAT_WIDTH - 2. * (SHEET_PAD + 14.);
+        let mut last: Option<Metrics> = None;
+        for w in (narrowest as i32..=2400).map(|w| w as f32) {
             let m = Metrics::for_width(w);
-            let usable = (w - 48f32).max(0.);
-            if usable >= 300. + 36. + 200. {
-                assert!(m.page() <= usable + 0.01, "width {w}: page {} > {usable}", m.page());
-            }
-            assert!(m.column >= 300. && m.column <= 760., "width {w}: column {}", m.column);
-            assert!(m.margin >= 200. && m.margin <= 280., "width {w}: margin {}", m.margin);
+            // `render` centres the sheet when it fits: page + padding <= window - 16
+            assert!(m.page() + 2. * SHEET_PAD <= w + 2. * (SHEET_PAD + 14.) - 16., "width {w}: page {} runs off", m.page());
+            assert!(m.column >= 220. && m.column <= 760., "width {w}: column {}", m.column);
+            assert!(m.margin >= NARROW_MARGIN && m.margin <= 280., "width {w}: margin {}", m.margin);
+            assert!(m.gap >= 24., "width {w}: gap {}", m.gap);
             assert!((m.right_left() - (m.column_left() + m.column + m.gap)).abs() < 0.01);
+            // a popover the width of the toolbar stays on the sheet
+            assert!(m.popover_left(236.) + 236. <= m.page() + SHEET_PAD + 0.01, "width {w}: popover off the sheet");
+            // narrowing the window takes from the margin, the gap and the cloth before the
+            // words, and never jumps
+            if let Some(l) = last.filter(|_| !m.both) {
+                assert!(m.column + 0.01 >= l.column || l.both, "width {w}: column {} after {}", m.column, l.column);
+                assert!((m.page() - l.page()).abs() <= 1.01 || l.both, "width {w}: page jumped from {} to {}", l.page(), m.page());
+            }
+            last = Some(m);
         }
+        // A 720 px window with the chat open still gets words a line can hold, and a margin
+        // a folded tab fits in.
+        let tight = Metrics::for_width(narrowest);
+        assert!(tight.column >= 220. && tight.margin >= TAB_W);
+        // The narrow layout only starts where the one-margin page no longer fits.
+        assert_eq!((Metrics::for_width(584.).column, Metrics::for_width(584.).margin), (300., 200.));
         // Wide: a margin on each side, as before.
         let wide = Metrics::for_width(1320.);
         assert!(wide.both);

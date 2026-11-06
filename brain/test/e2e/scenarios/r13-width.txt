@@ -1,5 +1,6 @@
 # The page at four window widths, with and without chat: the margins fold to one side first,
-# and when even that does not fit, the sheet starts at the left edge.
+# and when even that does not fit beside the chat, the margin slims to a strip for the
+# folded tabs and the page still fits.
 dump: w1320
 expect: d.metrics.both && d.metrics.fits
 width: 800
@@ -15,6 +16,6 @@ expect: d.metrics.available < d.metrics.viewport && !d.metrics.both && d.metrics
 width: 720
 wait: 500
 dump: w720-chat
-expect: !d.metrics.both && !d.metrics.fits && d.metrics.column < dumps["w800"].metrics.column   // too narrow beside the chat: the sheet starts at the left so the column stays in view
+expect: !d.metrics.both && d.metrics.fits && d.metrics.column < dumps["w800"].metrics.column && d.metrics.margin < 100   // too narrow for a full margin beside the chat: it slims, and the page still fits
 expect: d.chat === 2
 quit

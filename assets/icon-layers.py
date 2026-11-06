@@ -120,14 +120,16 @@ def srgb(hex_color):
 
 def main():
     (ICON / "Assets").mkdir(parents=True, exist_ok=True)
-    fills = {}
+    fills, drawn = {}, {}
     for drawing, suffix, appearance in ((LOGO / "icon.svg", "", None), (LOGO / "icon-dark.svg", "-dark", "dark")):
-        fills[appearance], parts = layers(drawing)
-        for name, elements in parts.items():
+        fills[appearance], drawn[appearance] = layers(drawing)
+        for name, elements in drawn[appearance].items():
             print(f"wrote {write(name + suffix, elements).relative_to(REPO)}")
-    thread = next(n.get("fill") for n in parts["i"][0] if tag(n) == "path")
+    # Mono starts from the dark drawing: light thread on dark cloth, as clear and tinted are.
+    dark = drawn["dark"]
+    thread = next(n.get("fill") for n in dark["i"][0] if tag(n) == "path")
     for name in ("border", "i", "knot"):
-        print(f"wrote {write(name + '-mono', mono(parts[name], thread)).relative_to(REPO)}")
+        print(f"wrote {write(name + '-mono', mono(dark[name], thread)).relative_to(REPO)}")
     # The background is icon.json's fill, per appearance; it must be the logo's tile.
     spec = json.loads((ICON / "icon.json").read_text())
     have = {s.get("appearance"): s["value"].get("solid") for s in spec.get("fill-specializations", [])}

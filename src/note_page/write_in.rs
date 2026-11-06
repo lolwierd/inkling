@@ -43,10 +43,11 @@ pub(super) struct WrittenIn {
 }
 
 /// The reply Write it in would put in the note for `t`: your last reply, when a reply tied
-/// the thread off (not your hand, an edit or an answer in the note), the thread's answer is
-/// not in the note yet, and the reply has at least [`MIN_WORDS`] words.
+/// a mind's thread off (not your hand, an edit or an answer in the note, and not a thread
+/// of your own, where nothing was asked of a mind), the thread's answer is not in the note
+/// yet, and the reply has at least [`MIN_WORDS`] words.
 pub(super) fn reply_to_write_in(t: &Thread) -> Option<&str> {
-    if t.status != ThreadStatus::Resolved || t.tied_by != Some(TiedBy::Reply) || t.answer.is_some() {
+    if t.own || t.status != ThreadStatus::Resolved || t.tied_by != Some(TiedBy::Reply) || t.answer.is_some() {
         return None;
     }
     let reply = t.messages.iter().rev().find(|m| m.role == Role::You)?.text.trim();
@@ -56,13 +57,16 @@ pub(super) fn reply_to_write_in(t: &Thread) -> Option<&str> {
 impl NotePage {
     /// Whether thread `id`'s tag offers Write it in now: it is the open tag, threads show,
     /// nothing is on its way to it, its words are in the note, and it has a reply to write
-    /// in that the note does not already say (you typed it, or ⌘⇧Z brought it back).
+    /// in that the note does not already say (you typed it, or ⌘⇧Z brought it back). A
+    /// thread between notes is offered only in its home note: at its far end its answer
+    /// belongs to the home note's words.
     fn offers_write_in(&self, id: &str, cx: &App) -> bool {
         let Some(reply) = self.note.threads.iter().find(|t| t.id == id).and_then(reply_to_write_in) else { return false };
         let ed = self.editor.read(cx);
         self.active.as_deref() == Some(id)
             && !self.just_my_words
             && !self.pending.contains_key(id)
+            && !self.visiting_here(id)
             && ed.anchor(id).is_some()
             && !ed.text().contains(reply)
     }
@@ -290,7 +294,8 @@ mod tests {
         }
         let written = Thread { answer: Some(Answer { start: 1, end: 9, quote: "I start".into() }), ..t.clone() };
         assert!(reply_to_write_in(&written).is_none(), "already in the note");
-        let unanswered = Thread { messages: vec![Message::new(Role::Mind, "Starting from how far?")], ..t };
+        let unanswered = Thread { messages: vec![Message::new(Role::Mind, "Starting from how far?")], ..t.clone() };
         assert!(reply_to_write_in(&unanswered).is_none(), "no reply of yours");
+        assert!(reply_to_write_in(&Thread { own: true, ..t }).is_none(), "a thread of your own asked nothing of a mind");
     }
 }

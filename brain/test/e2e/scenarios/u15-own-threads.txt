@@ -45,6 +45,7 @@ quit
 # reply (no reread, no tie-off) and never a learn (your own lines stay yours).
 expect: tasks.filter(t => t === "ask").length === 2
 expect: !tasks.includes("reply") && !tasks.includes("learn")
+expect: !tasks.includes("relate")   // no thread of yours starts a look at other notes
 expect: requests.filter(r => r.input.task === "ask")[0].input.ctx.mind.name === "Inkling"
 expect: requests.filter(r => r.input.task === "ask")[0].input.question === "Is four too many with the long run on Sunday?"
 expect: requests.filter(r => r.input.task === "ask")[0].input.history.length === 1

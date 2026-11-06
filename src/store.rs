@@ -1956,7 +1956,7 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
         a.threads.push(Thread {
             id: "t".into(), start: 2, end: 7, quote: "Words".into(), kind: ThoughtKind::Question, messages: vec![], drawing: None,
             status: ThreadStatus::Open, side: Side::Right, mind_name: "Inkling".into(), tag_offset: (0., 0.), created_at: a.created_at,
-            reason: None, ended_at: None, first_quote: None,
+            reason: None, ended_at: None, first_quote: None, ..Default::default()
         });
         a.elsewhere.push(Elsewhere { thread: "t".into(), note: "b".into(), title: "B".into(), ..Default::default() });
         let mut b = a.clone();

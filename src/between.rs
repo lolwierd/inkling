@@ -802,6 +802,7 @@ mod tests {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     }
 

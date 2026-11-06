@@ -45,4 +45,4 @@ dump: back
 expect: d.threads.find(t => t.own).status === "Open" && d.undo === null
 quit
 expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> **Me** on “Strength work twice a week”") && r.msg.includes("> *Me:* Calves or hips first?"))
-expect: tasks.filter(t => t !== "ask").length === 0   // a waiting note: only the one Ask went out
+expect: tasks.filter(t => t !== "ask").length === 0   // a waiting note: only the one Ask went out, never a read or a relate

@@ -1084,7 +1084,8 @@ impl AppView {
                     div()
                         .id("toggle-sidebar")
                         .absolute()
-                        .top(px(10.))
+                        // centred on the traffic lights' line, as Chat is
+                        .top(px(11.))
                         .left(px(76.))
                         .p(px(4.))
                         .rounded(px(5.))
@@ -1100,7 +1101,7 @@ impl AppView {
                 .child(
                     div()
                         .absolute()
-                        .top(px(9.))
+                        .top(px(8.))
                         .right(px(14.))
                         .flex()
                         .items_center()
@@ -1258,7 +1259,7 @@ impl AppView {
             );
             if !collapsed {
                 if inside.is_empty() {
-                    list = list.child(div().pl(px(42.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
+                    list = list.child(div().pl(px(49.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
                 }
                 for n in inside {
                     list = list.child(note_row(n, 14., cx));
@@ -1329,7 +1330,8 @@ impl AppView {
                             .pl(px(86.))
                             .pr(px(10.))
                             .child(ui::wordmark(&t, 18.))
-                            .child(ui::icon_button("sidebar-close", "x", 13., &t).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
+                            // 1 px above the row's middle: on the traffic lights' line
+                            .child(ui::icon_button("sidebar-close", "x", 13., &t).mb(px(2.)).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
                                 this.sidebar_open = false;
                                 cx.notify();
                             })),

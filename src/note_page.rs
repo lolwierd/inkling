@@ -2677,10 +2677,12 @@ impl NotePage {
                         .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
                 )
             })
-            .child(div().flex_1())
-            // the open count and Hide threads wrap together
+            // the open count and Hide threads wrap together, and keep to the right edge on
+            // whichever line they land (a spacer that wrapped with them, or did not, put
+            // them left or right by turns as the window narrowed)
             .child(
                 div()
+                    .ml_auto()
                     .flex()
                     .items_center()
                     .gap(px(16.))
@@ -4086,8 +4088,9 @@ impl NotePage {
             .child(
                 div()
                     .px(px(16.))
-                    .pt(px(12.))
-                    .pb(px(10.))
+                    // its row centred on the traffic lights' line, where Chat was
+                    .pt(px(10.))
+                    .pb(px(12.))
                     .child(
                         div()
                             .h(px(24.))

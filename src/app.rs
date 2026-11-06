@@ -659,7 +659,13 @@ impl AppView {
                 .text_size(px(11.))
                 .font_family(SANS)
                 .text_color(p.faint)
-                .child("Hold \u{2325} to speak \u{b7} \u{2318}J chat \u{b7} \u{2318}K notes")
+                .child({
+                    let keys = |name: &str| crate::shortcuts::keys_for(name, cx);
+                    let mut parts = vec!["Hold \u{2325} to speak".to_string()];
+                    parts.extend(keys("app::ToggleChat").map(|k| format!("{k} chat")));
+                    parts.extend(keys("app::OpenPalette").map(|k| format!("{k} notes")));
+                    parts.join(" \u{b7} ")
+                })
                 .into_any_element();
         }
         let partial = if self.partial.is_empty() { "Listening…".to_string() } else { self.partial.clone() };
@@ -1064,7 +1070,16 @@ impl AppView {
             list = list.child(note_row(n, 0., cx));
         }
 
-        let action = |id: &'static str, label: &'static str, keys: &'static str| {
+        // the keys each row shows are the ones bound now (Settings > Shortcuts)
+        let keys_of = |name: &str| crate::shortcuts::keys_for(name, cx).unwrap_or_default();
+        let (k_copy, k_export, k_hide, k_settings, k_find) = (
+            keys_of("app::CopyNote"),
+            keys_of("app::ExportNote"),
+            keys_of("app::JustMyWords"),
+            keys_of("app::OpenSettings"),
+            keys_of("app::OpenPalette"),
+        );
+        let action = |id: &'static str, label: &'static str, keys: String| {
             div()
                 .id(id)
                 .mx(px(6.))
@@ -1140,7 +1155,7 @@ impl AppView {
                             .hover(move |s| s.bg(p.wash))
                             .child(icon("search", 12., p.faint))
                             .child(div().flex_1().child("Find or start a note"))
-                            .child(div().text_size(px(10.)).text_color(p.faint).child("⌘K"))
+                            .child(div().text_size(px(10.)).text_color(p.faint).child(k_find))
                             .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
                     )
                     .child(
@@ -1202,21 +1217,21 @@ impl AppView {
                             .border_color(p.rule)
                             .child(div().px(px(14.)).text_size(px(11.)).text_color(p.ink).truncate().child(who))
                             .child(div().px(px(14.)).mb(px(6.)).text_size(px(10.)).text_color(p.faint).child("All notes saved on this Mac"))
-                            .child(action("sb-copy", "Copy this note", "⌘⇧C").on_click(cx.listener(|this, _, window, cx| {
+                            .child(action("sb-copy", "Copy this note", k_copy).on_click(cx.listener(|this, _, window, cx| {
                                 this.copy_note(cx);
                                 this.sidebar_open = false;
                                 let _ = window;
                             })))
-                            .child(action("sb-export", "Export this note", "⌘⇧E").on_click(cx.listener(|this, _, window, cx| {
+                            .child(action("sb-export", "Export this note", k_export).on_click(cx.listener(|this, _, window, cx| {
                                 this.open_export(window, cx);
                             })))
-                            .child(action("sb-jmw", "Hide threads", "⌘⇧.").on_click(cx.listener(|this, _, _, cx| {
+                            .child(action("sb-jmw", "Hide threads", k_hide).on_click(cx.listener(|this, _, _, cx| {
                                 this.toggle_jmw(cx);
                                 this.sidebar_open = false;
                             })))
-                            .child(action("sb-custom", "Customize Inkling", "⌘,").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Customize, window, cx))))
-                            .child(action("sb-minds", "Minds", "").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Minds, window, cx))))
-                            .child(action("sb-model", "Model", "").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Model, window, cx)))),
+                            .child(action("sb-custom", "Customize Inkling", k_settings).on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Customize, window, cx))))
+                            .child(action("sb-minds", "Minds", String::new()).on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Minds, window, cx))))
+                            .child(action("sb-model", "Model", String::new()).on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Model, window, cx)))),
                     ),
             )
             .child(

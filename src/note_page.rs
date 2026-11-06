@@ -3170,7 +3170,8 @@ impl NotePage {
                     })),
             );
         }
-        let action = |id: &'static str, title: &'static str, hint: &'static str| {
+        let find_keys = crate::shortcuts::keys_for("app::FindLooseThread", cx).unwrap_or_default();
+        let action = |id: &'static str, title: &'static str, hint: SharedString| {
             div()
                 .id(id)
                 .mx(px(4.))
@@ -3216,9 +3217,9 @@ impl NotePage {
             )
             .child(div().px(px(6.)).pt(px(4.)).child(colors))
             .child(div().mx(px(8.)).my(px(4.)).border_t_1().border_color(p.rule))
-            .child(action("tb-riddle", "Find a loose thread", "⌘↵").on_click(cx.listener(|this, _, window, cx| this.find_loose_thread(window, cx))))
-            .child(action("tb-ask", "Ask Inkling", "Your own question").on_click(cx.listener(|this, _, window, cx| this.start_ask(window, cx))))
-            .child(action("tb-viz", "Sketch it", "Stitched out step by step").on_click(cx.listener(|this, _, window, cx| this.sketch_selection(window, cx))));
+            .child(action("tb-riddle", "Find a loose thread", find_keys.into()).on_click(cx.listener(|this, _, window, cx| this.find_loose_thread(window, cx))))
+            .child(action("tb-ask", "Ask Inkling", "Your own question".into()).on_click(cx.listener(|this, _, window, cx| this.start_ask(window, cx))))
+            .child(action("tb-viz", "Sketch it", "Stitched out step by step".into()).on_click(cx.listener(|this, _, window, cx| this.sketch_selection(window, cx))));
         Some(
             deferred(div().absolute().top(top - px(6.)).left(px(self.m.right_left())).occlude().child(card))
                 .with_priority(1)
@@ -3890,7 +3891,7 @@ impl Render for NotePage {
                         .child("Undo")
                         .on_click(cx.listener(|this, _, _, cx| this.undo_dismiss(cx))),
                 )
-                .child(div().text_color(p.faint).child("\u{2325}\u{2318}Z"))
+                .children(crate::shortcuts::keys_for("app::UndoDismiss", cx).map(|k| div().text_color(p.faint).child(k)))
         });
 
         let body = div()

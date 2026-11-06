@@ -392,6 +392,8 @@ describe("what each task sends back", () => {
     const correction = thought(true, "so the 10k takes 50 minutes", "At 5:30 a km the 10k takes 55:00.", { kind: "correction", check: sum, question: "How long is 10 km at 5:30?" });
     b.send(run("w", { task: "read", ctx: ctx(pace), target: `${pace} ${fake(correction)}`, through: true }));
     expect((await b.end("w")).data).toMatchObject({ kind: "correction", quote: "so the 10k takes 50 minutes", check: { sum: [{ sum: "5:30 × 10", is: "55:00", rounded: false }] } });
+  });
+
   describe("sources from the web, only when real", () => {
     const TOWER = "https://en.wikipedia.org/wiki/Eiffel_Tower";
     const target = "The Eiffel Tower is 450 metres tall.";

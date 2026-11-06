@@ -271,7 +271,7 @@ New:
 
 | File | What |
 |---|---|
-| `src/loose_ends.rs` | The list: `collect` (rows from the store and the page's note), `narrow`, `age_words`, `who`, `start_at` (walking), `refresh` (each row's state), `describe` (the dump); the `LooseEnds` view (the card, its keys, `uniform_list` rows) and its `LooseEndsEvent` (`Go`, `Notes`, `Dismiss`). |
+| `src/loose_ends.rs` | The list: `collect` (rows from the store and the page's note), `narrow`, `age_words`, `who`, `start_at` (walking), `refresh` (each row's state), `describe` (the dump); the `Card` view (the card, its keys, `uniform_list` rows) and its `CardEvent` (`Go`, `Dismiss`). ⌘K over the card is the window's `OpenPalette`, which takes the typed words (`AppView::take_loose_query`). |
 | `src/app/goto.rs` | `AppView::open_loose_ends`, its events, `go_to_thread` (open the note, then the page's `go_to_thread`), switching between ⌘K and Loose ends with the typed words. |
 | `src/note_page/goto.rs` | `NotePage::go_to_thread` (show threads, caret, tag, reply box) and `finish_goto` (the scroll, once the note is laid out), `goto_offset` (the pure scroll rule). |
 | `brain/test/e2e/fixtures/loose-ends`, `loose-ends-many` | The notebooks above, written by `design/tools/loose_ends_notebook.py`. |
@@ -286,7 +286,8 @@ Small hooks in shared files, each a few lines, new struct fields last:
 | `src/note_page.rs` | `mod goto;`; one field (`goto`); one call in `render` (`finish_goto`); one line in `debug_state` (`loose_ends`). |
 | `src/palette.rs` | `query` and `set_query`, so the typed words carry across; the footer hint. |
 | `src/shortcuts.rs` | the binding (⇧⌘K) and its label. |
-| `AGENTS.md`, `design/capabilities.md`, `docs/agents/testing.md` | the map, the capability, the dump's new field. |
+| `src/script.rs` | the doc comment names `open: loose` (the step itself is the existing `open:`). |
+| `AGENTS.md`, `design/capabilities.md`, `docs/agents/testing.md`, `brain/test/e2e/fixtures/README.md` | the map, the capability, the dump's new field, the two notebooks. |
 
 Size: **S**, as the manifesto has it: about a day with the tests.
 

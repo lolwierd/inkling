@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
@@ -464,6 +464,43 @@ simple_enum!(InkColor {
     Purple => "Plum", Brown => "Walnut", Orange => "Ochre"
 } default Ink);
 
+/// A model Claude Code offers, as the Agent SDK's `supportedModels()` reports it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(default)]
+pub struct ModelChoice {
+    /// What to pass as the model: an alias ("opus"), a full id, or "default".
+    pub value: String,
+    pub name: String,
+    pub description: String,
+    /// The full id an alias stands for, when the SDK says.
+    pub resolved: Option<String>,
+    /// The effort levels it takes: None when the SDK did not say, empty when it takes none.
+    pub efforts: Option<Vec<String>>,
+}
+
+impl ModelChoice {
+    /// A specific version ("claude-opus-4-8") rather than a name that moves with releases.
+    pub fn is_pinned(&self) -> bool {
+        self.value.starts_with("claude-")
+    }
+}
+
+/// Which row the saved `model` setting picks. Empty is Claude Code's default, which the SDK
+/// lists as "default". Otherwise its own row, else a row that stands for it (an alias that
+/// resolves to it, the default last), so a saved full id shows as its alias.
+pub fn chosen_model(models: &[ModelChoice], model: &str) -> Option<usize> {
+    let model = model.trim();
+    if model.is_empty() {
+        return models.iter().position(|m| m.value == "default");
+    }
+    let stands_for = |m: &ModelChoice| m.resolved.as_deref() == Some(model);
+    models
+        .iter()
+        .position(|m| m.value == model)
+        .or_else(|| models.iter().position(|m| m.value != "default" && stands_for(m)))
+        .or_else(|| models.iter().position(stands_for))
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Settings {
@@ -477,10 +514,15 @@ pub struct Settings {
     pub ink: InkColor,
     pub about_me: String,
     pub learns_about_me: bool,
+    /// Empty: whatever Claude Code uses by default.
     pub model: String,
     pub effort_read: String,
     pub effort: String,
     pub last_note: Option<String>,
+    /// The models Claude Code reported last, shown while the brain is not running.
+    pub models: Vec<ModelChoice>,
+    /// Shortcuts you changed: action name to keys ("cmd-shift-k"); an empty list is none.
+    pub shortcuts: BTreeMap<String, Vec<String>>,
 }
 
 impl Default for Settings {
@@ -496,10 +538,12 @@ impl Default for Settings {
             ink: InkColor::Ink,
             about_me: String::new(),
             learns_about_me: true,
-            model: "claude-opus-5-5".into(),
+            model: String::new(),
             effort_read: "low".into(),
             effort: "medium".into(),
             last_note: None,
+            models: vec![],
+            shortcuts: BTreeMap::new(),
         }
     }
 }
@@ -953,7 +997,8 @@ mod tests {
         assert_eq!((d.pace, d.placement, d.appearance), (Pace::Regular, Placement::Both, Appearance::System));
         assert_eq!((d.text_size, d.lettering, d.ink), (TextSize::Default, Lettering::Own, InkColor::Ink));
         assert!(!d.ink_from_pointer && d.learns_about_me && d.about_me.is_empty() && d.last_note.is_none());
-        assert_eq!((d.model.as_str(), d.effort_read.as_str(), d.effort.as_str()), ("claude-opus-5-5", "low", "medium"));
+        assert_eq!((d.model.as_str(), d.effort_read.as_str(), d.effort.as_str()), ("", "low", "medium"), "Claude Code picks the model");
+        assert!(d.models.is_empty() && d.shortcuts.is_empty());
         assert_eq!(serde_json::from_str::<Settings>("{}").unwrap(), d);
 
         let tmp = TempDir::new();
@@ -969,10 +1014,21 @@ mod tests {
             ink: InkColor::Orange,
             about_me: "I teach physics. ünïcödé ✓".into(),
             learns_about_me: false,
-            model: "claude-haiku-5-5".into(),
+            model: "sonnet".into(),
             effort_read: "medium".into(),
             effort: "high".into(),
             last_note: Some("abc".into()),
+            models: vec![
+                ModelChoice { value: "default".into(), name: "Default".into(), description: "Recommended".into(), resolved: None, efforts: None },
+                ModelChoice {
+                    value: "sonnet".into(),
+                    name: "Sonnet".into(),
+                    description: String::new(),
+                    resolved: Some("claude-sonnet-x".into()),
+                    efforts: Some(vec!["low".into(), "high".into()]),
+                },
+            ],
+            shortcuts: BTreeMap::from([("app::NewNote".to_string(), vec!["alt-cmd-n".to_string()]), ("app::Quit".to_string(), vec![])]),
         };
         store.save_settings();
         let reopened = Store::open_at(tmp.0.clone()).unwrap();
@@ -991,12 +1047,49 @@ mod tests {
         assert_eq!(store.settings.about_me, "Keep this paragraph.");
         assert_eq!(store.settings.pace, Pace::Slow);
         assert_eq!(store.settings.appearance, Appearance::System);
-        assert_eq!(store.settings.model, "claude-opus-5-5");
+        assert_eq!(store.settings.model, "");
 
         fs::write(tmp.0.join("settings.json"), "{\"about_me\": \"cut off").unwrap();
         assert_eq!(Store::open_at(tmp.0.clone()).unwrap().settings, Settings::default());
         fs::write(tmp.0.join("settings.json"), "[]").unwrap();
         assert_eq!(Store::open_at(tmp.0.clone()).unwrap().settings, Settings::default());
+    }
+
+    #[std::prelude::v1::test]
+    fn a_saved_model_picks_its_own_row_then_an_alias_then_the_default() {
+        let m = |value: &str, resolved: &str| ModelChoice { value: value.into(), resolved: Some(resolved.into()), ..Default::default() };
+        let list = vec![
+            m("default", "claude-opus-x"),
+            m("opus", "claude-opus-x"),
+            m("sonnet", "claude-sonnet-x"),
+            m("claude-sonnet-x", "claude-sonnet-x"),
+            m("claude-haiku-y", "claude-haiku-y"),
+        ];
+        assert_eq!(chosen_model(&list, ""), Some(0), "empty is Claude Code's default");
+        assert_eq!(chosen_model(&list, "default"), Some(0));
+        assert_eq!(chosen_model(&list, "opus"), Some(1));
+        assert_eq!(chosen_model(&list, " claude-opus-x "), Some(1), "a saved full id shows as its alias, not the default");
+        assert_eq!(chosen_model(&list, "claude-sonnet-x"), Some(3), "its own row wins over the alias");
+        assert_eq!(chosen_model(&list, "claude-haiku-y"), Some(4));
+        assert_eq!(chosen_model(&list, "gpt"), None);
+        assert_eq!(chosen_model(&[m("opus", "x")], ""), None);
+        assert!(list[4].is_pinned() && !list[1].is_pinned() && !list[0].is_pinned());
+        let only_default = vec![m("default", "claude-opus-x")];
+        assert_eq!(chosen_model(&only_default, "claude-opus-x"), Some(0), "the default when nothing else stands for it");
+    }
+
+    #[std::prelude::v1::test]
+    fn shortcuts_and_models_that_do_not_read_cost_only_themselves() {
+        let tmp = TempDir::new();
+        fs::write(
+            tmp.0.join("settings.json"),
+            r#"{"about_me": "Kept.", "shortcuts": {"app::NewNote": "cmd-n"}, "models": [{"value": 3}], "pace": "slow"}"#,
+        )
+        .unwrap();
+        let store = Store::open_at(tmp.0.clone()).unwrap();
+        assert_eq!(store.settings.about_me, "Kept.");
+        assert_eq!(store.settings.pace, Pace::Slow);
+        assert!(store.settings.shortcuts.is_empty() && store.settings.models.is_empty());
     }
 
     #[std::prelude::v1::test]

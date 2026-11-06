@@ -38,10 +38,13 @@
 //   FAKE_READY_DELAY_MS=0        delay before the ready event; FAKE_NO_READY=1 never sends it
 //   FAKE_EXIT_AFTER=N            exit after the Nth run request arrives
 //   FAKE_READ_DEFAULT=speak      read answers speak unless [[silent]]; "silent" flips it
+//   FAKE_MODELS=none             status reports no model list (default: the list the real
+//                                SDK gave on 6 Nov 2026, test/fixtures/supported-models.json)
 //
 // Every request and every non-delta event is logged to stderr (the app sends it
 // to <data dir>/brain.log) as `[fake] recv {...}` / `[fake] send {...}`.
 
+import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 type Any = Record<string, any>;
@@ -315,9 +318,11 @@ function start() {
       case "cancel":
         cancel(req.id);
         break;
-      case "status":
-        emit({ ev: "status", id: req.id, data: { account: { email: "fake@example.test", subscriptionType: "fake" }, models: null } });
+      case "status": {
+        const models = env.FAKE_MODELS === "none" ? null : JSON.parse(readFileSync(new URL("../fixtures/supported-models.json", import.meta.url), "utf8"));
+        emit({ ev: "status", id: req.id, data: { account: { email: "fake@example.test", subscriptionType: "fake" }, models } });
         break;
+      }
       case "shutdown":
         process.exit(0);
     }

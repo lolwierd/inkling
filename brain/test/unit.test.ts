@@ -211,7 +211,21 @@ describe("accountStatus", () => {
   test("answers with the account and models", async () => {
     const s: any = await accountStatus(500);
     expect(s.account.email).toBe("writer@example.com");
-    expect(s.models.length).toBe(1);
+    expect(s.models).toEqual([{ value: "claude-opus-5-5", displayName: "Opus 5.5" }]);
+  });
+  test("asks without naming a model or an effort", async () => {
+    let seen: any;
+    setQueryForTests(((args: any) => {
+      seen = args.options;
+      return fakeQuery(args);
+    }) as any);
+    try {
+      await accountStatus(500);
+    } finally {
+      setQueryForTests(fakeQuery as any);
+    }
+    expect(seen.model).toBeUndefined();
+    expect(seen.effort).toBeUndefined();
   });
   test("a hung runtime times out with an error instead of hanging", async () => {
     process.env.FAKE_STATUS = "hang";

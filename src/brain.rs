@@ -8,6 +8,8 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use gpui_kit::{App, AppContext as _, Context, Entity, Global, Task};
 use serde_json::{Value, json};
+
+use crate::store::{ModelChoice, Store, chosen_model};
 use std::{
     collections::HashMap,
     fs::OpenOptions,
@@ -55,9 +57,34 @@ pub struct Brain {
     next_id: u64,
     pub state: BrainState,
     pub account: Option<Account>,
+    /// The models this brain's Claude Code reported, in its order; None until it says.
+    pub models: Option<Vec<ModelChoice>>,
     pub limit: Option<Limit>,
     pub last_error: Option<String>,
     _reader: Option<Task<()>>,
+}
+
+/// Effort levels from least to most, as the SDK names them.
+pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
+/// The effort to send with `model`: `effort` when the model takes it, else the nearest
+/// level it does take (the lower one on a tie), and none at all for a model that takes
+/// none. A model the list does not know, or one it gives no levels for, gets `effort`.
+pub fn effort_for(models: &[ModelChoice], model: &str, effort: &str) -> String {
+    let Some(levels) = chosen_model(models, model).and_then(|i| models[i].efforts.as_ref()) else {
+        return effort.to_string();
+    };
+    if levels.iter().any(|l| l == effort) {
+        return effort.to_string();
+    }
+    let rank = |e: &str| EFFORTS.iter().position(|x| *x == e);
+    let Some(want) = rank(effort) else { return levels.first().cloned().unwrap_or_default() };
+    levels
+        .iter()
+        .filter_map(|l| rank(l).map(|r| (r.abs_diff(want), r, l)))
+        .min_by_key(|(distance, r, _)| (*distance, *r))
+        .map(|(_, _, l)| l.clone())
+        .unwrap_or_default()
 }
 
 pub struct GlobalBrain(pub Entity<Brain>);
@@ -112,6 +139,7 @@ impl Brain {
                 next_id: 1,
                 state: BrainState::Starting,
                 account: None,
+                models: None,
                 limit: None,
                 last_error: None,
                 _reader: None,
@@ -151,10 +179,30 @@ impl Brain {
                 }
             }
         }));
-        if self.account.is_none() {
+        if self.account.is_none() || self.models.is_none() {
             self.request_status();
         }
         Ok(())
+    }
+
+    /// The models to offer: what Claude Code reports now, else what it reported last time
+    /// (kept in settings.json), else none. The flag says whether the list is live.
+    pub fn model_choices(&self, cx: &App) -> (Vec<ModelChoice>, bool) {
+        match &self.models {
+            Some(list) => (list.clone(), true),
+            None => (cx.global::<Store>().settings.models.clone(), false),
+        }
+    }
+
+    /// Ask Claude Code again who is signed in and which models it offers (no model turn).
+    /// Starts the brain when it is not running; starting asks on its own.
+    pub fn check_status(&mut self, cx: &mut Context<Self>) {
+        if self.proc.is_none() {
+            let _ = self.start(cx);
+            cx.notify();
+        } else {
+            self.request_status();
+        }
     }
 
     fn handle(&mut self, generation: u64, line: Option<Value>, cx: &mut Context<Self>) {
@@ -188,8 +236,21 @@ impl Brain {
                 self.pending.deliver(&id, BrainMsg::Error { kind, message }, cx);
                 cx.notify();
             }
-            Event::Status(account) => {
+            Event::Status { account, models } => {
                 self.account = account;
+                if let Some(models) = models {
+                    log::info!(
+                        "brain: Claude Code offers {}",
+                        models.iter().map(|m| m.value.as_str()).collect::<Vec<_>>().join(", ")
+                    );
+                    // Kept for when the brain is not running, so Settings still lists them.
+                    let store = cx.global_mut::<Store>();
+                    if store.settings.models != models {
+                        store.settings.models = models.clone();
+                        store.save_settings();
+                    }
+                    self.models = Some(models);
+                }
                 cx.notify();
             }
             Event::Limit(limit) => {
@@ -230,6 +291,8 @@ impl Brain {
     ) -> String {
         let id = format!("r{}", self.next_id);
         self.next_id += 1;
+        // A level the model does not take would fail the call; send the nearest one.
+        let effort = effort_for(&self.model_choices(cx).0, model, effort);
         let req = json!({
             "op": "run",
             "id": id,
@@ -320,9 +383,37 @@ enum Event {
     Delta { id: String, text: String },
     Done { id: String, data: Value },
     Error { id: String, kind: String, message: String },
-    Status(Option<Account>),
+    Status { account: Option<Account>, models: Option<Vec<ModelChoice>> },
     Limit(Limit),
     Unknown,
+}
+
+/// The status reply's `models` (the SDK's `supportedModels()`): rows without a value are
+/// dropped, as are repeats. None when there is no list, or nothing usable in it.
+fn parse_models(v: Option<&Value>) -> Option<Vec<ModelChoice>> {
+    let mut out: Vec<ModelChoice> = vec![];
+    for m in v?.as_array()? {
+        let text = |key: &str| m.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+        let Some(value) = text("value") else { continue };
+        if out.iter().any(|o| o.value == value) {
+            continue;
+        }
+        let efforts = if m.get("supportsEffort").and_then(Value::as_bool) == Some(false) {
+            Some(vec![])
+        } else {
+            m.get("supportedEffortLevels").and_then(Value::as_array).map(|levels| {
+                levels.iter().filter_map(Value::as_str).filter(|l| EFFORTS.contains(l)).map(String::from).collect()
+            })
+        };
+        out.push(ModelChoice {
+            name: text("displayName").unwrap_or_else(|| value.clone()),
+            description: text("description").unwrap_or_default(),
+            resolved: text("resolvedModel"),
+            efforts,
+            value,
+        });
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 fn parse_event(v: &Value) -> Event {
@@ -337,10 +428,13 @@ fn parse_event(v: &Value) -> Event {
             kind: s("kind").filter(|k| !k.is_empty()).unwrap_or("other").to_string(),
             message: s("message").unwrap_or("").to_string(),
         },
-        "status" => Event::Status(v.pointer("/data/account").filter(|a| a.is_object()).map(|a| {
-            let field = |key: &str| a.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
-            Account { email: field("email"), plan: field("subscriptionType") }
-        })),
+        "status" => Event::Status {
+            account: v.pointer("/data/account").filter(|a| a.is_object()).map(|a| {
+                let field = |key: &str| a.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from);
+                Account { email: field("email"), plan: field("subscriptionType") }
+            }),
+            models: parse_models(v.pointer("/data/models")),
+        },
         "limit" => Event::Limit(Limit {
             status: s("status").unwrap_or("").to_string(),
             resets_at: v.get("resetsAt").and_then(|t| t.as_i64().or_else(|| t.as_f64().map(|f| f as i64))),
@@ -627,14 +721,16 @@ mod tests {
             ev(r#"{"ev":"error","id":"r1","message":"boom"}"#),
             Event::Error { id: "r1".into(), kind: "other".into(), message: "boom".into() }
         );
+        let signed_in = Some(Account { email: Some("a@b.c".into()), plan: Some("max".into()) });
         assert_eq!(
             ev(r#"{"ev":"status","id":"status-1","data":{"account":{"email":"a@b.c","subscriptionType":"max","tokenSource":"claude.ai"},"models":[]}}"#),
-            Event::Status(Some(Account { email: Some("a@b.c".into()), plan: Some("max".into()) }))
+            Event::Status { account: signed_in.clone(), models: None },
+            "an empty list is no list"
         );
         // No account (or not an object) is not "signed in as your Claude account".
-        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{"account":null}}"#), Event::Status(None));
-        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{}}"#), Event::Status(None));
-        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{"account":"x"}}"#), Event::Status(None));
+        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{"account":null}}"#), Event::Status { account: None, models: None });
+        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{}}"#), Event::Status { account: None, models: None });
+        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{"account":"x","models":null}}"#), Event::Status { account: None, models: None });
         assert_eq!(
             ev(r#"{"ev":"limit","status":"allowed_warning","resetsAt":1762430400,"utilization":0.91,"kind":"five_hour"}"#),
             Event::Limit(Limit { status: "allowed_warning".into(), resets_at: Some(1762430400), utilization: Some(0.91), kind: Some("five_hour".into()) })
@@ -649,6 +745,75 @@ mod tests {
         assert_eq!(ev(r#"{"ev":"exit"}"#), Event::Unknown);
         assert_eq!(ev(r#"{"id":"r1"}"#), Event::Unknown);
         assert_eq!(ev("42"), Event::Unknown);
+    }
+
+    #[std::prelude::v1::test]
+    fn the_model_list_is_read_from_the_sdk_shape() {
+        let ev = |s: &str| parse_event(&serde_json::from_str(s).unwrap());
+        let line = r#"{"ev":"status","id":"s","data":{"account":null,"models":[
+            {"value":"default","displayName":"Default (recommended)","description":"Opus for most work"},
+            {"value":"opus","resolvedModel":"claude-opus-x","displayName":"Opus","description":" Most capable ","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max","turbo"]},
+            {"value":"haiku","displayName":"","supportsEffort":false,"supportedEffortLevels":["low"]},
+            {"value":"opus","displayName":"Opus again"},
+            {"displayName":"No value"},
+            {"value":"  "},
+            "not a model"
+        ]}}"#;
+        let Event::Status { models: Some(m), .. } = ev(line) else { panic!("no models") };
+        assert_eq!(m.len(), 3);
+        assert_eq!((m[0].value.as_str(), m[0].name.as_str(), m[0].efforts.clone()), ("default", "Default (recommended)", None));
+        assert_eq!(m[1].description, "Most capable");
+        assert_eq!(m[1].resolved.as_deref(), Some("claude-opus-x"));
+        assert_eq!(m[1].efforts.clone().unwrap(), vec!["low", "medium", "high", "xhigh", "max"], "unknown levels are dropped");
+        assert_eq!((m[2].name.as_str(), m[2].efforts.clone()), ("haiku", Some(vec![])), "no effort, and the value names it");
+        assert_eq!(ev(r#"{"ev":"status","id":"s","data":{"models":[{"displayName":"x"}]}}"#), Event::Status { account: None, models: None });
+    }
+
+    /// What the real SDK's supportedModels() returned on 6 Nov 2026 (one status call).
+    #[std::prelude::v1::test]
+    fn the_real_sdk_list_reads() {
+        let models = include_str!("../brain/test/fixtures/supported-models.json");
+        let line = format!(r#"{{"ev":"status","id":"s","data":{{"account":null,"models":{models}}}}}"#);
+        let Event::Status { models: Some(m), .. } = parse_event(&serde_json::from_str(&line).unwrap()) else { panic!("no models") };
+        assert_eq!(m.len(), 13);
+        assert_eq!((m[0].value.as_str(), m[0].name.as_str()), ("default", "Default (recommended)"));
+        assert_eq!(m[0].efforts.as_deref().map(|e| e.len()), Some(5));
+        assert!(m.iter().all(|c| !c.name.is_empty() && !c.description.is_empty() && c.resolved.is_some()));
+        let haiku_45 = m.iter().find(|c| c.value == "claude-haiku-4-5-20251001").unwrap();
+        assert_eq!(haiku_45.efforts, None, "no levels reported");
+        // A setting saved before the list existed shows as its alias, with its levels.
+        let i = crate::store::chosen_model(&m, "claude-opus-5-5").unwrap();
+        assert_eq!(m[i].value, "opus");
+        assert_eq!(super::effort_for(&m, "claude-opus-5-5", "xhigh"), "xhigh");
+        assert_eq!(super::effort_for(&m, "claude-sonnet-4-6", "xhigh"), "high");
+        assert_eq!(m.iter().filter(|c| !c.is_pinned()).count(), 5, "five names that move with releases");
+    }
+
+    #[std::prelude::v1::test]
+    fn effort_follows_what_the_model_takes() {
+        use crate::store::ModelChoice;
+        let m = |value: &str, efforts: Option<&[&str]>| ModelChoice {
+            value: value.into(),
+            efforts: efforts.map(|e| e.iter().map(|s| s.to_string()).collect()),
+            ..Default::default()
+        };
+        let list = vec![
+            m("default", Some(&["low", "medium", "high"])),
+            m("big", Some(&["low", "medium", "high", "xhigh", "max"])),
+            m("small", Some(&[])),
+            m("quiet", None),
+            m("odd", Some(&["low", "max"])),
+        ];
+        assert_eq!(super::effort_for(&list, "big", "xhigh"), "xhigh");
+        assert_eq!(super::effort_for(&list, "", "max"), "high", "the default row stands for an empty setting");
+        assert_eq!(super::effort_for(&list, "default", "xhigh"), "high");
+        assert_eq!(super::effort_for(&list, "small", "high"), "", "a model without levels gets none");
+        assert_eq!(super::effort_for(&list, "quiet", "high"), "high", "no levels reported: send what was asked");
+        assert_eq!(super::effort_for(&list, "unknown", "medium"), "medium");
+        assert_eq!(super::effort_for(&list, "odd", "xhigh"), "max");
+        assert_eq!(super::effort_for(&list, "odd", "medium"), "low");
+        assert_eq!(super::effort_for(&list, "odd", "high"), "low", "a tie goes to the lower level");
+        assert_eq!(super::effort_for(&[], "big", "low"), "low");
     }
 
     #[std::prelude::v1::test]
@@ -876,7 +1041,7 @@ exit 3"#,
             let v = next(&rx).expect("the brain stopped early");
             match parse_event(&v) {
                 Event::Ready => {}
-                Event::Status(a) => status = Some(a),
+                Event::Status { account, models } => status = Some((account, models)),
                 Event::Limit(_) => limit_seen = true,
                 Event::Delta { id, text } => {
                     // Cancel r2 as soon as it starts talking.
@@ -900,7 +1065,10 @@ exit 3"#,
             }
         }
         assert!(!limit_seen);
-        assert_eq!(status, Some(Some(Account { email: Some("writer@example.com".into()), plan: Some("max".into()) })));
+        let (account, models) = status.unwrap();
+        assert_eq!(account, Some(Account { email: Some("writer@example.com".into()), plan: Some("max".into()) }));
+        let models = models.expect("the fake SDK lists a model");
+        assert_eq!((models[0].value.as_str(), models[0].name.as_str()), ("claude-opus-5-5", "Opus 5.5"));
         assert_eq!(*log.borrow(), vec!["r1:delta:Hel", "r1:delta:lo", r#"r1:done:{"text":"Hello"}"#]);
 
         // Closing its stdin stops it; a new one starts cleanly afterwards.

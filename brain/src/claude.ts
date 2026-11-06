@@ -247,7 +247,11 @@ export function parseLooseJson<T>(text: string): T {
   }
 }
 
-/** Who is signed in, without spending a model turn. Always settles within `timeoutMs`. */
+/**
+ * Who is signed in and which models Claude Code offers (the SDK's `supportedModels()`,
+ * passed on as it comes: value, displayName, description, resolvedModel, effort levels),
+ * without spending a model turn. Always settles within `timeoutMs`.
+ */
 export async function accountStatus(timeoutMs = Number(process.env.INKLING_STATUS_TIMEOUT_MS) || 20000): Promise<unknown> {
   const signal = new AbortController();
   // A prompt stream that never yields keeps the session open without sending a turn.
@@ -264,9 +268,10 @@ export async function accountStatus(timeoutMs = Number(process.env.INKLING_STATU
   });
   let q: ReturnType<QueryFn> | undefined;
   try {
+    // No model or effort: the list should not depend on one, and nothing is sent.
     q = queryFn({
       prompt: never() as any,
-      options: { ...baseOptions("", { model: "claude-opus-5-5", effort: "low" }, signal) },
+      options: baseOptions("", {}, signal),
     });
     const info = await Promise.race([q.accountInfo(), timeout]);
     let models: unknown = null;

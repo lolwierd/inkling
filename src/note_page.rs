@@ -356,6 +356,8 @@ pub struct NotePage {
     chat_input: Entity<InputState>,
     /// The chat's scroll position: it follows the conversation to its newest line.
     chat_scroll: ScrollHandle,
+    /// Why the last chat question got no answer, shown under it with Try again.
+    chat_error: Option<String>,
     chat_pending: Option<(String, String)>,
     pub just_my_words: bool,
     /// How present the window's controls are, 0..1: the app fades them while you type
@@ -459,6 +461,7 @@ impl NotePage {
             chat_open: false,
             chat_input,
             chat_scroll: ScrollHandle::new(),
+            chat_error: None,
             chat_pending: None,
             just_my_words: false,
             enlarged: None,
@@ -556,6 +559,7 @@ impl NotePage {
         self.last_edited = None;
         self.waiting.clear();
         self.error = None;
+        self.chat_error = None;
         self.mind = cx.global::<Store>().mind(&note.mind_id);
         self.note = note;
         self.active = None;
@@ -1152,7 +1156,13 @@ impl NotePage {
     /// Tell the writer a request failed, in words that fit the kind of failure
     /// (the brain classifies it; see brain/src/protocol.ts `ErrorKind`).
     fn report(&mut self, kind: &str, message: &str, cx: &mut Context<Self>) {
-        let short = if message.to_lowercase().contains("bun is not installed") {
+        let short = self.describe_failure(kind, message, cx);
+        self.notice(short, cx);
+    }
+
+    /// One plain sentence for a failed request (see [`Self::report`]).
+    fn describe_failure(&self, kind: &str, message: &str, cx: &App) -> String {
+        if message.to_lowercase().contains("bun is not installed") {
             "Inkling's brain needs Bun. Install it from bun.sh.".to_string()
         } else {
             match kind {
@@ -1178,11 +1188,15 @@ impl NotePage {
                         }
                         m.push('\u{2026}');
                     }
-                    format!("Couldn't reach the model: {m}")
+                    // The sidecar itself is down: say so, rather than blame the model.
+                    if matches!(Brain::global(cx).read(cx).state, crate::brain::BrainState::Failed(_)) {
+                        format!("Inkling's brain isn't running ({m}). Settings \u{203a} Model has more.")
+                    } else {
+                        format!("Couldn't reach the model: {m}")
+                    }
                 }
             }
-        };
-        self.notice(short, cx);
+        }
     }
 
     fn notice(&mut self, text: String, cx: &mut Context<Self>) {
@@ -1922,8 +1936,19 @@ impl NotePage {
             self.cancel_request(&req, cx);
         }
         self.note.chat.clear();
+        self.chat_error = None;
         self.schedule_save(cx);
         cx.notify();
+    }
+
+    /// Send the question the chat failed on again.
+    fn retry_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.chat_pending.is_some() || self.note.chat.last().is_none_or(|m| m.role != Role::You) {
+            return;
+        }
+        let Some(last) = self.note.chat.pop() else { return };
+        self.chat_error = None;
+        self.send_chat(Some(last.text), window, cx);
     }
 
     fn send_chat(&mut self, preset: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
@@ -1969,7 +1994,7 @@ impl NotePage {
                 page.chat_scroll.scroll_to_bottom();
                 let text = v["text"].as_str().unwrap_or("").trim().to_string();
                 if text.is_empty() {
-                    page.notice("Inkling came back with nothing to say. Try again.".into(), cx);
+                    page.chat_error = Some("Inkling came back with nothing to say.".into());
                 } else {
                     page.note.chat.push(ChatMessage { role: Role::Mind, text, at: Utc::now() });
                     page.schedule_save(cx);
@@ -1978,12 +2003,15 @@ impl NotePage {
             }
             BrainMsg::Error { kind, message } => {
                 page.chat_pending = None;
+                // Said in the chat, under the question it failed on, with Try again.
                 if kind != "cancelled" {
-                    page.report(&kind, &message, cx);
+                    page.chat_error = Some(page.describe_failure(&kind, &message, cx));
+                    page.chat_scroll.scroll_to_bottom();
                 }
                 cx.notify();
             }
         });
+        self.chat_error = None;
         self.chat_pending = Some((req, String::new()));
         self.schedule_save(cx);
         cx.notify();
@@ -2375,11 +2403,13 @@ impl NotePage {
                         .on_click(cx.listener(|this, _, window, cx| this.jump_to_open(true, window, cx))),
                 )
             })
-            .child(
-                control("hide-threads", false)
-                    .child(if jmw { "Show threads" } else { "Hide threads" })
-                    .on_click(cx.listener(move |this, _, _, cx| this.set_hidden(!jmw, cx))),
-            )
+            .when(jmw || self.note.visible_threads() > 0, |d| {
+                d.child(
+                    control("hide-threads", false)
+                        .child(if jmw { "Show threads" } else { "Hide threads" })
+                        .on_click(cx.listener(move |this, _, _, cx| this.set_hidden(!jmw, cx))),
+                )
+            })
             .into_any_element()
     }
 
@@ -3226,7 +3256,8 @@ impl NotePage {
                 .active(|s| s.opacity(0.7))
         };
         let block = |id: &'static str, label: &'static str, k: BlockKind, cx: &mut Context<Self>| {
-            key(id, kind == k).text_size(px(ts::META)).child(label).on_click(cx.listener(move |this, _, _, cx| {
+            let glyph = matches!(k, BlockKind::Quote | BlockKind::Bullet);
+            key(id, kind == k).text_size(px(if glyph { ts::BODY } else { ts::META })).child(label).on_click(cx.listener(move |this, _, _, cx| {
                 this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));
                 this.show_toolbar = true;
                 cx.notify();
@@ -3508,6 +3539,20 @@ impl NotePage {
                         .child(partial.clone()),
                 );
             }
+        }
+        if let Some(err) = self.chat_error.clone() {
+            messages = messages.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap(px(4.))
+                    .text_size(px(ts::SMALL))
+                    .line_height(px(17.))
+                    .text_color(p.graphite)
+                    .child(err)
+                    .child(ui::ghost_button("chat-retry", "Try again", &t).on_click(cx.listener(|this, _, window, cx| this.retry_chat(window, cx)))),
+            );
         }
         let input = self.chat_input.clone();
         let title = if title.trim().is_empty() { "Untitled".to_string() } else { title };

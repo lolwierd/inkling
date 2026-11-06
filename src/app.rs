@@ -660,6 +660,16 @@ impl AppView {
         if keystroke.key == "escape" && keystroke.modifiers == Modifiers::default() && self.escape(window, cx) {
             cx.stop_propagation();
         }
+        // ⌘⌫ in ⌘K deletes the highlighted note (with Undo). Caught here, before the
+        // search box's own ⌘⌫ binding takes it and the shortcut silently does nothing.
+        let cmd_only = Modifiers { platform: true, ..Modifiers::default() };
+        if keystroke.key == "backspace" && keystroke.modifiers == cmd_only {
+            if let Some(palette) = self.palette.clone() {
+                if palette.update(cx, |p, cx| p.delete_selected(cx)) {
+                    cx.stop_propagation();
+                }
+            }
+        }
     }
 
     /// Escape closes the topmost thing that is open, one per press: this view's

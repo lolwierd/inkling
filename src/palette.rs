@@ -95,13 +95,20 @@ impl Palette {
                 cx.stop_propagation();
                 cx.emit(PaletteEvent::Dismiss);
             }
-            "backspace" if ev.keystroke.modifiers.platform => {
-                if let Some(Row { kind: RowKind::Note(id), .. }) = rows.get(clamp_selection(self.selected, rows.len())) {
-                    cx.stop_propagation();
-                    cx.emit(PaletteEvent::Delete(id.clone()));
-                }
-            }
             _ => {}
+        }
+    }
+
+    /// ⌘⌫: delete the highlighted note. The window catches the keystroke before the
+    /// search box's own ⌘⌫ binding can swallow it. Returns whether a note was there.
+    pub fn delete_selected(&mut self, cx: &mut Context<Self>) -> bool {
+        let rows = self.rows(cx);
+        match rows.get(clamp_selection(self.selected, rows.len())) {
+            Some(Row { kind: RowKind::Note(id), .. }) => {
+                cx.emit(PaletteEvent::Delete(id.clone()));
+                true
+            }
+            _ => false,
         }
     }
 }

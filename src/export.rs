@@ -2,7 +2,172 @@
 //! the paragraph they are about. Word goes through macOS `textutil`, which turns
 //! HTML into .docx without any extra dependency.
 
-use crate::store::{BlockKind, Note, Role, Thread, ThreadStatus, markdown_blocks};
+use crate::store::{BlockKind, Mark, MarkSpan, Note, Role, Thread, ThreadStatus, markdown_blocks};
+
+/// A mark as an export writes it, in the order marks nest (outermost first), so a stack
+/// of open marks closes and reopens cleanly wherever the set changes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Inline {
+    Bold,
+    Italic,
+    Strike,
+    Underline,
+    Color(u32),
+    Code,
+}
+
+impl Inline {
+    fn of(m: Mark) -> Option<Inline> {
+        Some(match m {
+            Mark::Bold => Inline::Bold,
+            Mark::Italic => Inline::Italic,
+            Mark::Strike => Inline::Strike,
+            Mark::Underline => Inline::Underline,
+            Mark::Color(0) => return None,
+            Mark::Color(c) => Inline::Color(c),
+            Mark::Code => Inline::Code,
+        })
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Inline::Bold => 0,
+            Inline::Italic => 1,
+            Inline::Strike => 2,
+            Inline::Underline => 3,
+            Inline::Color(_) => 4,
+            Inline::Code => 5,
+        }
+    }
+}
+
+/// Byte offset of each block in the note's joined text (blocks joined by '\n').
+fn block_starts(note: &Note) -> Vec<usize> {
+    let mut at = 0;
+    note.blocks
+        .iter()
+        .map(|b| {
+            let start = at;
+            at += b.text.len() + 1;
+            start
+        })
+        .collect()
+}
+
+/// `text` (a block starting at byte `base` of the joined text) cut wherever one of
+/// `marks` starts or ends: each piece with the marks on it, outermost first.
+fn pieces<'a>(text: &'a str, base: usize, marks: &[MarkSpan]) -> Vec<(&'a str, Vec<Inline>)> {
+    let end = base + text.len();
+    let here: Vec<&MarkSpan> = marks.iter().filter(|m| m.start < end && m.end > base).collect();
+    let mut cuts = vec![0, text.len()];
+    for m in &here {
+        cuts.push(m.start.max(base) - base);
+        cuts.push(m.end.min(end) - base);
+    }
+    cuts.retain(|c| text.is_char_boundary(*c));
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.windows(2)
+        .map(|w| {
+            let (a, b) = (base + w[0], base + w[1]);
+            let mut on: Vec<Inline> = here.iter().filter(|m| m.start <= a && m.end >= b).filter_map(|m| Inline::of(m.mark)).collect();
+            on.sort_by_key(|m| m.rank());
+            on.dedup_by_key(|m| m.rank());
+            (&text[w[0]..w[1]], on)
+        })
+        .collect()
+}
+
+/// Write `text` with its marks: `open`/`close` give each mark's tokens and `escape`
+/// the words. With `hug`, tokens never touch whitespace on their inner side (Markdown
+/// reads "** bold**" as plain asterisks), so whitespace at a piece's edges moves out.
+fn inline_text(
+    text: &str,
+    base: usize,
+    marks: &[MarkSpan],
+    open: impl Fn(Inline) -> String,
+    close: impl Fn(Inline) -> String,
+    escape: impl Fn(&str) -> String,
+    hug: bool,
+) -> String {
+    let mut out = String::new();
+    let mut stack: Vec<Inline> = vec![];
+    let mut pending = String::new();
+    for (piece, want) in pieces(text, base, marks) {
+        let (lead, core, trail) = if hug {
+            let core = piece.trim();
+            if core.is_empty() {
+                pending.push_str(piece);
+                continue;
+            }
+            let lead = &piece[..piece.len() - piece.trim_start().len()];
+            (lead, core, &piece[lead.len() + core.len()..])
+        } else {
+            ("", piece, "")
+        };
+        let keep = stack.iter().zip(&want).take_while(|(a, b)| a == b).count();
+        while stack.len() > keep {
+            let m = stack.pop().expect("a mark to close");
+            out.push_str(&close(m));
+        }
+        out.push_str(&pending);
+        pending.clear();
+        out.push_str(lead);
+        for m in &want[keep..] {
+            out.push_str(&open(*m));
+            stack.push(*m);
+        }
+        out.push_str(&escape(core));
+        pending.push_str(trail);
+    }
+    while let Some(m) = stack.pop() {
+        out.push_str(&close(m));
+    }
+    out.push_str(&pending);
+    out
+}
+
+/// A block's words as Markdown: **bold**, *italic*, ~~struck~~, <u>underlined</u>,
+/// `code`. Colours have no Markdown and are left out.
+fn markdown_inline(text: &str, base: usize, marks: &[MarkSpan]) -> String {
+    let token = |m: Inline, closing: bool| -> String {
+        match m {
+            Inline::Bold => "**".into(),
+            Inline::Italic => "*".into(),
+            Inline::Strike => "~~".into(),
+            Inline::Underline if closing => "</u>".into(),
+            Inline::Underline => "<u>".into(),
+            Inline::Color(_) => String::new(),
+            Inline::Code => "`".into(),
+        }
+    };
+    inline_text(text, base, marks, |m| token(m, false), |m| token(m, true), |s| s.to_string(), true)
+}
+
+/// A block's words as HTML, every mark kept (colours as the stored linen value).
+fn html_inline(text: &str, base: usize, marks: &[MarkSpan]) -> String {
+    let open = |m: Inline| -> String {
+        match m {
+            Inline::Bold => "<strong>".into(),
+            Inline::Italic => "<em>".into(),
+            Inline::Strike => "<s>".into(),
+            Inline::Underline => "<u>".into(),
+            Inline::Color(c) => format!("<span style=\"color:#{c:06x}\">"),
+            Inline::Code => "<code>".into(),
+        }
+    };
+    let close = |m: Inline| -> String {
+        match m {
+            Inline::Bold => "</strong>".into(),
+            Inline::Italic => "</em>".into(),
+            Inline::Strike => "</s>".into(),
+            Inline::Underline => "</u>".into(),
+            Inline::Color(_) => "</span>".into(),
+            Inline::Code => "</code>".into(),
+        }
+    };
+    inline_text(text, base, marks, open, close, esc, false)
+}
 
 /// The threads to print under each block, by block index, in the order they appear.
 /// A thread goes under the printed block it starts in; one that starts in an empty
@@ -59,7 +224,8 @@ pub fn to_markdown(note: &Note, with_threads: bool) -> String {
     if let Some(on_title) = threads(0) {
         out.push_str(&on_title);
     }
-    out.push_str(&markdown_blocks(&note.blocks, 1, threads));
+    let starts = block_starts(note);
+    out.push_str(&markdown_blocks(&note.blocks, 1, |i| markdown_inline(&note.blocks[i].text, starts[i], &note.marks), threads));
     out.trim_end().to_string() + "\n"
 }
 
@@ -70,7 +236,7 @@ fn esc(s: &str) -> String {
 fn thread_html(t: &Thread) -> String {
     let name = mind_name(t);
     let mut out = format!(
-        "<div class=\"thread\"><div class=\"on\">{} on “{}”</div>\n",
+        "<div class=\"thread\"><div class=\"on\"><span class=\"who\">{}</span> on “{}”</div>\n",
         esc(name),
         esc(&t.quote.replace('\n', " "))
     );
@@ -90,6 +256,7 @@ pub fn to_html(note: &Note, with_threads: bool) -> String {
     let threads = |i: usize| -> String {
         if with_threads { under[i].iter().map(|t| thread_html(t)).collect() } else { String::new() }
     };
+    let starts = block_starts(note);
     let mut body = threads(0);
     let mut list: Option<&str> = None;
     // Items so far in the current run of numbered blocks, as in the Markdown.
@@ -106,7 +273,7 @@ pub fn to_html(note: &Note, with_threads: bool) -> String {
         if b.kind != BlockKind::Numbered {
             number = 0;
         }
-        let t = esc(&b.text);
+        let t = html_inline(&b.text, starts[i], &note.marks);
         match b.kind {
             BlockKind::Bullet | BlockKind::Numbered => {
                 let tag = if b.kind == BlockKind::Bullet { "ul" } else { "ol" };
@@ -145,11 +312,19 @@ pub fn to_html(note: &Note, with_threads: bool) -> String {
         }
     }
     close(&mut list, &mut body);
+    // Loose Threads on paper: the writer's words in Fraunces, Inkling's in Figtree, each
+    // thread hung off a madder running stitch (the fonts fall back where not installed).
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title><style>\
-body{{font-family:-apple-system,Helvetica,sans-serif;max-width:640px;margin:40px auto;color:#1d1c1a;line-height:1.6}}\
-.thread{{margin:6px 0 16px 18px;padding-left:10px;border-left:2px solid #dedbd4;font-family:Georgia,serif;color:#2a2824}}\
-.thread .on{{font-size:12px;color:#8e8a83}} .thread .me{{font-family:-apple-system,Helvetica,sans-serif;color:#5c5953}}\
+body{{font-family:\"Fraunces Text\",Fraunces,\"Iowan Old Style\",Georgia,serif;font-size:17px;line-height:1.62;\
+max-width:640px;margin:48px auto;padding:0 20px;color:#26232b;background:#fbf8f2}}\
+h1,h2,h3,h4{{font-family:\"Fraunces Display\",Fraunces,\"Iowan Old Style\",Georgia,serif;font-weight:600;line-height:1.25}}\
+blockquote{{margin:0 0 1em;padding-left:16px;border-left:2px solid #e3dacb;color:#57505c;font-style:italic}}\
+code{{font-family:Menlo,monospace;font-size:.88em;background:#f1eadc;padding:0 3px;border-radius:3px}}\
+.thread{{margin:6px 0 18px 18px;padding:2px 0 2px 12px;border-left:2px dashed #a63f32;\
+font-family:Figtree,-apple-system,\"Helvetica Neue\",Helvetica,sans-serif;font-size:14px;line-height:1.5}}\
+.thread p{{margin:4px 0}} .thread .on{{font-size:12px;color:#6f6862}} .thread .who{{color:#a63f32;font-weight:600}}\
+.thread .me{{color:#57505c}}\
 </style></head><body><h1>{title}</h1>\n{body}</body></html>",
         title = esc(title_of(note)),
     )
@@ -200,7 +375,7 @@ pub fn write(note: &Note, with_threads: bool, format: Format, path: &std::path::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{Block, Message, Mode, Side, ThoughtKind};
+    use crate::store::{Block, Mark, MarkSpan, Message, Mode, Side, ThoughtKind};
 
     #[std::prelude::v1::test]
     fn markdown_includes_threads_under_their_paragraph() {
@@ -326,6 +501,62 @@ A paragraph after the list.\n\n\
         let plain = to_html(&sample(), false);
         assert!(!plain.contains("thread\">"));
         assert!(plain.contains("<li>Measure first</li>\n<li>Then cache</li>"));
+    }
+
+    fn marked(text: &str, marks: &[(&str, Mark)]) -> Note {
+        let mut note = Note::new("Marks", Mode::ThinksWithYou, None);
+        note.blocks = vec![b(BlockKind::Title, "Marks"), b(BlockKind::Paragraph, text)];
+        let joined = note.joined_text();
+        note.marks = marks
+            .iter()
+            .map(|(words, mark)| {
+                let start = joined.find(words).expect("words are in the note");
+                MarkSpan { start, end: start + words.len(), mark: *mark }
+            })
+            .collect();
+        note
+    }
+
+    #[std::prelude::v1::test]
+    fn marks_survive_export() {
+        let note = marked(
+            "Keep bold, italic, struck, underlined and code words, coloured too.",
+            &[
+                ("bold", Mark::Bold),
+                ("italic", Mark::Italic),
+                ("struck", Mark::Strike),
+                ("underlined", Mark::Underline),
+                ("code", Mark::Code),
+                ("coloured", Mark::Color(0x2e3f7a)),
+            ],
+        );
+        let md = to_markdown(&note, false);
+        assert!(md.contains("Keep **bold**, *italic*, ~~struck~~, <u>underlined</u> and `code` words, coloured too."), "{md}");
+        let html = to_html(&note, false);
+        assert!(
+            html.contains("<p>Keep <strong>bold</strong>, <em>italic</em>, <s>struck</s>, <u>underlined</u> and <code>code</code> words, <span style=\"color:#2e3f7a\">coloured</span> too.</p>"),
+            "{html}"
+        );
+    }
+
+    #[std::prelude::v1::test]
+    fn overlapping_marks_nest_and_hug_their_words() {
+        // Bold over "two words ", italic over "words and": they overlap, and the bold
+        // ends on a space, which Markdown will not read inside the asterisks.
+        let mut note = marked("one two words and more", &[]);
+        let joined = note.joined_text();
+        let at = |w: &str| joined.find(w).unwrap();
+        note.marks = vec![
+            MarkSpan { start: at("two"), end: at("and"), mark: Mark::Bold },
+            MarkSpan { start: at("words"), end: at("and") + 3, mark: Mark::Italic },
+            MarkSpan { start: 0, end: 3, mark: Mark::Color(0) },
+        ];
+        assert!(to_markdown(&note, false).contains("one **two *words*** *and* more"), "{}", to_markdown(&note, false));
+        assert!(to_html(&note, false).contains("<p>one <strong>two <em>words </em></strong><em>and</em> more</p>"), "{}", to_html(&note, false));
+        // marks never cut a character
+        let mut wide = marked("日本語の文", &[]);
+        wide.marks = vec![MarkSpan { start: "Marks\n".len() + 3, end: "Marks\n".len() + 9, mark: Mark::Bold }];
+        assert!(to_markdown(&wide, false).contains("日**本語**の文"), "{}", to_markdown(&wide, false));
     }
 
     #[std::prelude::v1::test]

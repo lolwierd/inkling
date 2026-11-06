@@ -247,26 +247,28 @@ impl Note {
 
 /// The body of a note (everything after the title) as light Markdown.
 pub fn plain_text_of(blocks: &[Block]) -> String {
-    markdown_blocks(blocks, 0, |_| None).trim_end().to_string()
+    markdown_blocks(blocks, 0, |i| blocks[i].text.clone(), |_| None).trim_end().to_string()
 }
 
 /// The body (blocks after the title) as Markdown, headings `heading_shift` levels
-/// deeper. `after(i)` may add text under block `i`, such as its threads. Items of one
-/// list sit on consecutive lines; whatever follows a list starts after a blank line,
-/// because Markdown reads a line right under an item as more of that item.
+/// deeper. `text_of(i)` is block `i`'s words as they should be written (with their
+/// marks, for an export). `after(i)` may add text under block `i`, such as its threads.
+/// Items of one list sit on consecutive lines; whatever follows a list starts after a
+/// blank line, because Markdown reads a line right under an item as more of that item.
 pub(crate) fn markdown_blocks(
     blocks: &[Block],
     heading_shift: usize,
+    mut text_of: impl FnMut(usize) -> String,
     mut after: impl FnMut(usize) -> Option<String>,
 ) -> String {
     let mut out = String::new();
     let mut number = 0;
     let mut list: Option<BlockKind> = None;
     for (i, b) in blocks.iter().enumerate().skip(1) {
-        let text = &b.text;
-        if text.trim().is_empty() {
+        if b.text.trim().is_empty() {
             continue;
         }
+        let text = &text_of(i);
         if list.is_some_and(|k| k != b.kind) {
             out.push('\n');
         }

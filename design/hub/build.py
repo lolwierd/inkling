@@ -19,9 +19,9 @@ LINKS = {
 }
 
 WAITING = [
-    ("One tap: let the new film upload",
-     "The new 73-second film (1080p, 60 fps, no jitter) is finished and merged, but every file upload failed after you went to sleep, "
-     "even small ones, so the film page still shows the first cut. Approve the upload when it asks, or tell me to try again.",
+    ("Publish the new film from a new session",
+     "The new 73-second film (1080p, 60 fps, no jitter) is finished and merged, but the artifact tools stopped working in the overnight session, "
+     "so the film page (and this page) still show older versions. In a new session, ask Claude to publish design/video/page/ to the film page and design/hub/ here.",
      None),
     ("Which of the manifesto's six to change",
      "The manifesto argues against six things the app still does; nothing changed there tonight. The full text is at the bottom of this page.",
@@ -60,7 +60,7 @@ DONE = [
     ("The manifesto", "Eight beliefs, ten features they call for, six things they argue against."),
     ("A UI audit", "59 findings, all closed: 55 fixed, 3 made moot by later changes, 1 written up."),
     ("Built for agents", "A map of the repo and one command that checks everything."),
-    ("Checks", "188 Rust tests and 101 brain tests pass; 42 of 43 scenarios pass (the last needs the real model)."),
+    ("Checks", "292 Rust tests and 191 brain tests pass; 81 of 82 scenarios pass (the last needs the real model); no compiler warnings."),
 ]
 
 LOGOS = [

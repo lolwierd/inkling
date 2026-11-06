@@ -50,9 +50,9 @@ The first time Inkling opens, a note called Start here walks you through everyth
 
 ## How it works
 
-Inkling is two programs that talk over a pipe. The app, written in Rust with [GPUI](https://www.gpui.rs), draws the page, the threads and the margin, and keeps your notes. A small helper called the brain, written in TypeScript and run with Bun, talks to Claude through the Claude Agent SDK, using your Claude Code login. When you pause, the app sends the brain the paragraph and enough of the note for context, and the brain answers with silence, a question, a correction or a sketch.
+Inkling is two programs that talk over a pipe. The app, written in Rust with [GPUI](https://www.gpui.rs), draws the page, the threads and the margin, and keeps your notes. A small helper called the brain, written in TypeScript and run with Bun, talks to Claude through the Claude Agent SDK, using your Claude Code login. When you stop typing for a couple of seconds, the app sends the brain each paragraph you changed, together with the whole note, its threads, what the note is for and what Inkling knows about you, and the brain answers with silence, a question, a correction or a sketch. A paragraph it has read is not sent again until you change it, and a note that waits to be asked is never read on its own.
 
-You pick the model in Settings > Model, from the list Claude Code offers; reading along and answering each have their own effort setting. Nothing leaves your Mac except the text Inkling sends to Claude to read along or to answer you.
+Everything else happens only when you ask: a question about a selection, the room (one call for each mind), a reply in a tag, a sketch (two calls: the idea, then the drawing) and chat. Every call is a single turn with no tools and no web access. You pick the model in Settings > Model, from the list Claude Code offers; reading along uses low effort and answering medium, and you can change either. Nothing leaves your Mac except the text Inkling sends to Claude.
 
 ## The look
 

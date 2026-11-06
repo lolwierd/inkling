@@ -55,13 +55,16 @@ pub(super) fn reply_to_write_in(t: &Thread) -> Option<&str> {
 
 impl NotePage {
     /// Whether thread `id`'s tag offers Write it in now: it is the open tag, threads show,
-    /// nothing is on its way to it, its words are in the note, and it has a reply to write in.
+    /// nothing is on its way to it, its words are in the note, and it has a reply to write
+    /// in that the note does not already say (you typed it, or ⌘⇧Z brought it back).
     fn offers_write_in(&self, id: &str, cx: &App) -> bool {
+        let Some(reply) = self.note.threads.iter().find(|t| t.id == id).and_then(reply_to_write_in) else { return false };
+        let ed = self.editor.read(cx);
         self.active.as_deref() == Some(id)
             && !self.just_my_words
             && !self.pending.contains_key(id)
-            && self.editor.read(cx).anchor(id).is_some()
-            && self.note.threads.iter().find(|t| t.id == id).is_some_and(|t| reply_to_write_in(t).is_some())
+            && ed.anchor(id).is_some()
+            && !ed.text().contains(reply)
     }
 
     /// The open tag's offer, under the conversation: a short running stitch, "Your note
@@ -107,6 +110,8 @@ impl NotePage {
                         .flex_wrap()
                         .items_baseline()
                         .gap_x(px(6.))
+                        // wrapped under the button, the words keep clear of its focus ring
+                        .gap_y(px(3.))
                         .child(button)
                         .child(div().text_color(p.faint).child("under its paragraph, word for word")),
                 )

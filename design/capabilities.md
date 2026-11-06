@@ -45,6 +45,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |
 | Threads of your own | Add to it: a line for you, sent nowhere; Ask Inkling on the tag, or a line that starts with a mind's name, calls that mind in for one answer; only you tie it off or cut it, and editing its words starts no reread; the minds see it as yours and do not ask it back |
+| Write it in | when your reply ties a thread off, its tag offers to put the reply, word for word, under the paragraph it is about, for you to rework; it becomes the thread's answer, with its knot; Undo in the toast, or ⌘Z |
 | Tie off | Resolve: the knot is tied and joins the border at the top of the page |
 | Let it stand | on a mind's question or correction, Let stand (⇧⌘⌫): what you typed in its box goes with it as your reason, and every mind that reads the note is told the point, so none raises it again, in any words; Find a loose thread looks past it; Undo for a few seconds, or ⌥⌘Z |
 | Snip | your own threads, asks, sketches and answers: Dismiss (⇧⌘⌫); Undo for a few seconds, or ⌥⌘Z |

@@ -1,0 +1,39 @@
+# Write it in from the keyboard (⌃Tab out of the note reaches it first in the open tag,
+# Return presses it) and from the card Marks only opens; none while threads are hidden.
+# The paragraph is your reply exactly, and the export says where the thread was answered.
+# fixture: replied
+wait: 1500
+activate: 2
+dump: offered
+expect: d.offer === "t2" && d.tied_by.t2 === "reply" && d.read_hashes === 4
+key: ctrl-tab
+dump: keyed
+expect: d.focus === "tag:writein"
+key: enter
+dump: written
+expect: d.answers.length === 1 && d.answers[0].quote === "I start at 8 km in the first week of December and take the last week easy."
+expect: d.focus === "note" && d.cursor_line === 4 && d.offer === null && d.written_in === "t2"
+expect: d.read_hashes === 5   // the reply's words count as read
+undo-writein
+dump: undone
+expect: d.answers.length === 0 && d.kinds.length === 6 && d.written_in === null
+# hidden threads: no offer
+open: jmw
+activate: 2
+dump: hidden
+expect: d.hidden === true && d.offer === null
+open: jmw
+# Marks only: the card the mark opens offers it too
+set: placement=marks
+mark: 2
+dump: marks
+expect: d.offer === "t2" && d.active === "t2"
+writein
+settle
+dump: marks-written
+expect: d.answers.length === 1 && d.knots.includes("t2") && d.active === null && d.kinds.length === 7
+export: md
+expect: log.some(l => l.msg.includes("Answered in the note:* “I start at 8 km"))
+expect: textOf(note("Sub-50 10k by March")).split("\n")[4] === "I start at 8 km in the first week of December and take the last week easy."
+expect: !requests.some(r => r.input.task === "read")
+quit

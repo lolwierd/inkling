@@ -29,6 +29,13 @@ settle
 dump: undone
 expect: d.kinds.length === 6 && d.answers.length === 0 && d.knots.length === 0
 expect: d.written_in === null && !d.toasts.some(t => t.kind === "written_in" && t.live)
+# ⌘⇧Z brings the words back: the note says it now, so the tag offers nothing; ⌘Z again
+key: cmd-shift-z
+activate: 2
+dump: redone
+expect: d.kinds.length === 7 && d.offer === null
+key: cmd-z
+settle
 activate: 2
 dump: offered-again
 expect: d.offer === "t2"

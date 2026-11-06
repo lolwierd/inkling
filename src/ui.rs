@@ -123,7 +123,7 @@ pub fn icon_button(id: impl Into<ElementId>, name: &str, size: f32, t: &Theme) -
         .p(px(4.))
         .rounded(px(5.))
         .cursor_pointer()
-        .hover(move |s| s.bg(p.wash))
+        .hover(move |s| s.bg(p.hover))
         .active(|s| s.opacity(0.7))
         .child(icon(name, size, p.graphite))
 }
@@ -300,7 +300,7 @@ pub fn menu_item(id: impl Into<ElementId>, t: &Theme) -> Stateful<Div> {
         .rounded(px(6.))
         .cursor_pointer()
         .text_color(p.ink)
-        .hover(move |s| s.bg(p.wash))
+        .hover(move |s| s.bg(p.hover))
         .active(|s| s.opacity(0.8))
 }
 

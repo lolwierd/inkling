@@ -363,7 +363,7 @@ pub fn stack<V: 'static>(
                         .rounded(px(5.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .cursor_pointer()
-                        .hover(move |s| s.bg(p.wash))
+                        .hover(move |s| s.bg(p.hover))
                         .active(|s| s.opacity(0.7))
                         .child("Undo")
                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -402,7 +402,8 @@ pub fn stack<V: 'static>(
             );
         column = column.child(label);
     }
-    Some(div().absolute().bottom(px(18.)).left_0().right(right).flex().justify_center().child(column).into_any_element())
+    // 12 px above the sheet's bottom edge, as the corner hint sits
+    Some(div().absolute().bottom(px(24.)).left_0().right(right).flex().justify_center().child(column).into_any_element())
 }
 
 #[cfg(test)]

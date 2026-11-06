@@ -122,7 +122,7 @@ fn sync_component_theme(theme: &Theme, cx: &mut App) {
     c.muted_foreground = p.faint;
     c.popover = p.card;
     c.popover_foreground = p.ink;
-    c.accent = p.wash;
+    c.accent = p.hover;
     c.accent_foreground = p.ink;
 }
 
@@ -767,10 +767,12 @@ impl AppView {
             return div().into_any_element();
         }
         if !self.listening {
+            // on the paper, in the sheet's bottom corner: clear of its edges and the weave
+            let right = self.page.read(cx).sheet_inner_right();
             return div()
                 .absolute()
-                .bottom(px(10.))
-                .right(px(14.))
+                .bottom(px(24.))
+                .right(px(right))
                 .text_size(px(ts::META))
                 .font_family(SANS)
                 .text_color(p.faint)
@@ -1073,7 +1075,7 @@ impl AppView {
             .top_0()
             .left_0()
             .w_full()
-            .h(px(40.))
+            .h(px(crate::note_page::CHROME_H))
             .window_control_area(WindowControlArea::Drag)
             .opacity(next)
             .when(next > 0.02, |d| {
@@ -1086,7 +1088,7 @@ impl AppView {
                         .p(px(4.))
                         .rounded(px(5.))
                         .cursor_pointer()
-                        .hover(move |s| s.bg(p.wash))
+                        .hover(move |s| s.bg(p.hover))
                         .child(icon("menu", 14., p.graphite))
                         // first in the Tab order (no part of the window comes before it)
                         .keyed_as("chrome:sidebar", 5., t.voice_ink, cx, |this, _, cx| {
@@ -1165,8 +1167,8 @@ impl AppView {
                 .gap(px(8.))
                 .text_size(px(ts::UI))
                 .cursor_pointer()
-                .when(on, |d| d.bg(p.wash).font_weight(FontWeight::MEDIUM))
-                .when(!on, |d| d.hover(move |s| s.bg(p.wash.opacity(0.5))))
+                .when(on, |d| d.bg(p.hover).font_weight(FontWeight::MEDIUM))
+                .when(!on, |d| d.hover(move |s| s.bg(p.hover.opacity(0.5))))
                 .active(|s| s.opacity(0.8))
         };
         let ring = t.voice_ink;
@@ -1214,19 +1216,25 @@ impl AppView {
                     .text_color(p.graphite)
                     .child(icon(if collapsed { "folder" } else { "folder-open" }, 13., p.faint))
                     .child(div().flex_1().min_w(px(0.)).truncate().child(f.name.clone()))
-                    .when(collapsed && !inside.is_empty(), |d| d.child(ui::key_hint(inside.len().to_string(), &t)))
+                    // a folded folder's count lines up with the notes' counts; under the
+                    // pointer the remove × takes its place
+                    .when(collapsed && !inside.is_empty(), |d| d.child(ui::key_hint(inside.len().to_string(), &t).group_hover(group.clone(), |s| s.invisible())))
                     .child({
                         // Remove the folder; its notes stay, at the top level.
                         let fid = fid.clone();
                         div()
                             .id(SharedString::from(format!("folder-remove-{}", f.id)))
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .right(px(6.))
+                            .flex()
+                            .items_center()
                             .invisible()
                             .group_hover(group, |s| s.visible())
-                            .p(px(2.))
-                            .rounded(px(4.))
-                            .hover(move |s| s.bg(p.wash))
+                            .child(div().p(px(2.)).rounded(px(4.)).hover(move |s| s.bg(p.hover)).child(icon("x", 11., p.faint)))
+                            .hover(move |s| s.bg(p.hover))
                             .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove folder (its notes stay)").build(window, cx))
-                            .child(icon("x", 11., p.faint))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
                                 cx.global_mut::<Store>().delete_folder(&fid);
@@ -1282,7 +1290,7 @@ impl AppView {
                 .text_size(px(ts::SMALL))
                 .text_color(p.graphite)
                 .cursor_pointer()
-                .hover(move |s| s.bg(p.wash.opacity(0.5)).text_color(p.ink))
+                .hover(move |s| s.bg(p.hover.opacity(0.5)).text_color(p.ink))
                 .active(|s| s.opacity(0.8))
                 .child(div().flex_1().child(label))
                 .child(ui::key_hint(keys, &t))

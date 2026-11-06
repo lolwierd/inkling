@@ -60,8 +60,11 @@ pub struct Palette {
     /// Labels and quiet text (still 4.5:1 on the page).
     pub faint: Hsla,
     pub rule: Hsla,
-    /// Behind the words of the thread you are looking at.
+    /// Behind the words of the thread you are looking at: madder, Inkling's own.
     pub wash: Hsla,
+    /// Under the pointer, the row that is chosen, a selection the keyboard has left: a
+    /// plain shade of the ink, because controls are not Inkling's and madder is.
+    pub hover: Hsla,
     /// Tacking thread: a done checklist line is tacked through with it, and a quote's
     /// seam is sewn in it.
     pub tack: Hsla,
@@ -101,6 +104,7 @@ impl Palette {
             faint: c(0x6f6862),
             rule: c(0xe3dacb),
             wash: ca(0xa63f3214),
+            hover: ca(0x26232b12),
             tack: c(0x8c8276),
             bulb: c(0x57505c),
             line: ca(0x26232b4d),
@@ -125,6 +129,7 @@ impl Palette {
             faint: c(0xa39a8f),
             rule: c(0x332f36),
             wash: ca(0xd9705e1f),
+            hover: ca(0xede6da17),
             tack: c(0x948a80),
             bulb: c(0xbdb4a8),
             line: ca(0xede6da4d),
@@ -215,17 +220,21 @@ pub fn thread_hex(ink: InkColor) -> (u32, u32) {
 
 /// Text colours offered in the selection toolbar: the same threads, for your own words.
 /// A note stores the linen value; lamplight draws its lighter twin, so coloured words
-/// still read on the dark page.
-pub const TEXT_COLORS: [(u32, u32, &str); 8] = [
+/// still read on the dark page. Madder is not among them: it is only ever Inkling's,
+/// so your words never look like one of its marks.
+pub const TEXT_COLORS: [(u32, u32, &str); 7] = [
     (0x000000, 0x000000, "Default"),
     (0x6f6862, 0xa39a8f, "Grey"),
     (0x6e4b2e, 0xc49a73, "Walnut"),
     (0x8f6214, 0xd9a548, "Ochre"),
-    (0xa63f32, 0xd9705e, "Madder"),
     (0x4f7350, 0x8db88e, "Sage"),
     (0x2e3f7a, 0x8c9be0, "Indigo"),
     (0x6b3e62, 0xc08ab4, "Plum"),
 ];
+
+/// Colours the toolbar offered once and no longer does (madder, before it was kept for
+/// Inkling): words already in them keep their colour, twin and all.
+const RETIRED_TEXT_COLORS: [(u32, u32); 1] = [(0xa63f32, 0xd9705e)];
 
 /// How a stored text colour (`Mark::Color`) draws on `p`'s page: 0 is the ink, a
 /// toolbar colour is its twin for the light, and any other colour (from an older
@@ -234,8 +243,9 @@ pub fn text_color(hex: u32, p: &Palette) -> Hsla {
     if hex == 0 {
         return p.ink;
     }
-    if let Some((_, dark, _)) = TEXT_COLORS.iter().find(|(light, _, _)| *light == hex) {
-        return c(if p.dark { *dark } else { hex });
+    let twins = TEXT_COLORS.iter().map(|(light, dark, _)| (*light, *dark)).chain(RETIRED_TEXT_COLORS);
+    if let Some((_, dark)) = twins.into_iter().find(|(light, _)| *light == hex) {
+        return c(if p.dark { dark } else { hex });
     }
     let base = c(hex);
     if p.dark && base.l < 0.62 { Hsla { l: (1. - base.l).clamp(0.62, 0.8), ..base } } else { base }
@@ -345,5 +355,15 @@ mod tests {
             assert!(contrast(old, p.paper) >= 3., "an old colour on the {} page: {}", if p.dark { "dark" } else { "light" }, contrast(old, p.paper));
         }
         assert_eq!(text_color(0x2e3f7a, &Palette::light()), c(0x2e3f7a), "linen draws what was stored");
+    }
+
+    #[std::prelude::v1::test]
+    fn madder_is_never_offered_for_your_words() {
+        let madder = thread_hex(InkColor::Ink);
+        assert!(TEXT_COLORS.iter().all(|(light, dark, _)| (*light, *dark) != madder), "madder is only ever Inkling's");
+        assert!(TEXT_COLORS.iter().all(|(_, _, name)| *name != "Madder"));
+        // words coloured madder by an older build keep it, with its lamplight twin
+        assert_eq!(text_color(madder.0, &Palette::light()), c(madder.0));
+        assert_eq!(text_color(madder.0, &Palette::dark()), c(madder.1));
     }
 }

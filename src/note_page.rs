@@ -29,10 +29,21 @@ use crate::ui::{self, Keyed, icon};
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
+/// The band of cloth along the top of the window that holds the traffic lights, ☰ and
+/// Chat. The page scrolls under its edge, never under the controls.
+pub(crate) const CHROME_H: f32 = 40.;
+/// The sheet's top sits this far down the window, and its bottom this far up (when the
+/// note is short, or scrolled to its end).
+const SHEET_TOP: f32 = 44.;
+const SHEET_BOTTOM: f32 = 12.;
 /// The cloth shows around the page: this much page beyond the margins on each side.
 const SHEET_PAD: f32 = 28.;
 /// The narrowest margin: room for a folded tab.
 const NARROW_MARGIN: f32 = 60.;
+/// With no margin on the left, the column keeps this much more paper beside it, so the
+/// gutter's marks (drawn 26 px left of the words, about 5 px either side) sit on the page
+/// and not on the sheet's edge.
+const GUTTER_LEAD: f32 = 14.;
 /// An open tag is at least this wide, however slim the margin it hangs from.
 const PANEL_MIN: f32 = 200.;
 /// A tied-off tag stays this long, so you can watch the thread pull taut and knot.
@@ -190,17 +201,18 @@ impl Metrics {
             return Self { column, margin, gap, both: true };
         }
         let margin = ((avail - gap) * 0.32).clamp(200., 280.);
-        let column = (avail - gap - margin).clamp(300., 760.);
-        if column + gap + margin <= avail {
+        let column = (avail - gap - margin - GUTTER_LEAD).clamp(300., 760.);
+        if GUTTER_LEAD + column + gap + margin <= avail {
             return Self { column, margin, gap, both: false };
         }
         // Narrower still: first the margin slims to a strip that holds the folded tabs (an
         // open tag is drawn over the page), then the gap tightens, then the sheet takes
         // most of the cloth kept around it, and last the column gives way.
-        let margin = (avail - gap - 300.).clamp(NARROW_MARGIN, 200.);
-        let gap = (avail - margin - 300.).clamp(24., 36.);
-        let room = avail.max((300. + gap + margin).min(available - 12.));
-        Self { column: (room - gap - margin).max(160.), margin, gap, both: false }
+        let margin = (avail - gap - 300. - GUTTER_LEAD).clamp(NARROW_MARGIN, 200.);
+        let gap = (avail - margin - 300. - GUTTER_LEAD).clamp(24., 36.);
+        // (the gutter's room comes out of the cloth, not out of the words)
+        let room = avail.max((300. + gap + margin + GUTTER_LEAD).min(available - 12. + GUTTER_LEAD));
+        Self { column: (room - gap - margin - GUTTER_LEAD).max(160.), margin, gap, both: false }
     }
     /// Where a popover of `width` hangs from the page's left: in the margin when it fits
     /// there, else as far right as the sheet allows, over the column.
@@ -208,10 +220,10 @@ impl Metrics {
         self.right_left().min(self.page() + SHEET_PAD - width).max(0.)
     }
     fn page(&self) -> f32 {
-        if self.both { self.margin * 2. + self.gap * 2. + self.column } else { self.column + self.gap + self.margin }
+        if self.both { self.margin * 2. + self.gap * 2. + self.column } else { GUTTER_LEAD + self.column + self.gap + self.margin }
     }
     fn column_left(&self) -> f32 {
-        if self.both { self.margin + self.gap } else { 0. }
+        if self.both { self.margin + self.gap } else { GUTTER_LEAD }
     }
     fn right_left(&self) -> f32 {
         self.column_left() + self.column + self.gap
@@ -2477,6 +2489,16 @@ impl NotePage {
         crate::export::to_markdown(&self.note, with_threads)
     }
 
+    /// How far in from the right of the page's area the sheet's padding ends: where
+    /// something sitting in the sheet's bottom corner (the window's corner hint) lines
+    /// up, so it rests on the paper and never on the cloth or across the sheet's edge.
+    pub fn sheet_inner_right(&self) -> f32 {
+        let width = self.viewport.width.as_f32() - if self.chat_open { CHAT_WIDTH } else { 0. };
+        let sheet_w = self.m.page() + 2. * SHEET_PAD;
+        let x = if sheet_w <= width - 16. { (width - sheet_w) / 2. } else { 12. };
+        (width - x - sheet_w + SHEET_PAD).max(SHEET_PAD)
+    }
+
     pub fn note_snapshot(&mut self, cx: &mut Context<Self>) -> Note {
         self.sync_from_editor(cx);
         self.note.clone()
@@ -2512,6 +2534,10 @@ impl NotePage {
         };
         let mind_menu = (menu == Some(Menu::Mind)).then(|| self.menu_card(Menu::Mind, cx));
         let mode_menu = (menu == Some(Menu::Mode)).then(|| self.menu_card(Menu::Mode, cx));
+        // Each menu hangs so its words line up with its button's: the mind's dot and name
+        // over the button's dot and name; a mode's title under "Reads along", its icon
+        // out to the left (the card's edge, an item's inset, then a 12 px icon and a gap).
+        let (mind_dx, mode_dx) = (-(1. + 5. + 9.), -(1. + 5. + 9. + 12. + 7.));
         div()
             .flex()
             .flex_row()
@@ -2538,7 +2564,7 @@ impl NotePage {
                                 .child(icon("chevron-down", 12., p.faint))
                                 .keyed_as("header:mind", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mind, window, cx)),
                         )
-                        .children(mind_menu.map(|card| self.drop_down(card, cx))),
+                        .children(mind_menu.map(|card| self.drop_down(card, mind_dx, cx))),
                 )
                 .when(!has_brief, |d| {
                     d.child(
@@ -2560,7 +2586,7 @@ impl NotePage {
                                 .child(icon("chevron-down", 12., p.faint))
                                 .keyed_as("header:mode", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mode, window, cx)),
                         )
-                        .children(mode_menu.map(|card| self.drop_down(card, cx))),
+                        .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
                 )
             })
             .child(div().flex_1())
@@ -2684,13 +2710,13 @@ impl NotePage {
         }
     }
 
-    /// A header menu, hung under the button that opened it.
-    fn drop_down(&self, card: AnyElement, cx: &mut Context<Self>) -> AnyElement {
+    /// A header menu, hung under the button that opened it, `dx` from its left edge.
+    fn drop_down(&self, card: AnyElement, dx: f32, cx: &mut Context<Self>) -> AnyElement {
         deferred(
             div()
                 .absolute()
                 .top(px(26.))
-                .left(px(-10.))
+                .left(px(dx))
                 .occlude()
                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                     if let Some(m) = this.menu.take() {
@@ -2831,7 +2857,7 @@ impl NotePage {
                     c = c.child(
                         ui::menu_item(SharedString::from(format!("mind-{}", m.id)), &t)
                             .relative()
-                            .when(pick == i, |d| d.bg(p.wash).child(ui::focus_ring(&self.menu_focus, 6., color)))
+                            .when(pick == i, |d| d.bg(p.hover).child(ui::focus_ring(&self.menu_focus, 6., color)))
                             .child(
                                 div()
                                     .flex()
@@ -2881,7 +2907,7 @@ impl NotePage {
                 let item = |id: &'static str, mode: Mode, title: &'static str, body: &'static str, cx: &mut Context<Self>| {
                     ui::menu_item(id, &t)
                         .relative()
-                        .when(pick == usize::from(mode == Mode::WhenYouAsk), |d| d.bg(p.wash).child(ui::focus_ring(&focus, 6., t.voice_ink)))
+                        .when(pick == usize::from(mode == Mode::WhenYouAsk), |d| d.bg(p.hover).child(ui::focus_ring(&focus, 6., t.voice_ink)))
                         .child(
                             div()
                                 .flex()
@@ -2914,21 +2940,22 @@ impl NotePage {
             // Inkling's words are for reading: ink, not thread.
             Role::Mind => div()
                 .font_family(t.voice_font.clone())
-                .text_size(px(14.5))
-                .line_height(px(21.))
+                .text_size(px(ts::BODY))
+                .line_height(px(20.))
                 .text_color(p.ink)
                 .when(align_right, |d| d.text_right())
                 .child(m.text.clone()),
+            // your reply wraps under itself, beside "You", inside the tag
             Role::You => div()
                 .flex()
                 .gap(px(6.))
                 .font_family(SANS)
-                .text_size(px(13.5))
-                .line_height(px(19.))
+                .text_size(px(ts::UI))
+                .line_height(px(18.))
                 .text_color(p.graphite)
                 .when(align_right, |d| d.text_right())
                 .child(div().flex_none().text_color(p.faint).child("You"))
-                .child(div().child(m.text.clone())),
+                .child(div().flex_1().min_w(px(0.)).child(m.text.clone())),
         }
     }
 
@@ -3058,7 +3085,7 @@ impl NotePage {
             div().size(px(7.)).rounded_full().bg(thread_color).into_any_element()
         } else {
             div()
-                .text_size(px(13.))
+                .text_size(px(ts::UI))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(thread_color)
                 .child(if correction { "\u{d7}" } else { "?" })
@@ -3074,7 +3101,7 @@ impl NotePage {
             .items_center()
             .gap(px(4.))
             .font_family(SANS)
-            .children(number.map(|n| div().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(p.graphite).child(n.to_string())))
+            .children(number.map(|n| div().text_size(px(ts::SMALL)).font_weight(FontWeight::SEMIBOLD).text_color(p.graphite).child(n.to_string())))
             .child(glyph);
         let tab = div()
             .absolute()
@@ -3234,21 +3261,24 @@ impl NotePage {
                         this.toggle_tag(&id_head, window, cx);
                     }
                 }))
+                // a long mind's name gives way (with an ellipsis); its kind and number stay
                 .child(
                     div()
+                        .flex_1()
+                        .min_w(px(0.))
                         .flex()
                         .items_center()
                         .gap(px(5.))
-                        .text_size(px(12.5))
-                        .child(div().font_weight(FontWeight::SEMIBOLD).text_color(thread_color).child(mind))
-                        .child(div().text_color(p.faint).child(if tied { "\u{b7} tied off".to_string() } else { format!("\u{b7} {kind}") })),
+                        .text_size(px(ts::SMALL))
+                        .child(div().min_w(px(0.)).truncate().font_weight(FontWeight::SEMIBOLD).text_color(thread_color).child(mind))
+                        .child(div().flex_none().text_color(p.faint).child(if tied { "\u{b7} tied off".to_string() } else { format!("\u{b7} {kind}") })),
                 )
-                .children(self.numbers.get(&id).map(|n| div().text_size(px(12.5)).text_color(p.faint).child(n.to_string()))),
+                .children(self.numbers.get(&id).map(|n| div().flex_none().text_size(px(ts::SMALL)).text_color(p.faint).child(n.to_string()))),
         );
         if tied && !is_active {
             let first = thread.messages.first().map(|m| m.text.clone()).unwrap_or_default();
             let short: String = first.chars().take(64).collect::<String>() + if first.chars().count() > 64 { "\u{2026}" } else { "" };
-            body = body.child(div().text_size(px(13.)).line_height(px(18.)).text_color(p.faint).child(short));
+            body = body.child(div().text_size(px(ts::UI)).line_height(px(18.)).text_color(p.faint).child(short));
         } else {
             // Folded, a tag shows what it says: a question's question, an asked mind's answer.
             let messages: Vec<&Message> = if is_active {
@@ -3277,7 +3307,7 @@ impl NotePage {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(div().text_size(px(13.)).text_color(p.faint).child("Stitching a sketch\u{2026}"))
+                            .child(div().text_size(px(ts::UI)).text_color(p.faint).child("Stitching a sketch\u{2026}"))
                             .child(Self::thinking_dot(&t, SharedString::from(format!("sketch-{id}")))),
                     );
                 }
@@ -3286,7 +3316,7 @@ impl NotePage {
             if !is_active && replies > 0 {
                 body = body.child(
                     div()
-                        .text_size(px(12.5))
+                        .text_size(px(ts::SMALL))
                         .text_color(p.faint)
                         .child(if replies == 1 { "1 reply".to_string() } else { format!("{replies} replies") }),
                 );
@@ -3307,7 +3337,7 @@ impl NotePage {
                         .bg(p.paper)
                         .border_1()
                         .border_color(p.rule)
-                        .child(div().flex_1().text_size(px(13.5)).child(Input::new(&input).appearance(false)))
+                        .child(div().flex_1().text_size(px(ts::BODY)).child(Input::new(&input).appearance(false)))
                         .child(
                             div()
                                 .id(SharedString::from(format!("send-{id_send}")))
@@ -3351,7 +3381,7 @@ impl NotePage {
                             .cursor_pointer()
                             .p(px(2.))
                             .rounded(px(4.))
-                            .hover(move |s| s.bg(p.wash))
+                            .hover(move |s| s.bg(p.hover))
                             .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
                             // a tick where the pointer is, the words in the toasts (the row has no room)
                             .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
@@ -3562,7 +3592,7 @@ impl NotePage {
                 .rounded(px(5.))
                 .cursor_pointer()
                 .when(on, |d| d.bg(p.ink).text_color(p.paper))
-                .when(!on, |d| d.text_color(p.graphite).hover(move |s| s.bg(p.wash).text_color(p.ink)))
+                .when(!on, |d| d.text_color(p.graphite).hover(move |s| s.bg(p.hover).text_color(p.ink)))
                 .active(|s| s.opacity(0.7))
         };
         let block = |id: &'static str, label: &'static str, k: BlockKind, cx: &mut Context<Self>| {
@@ -3609,7 +3639,7 @@ impl NotePage {
                     .cursor_pointer()
                     .border_1()
                     .border_color(if on { c } else { gpui_kit::transparent_black() })
-                    .hover(move |s| s.bg(p.wash))
+                    .hover(move |s| s.bg(p.hover))
                     .active(|s| s.opacity(0.7))
                     .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(*name).build(window, cx))
                     .child(div().text_size(px(ts::UI)).font_weight(FontWeight::SEMIBOLD).text_color(c).child("A"))
@@ -3633,7 +3663,7 @@ impl NotePage {
                 .justify_between()
                 .gap(px(10.))
                 .cursor_pointer()
-                .hover(move |s| s.bg(p.wash))
+                .hover(move |s| s.bg(p.hover))
                 .active(|s| s.opacity(0.8))
                 .child(div().flex_none().text_size(px(ts::UI)).text_color(p.ink).child(title))
                 .child(div().min_w(px(0.)).truncate().text_size(px(ts::META)).text_color(p.faint).child(hint))
@@ -3708,7 +3738,7 @@ impl NotePage {
                     .text_color(color)
                     .border_1()
                     .border_color(if on { color } else { gpui_kit::transparent_black() })
-                    .hover(move |s| s.bg(p.wash))
+                    .hover(move |s| s.bg(p.hover))
                     .active(|s| s.opacity(0.7))
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -4098,10 +4128,16 @@ impl NotePage {
                 _ => true,
             };
             if visible {
-                items.push((th.id.clone(), side, first.origin.y));
+                let start = ed.anchors().iter().find(|a| a.id == th.id).map_or(usize::MAX, |a| a.range.start);
+                items.push((start, th.id.clone(), side, first.origin.y));
             }
             anchor_boxes.insert(th.id.clone(), rects);
         }
+        // Tags on one line stack in reading order, as they are numbered (`place` keeps
+        // this order among tags level with each other); threads on the same words keep
+        // the order they were made in.
+        items.sort_by_key(|(start, ..)| *start);
+        let items = items.into_iter().map(|(_, id, side, y)| (id, side, y)).collect();
         let slots = margin::place(items, &self.heights.borrow(), self.active.as_deref(), px(CARD_GAP));
         (threads, slots, anchor_boxes)
     }
@@ -4296,7 +4332,7 @@ impl Render for NotePage {
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(color)
                         .cursor_pointer()
-                        .hover(move |s| s.bg(p.wash))
+                        .hover(move |s| s.bg(p.hover))
                         .child(glyph)
                         .on_click(cx.listener(move |this, _, window, cx| this.toggle_mark(&id, window, cx)))
                         .into_any_element(),
@@ -4461,7 +4497,7 @@ impl Render for NotePage {
         let sheet = div()
             .relative()
             .w(px(m.page() + 2. * SHEET_PAD))
-            .min_h(viewport.height - px(56.))
+            .min_h(viewport.height - px(SHEET_TOP + SHEET_BOTTOM))
             .px(px(SHEET_PAD))
             .pt(px(50.))
             .bg(p.paper)
@@ -4473,6 +4509,21 @@ impl Render for NotePage {
             .child(border)
             .child(page);
         let fits = m.page() + 2. * SHEET_PAD <= width - 16.;
+        // Scrolled, the sheet slides under the cloth along the top, which lays a soft
+        // shadow on it there; the shadow comes in over the first few pixels of scroll.
+        let sheet_w = m.page() + 2. * SHEET_PAD;
+        let sheet_x = if fits { (width - sheet_w) / 2. } else { 12. };
+        let scrolled = (-self.scroll.offset().y.as_f32() / 24.).clamp(0., 1.);
+        let hem = (scrolled > 0.).then(|| {
+            div()
+                .absolute()
+                .top(px(CHROME_H))
+                .left(px(sheet_x))
+                .w(px(sheet_w))
+                .h(px(10.))
+                .opacity(scrolled)
+                .bg(linear_gradient(180., linear_color_stop(p.shadow, 0.), linear_color_stop(p.shadow.opacity(0.), 1.)))
+        });
 
         div()
             .size_full()
@@ -4496,24 +4547,30 @@ impl Render for NotePage {
                     .h_full()
                     .min_w(px(0.))
                     .child(weave)
+                    // The page scrolls below the band of cloth that holds the traffic lights,
+                    // the sidebar toggle and Chat, so no words ever run under them.
                     .child(
                         div()
                             .id("page-scroll")
-                            .size_full()
+                            .absolute()
+                            .top(px(CHROME_H))
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
                             .overflow_y_scroll()
                             .track_scroll(&self.scroll)
                             .child(
                                 div()
                                     .w_full()
                                     .flex()
-                                    // the traffic lights, sidebar toggle and Chat sit on the cloth above
-                                    .pt(px(44.))
-                                    .pb(px(28.))
+                                    .pt(px(SHEET_TOP - CHROME_H))
+                                    .pb(px(SHEET_BOTTOM))
                                     // Centred while it fits; past that keep the column in view.
                                     .map(|d| if fits { d.justify_center() } else { d.justify_start().pl(px(12.)) })
                                     .child(sheet),
                             ),
                     )
+                    .children(hem)
                     .children(enlarged),
             )
             .children(chat)
@@ -4676,7 +4733,7 @@ mod tests {
         let tight = Metrics::for_width(narrowest);
         assert!(tight.column >= 220. && tight.margin >= TAB_W);
         // The narrow layout only starts where the one-margin page no longer fits.
-        assert_eq!((Metrics::for_width(584.).column, Metrics::for_width(584.).margin), (300., 200.));
+        assert_eq!((Metrics::for_width(584. + GUTTER_LEAD).column, Metrics::for_width(584. + GUTTER_LEAD).margin), (300., 200.));
         // Wide: a margin on each side, as before.
         let wide = Metrics::for_width(1320.);
         assert!(wide.both);
@@ -4687,7 +4744,18 @@ mod tests {
         // Narrow, or the chat open on a laptop-sized window: one margin, on the right.
         let narrow = Metrics::for_width(1100. - CHAT_WIDTH);
         assert!(!narrow.both);
-        assert_eq!(narrow.column_left(), 0.);
+        assert_eq!(narrow.column_left(), GUTTER_LEAD);
         assert!(narrow.column >= 400.);
+    }
+
+    #[std::prelude::v1::test]
+    fn the_gutter_marks_sit_on_the_paper() {
+        // The editor draws a paragraph's knot and number 26 px left of the words, about
+        // 5 px either side: at every width they keep 8 px of paper from the sheet's edge.
+        let narrowest = 720. - CHAT_WIDTH - 2. * (SHEET_PAD + 14.);
+        for w in (narrowest as i32..=2400).map(|w| w as f32) {
+            let m = Metrics::for_width(w);
+            assert!(SHEET_PAD + m.column_left() - 26. - 5. >= 8., "width {w}: the gutter is on the sheet's edge");
+        }
     }
 }

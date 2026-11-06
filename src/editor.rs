@@ -3196,19 +3196,22 @@ impl Element for EditorElement {
             }
         }
 
-        // Active thread: wash its words.
+        // Active thread: wash its words in its own thread (another mind's thread is not
+        // washed in madder, which is Inkling's).
         if let Some(active) = &active {
             if let Some(a) = anchors.iter().find(|a| &a.id == active) {
+                let wash = styles.get(active).map_or(p.wash, |s| s.color.opacity(if p.dark { 0.12 } else { 0.08 }));
                 for r in layout.rects(a.range.clone()) {
                     let r = Bounds::new(origin + r.origin - point(px(1.), px(-2.)), size(r.size.width + px(2.), r.size.height - px(4.)));
-                    window.paint_quad(fill(r, p.wash).corner_radii(px(2.)));
+                    window.paint_quad(fill(r, wash).corner_radii(px(2.)));
                 }
             }
         }
 
         // Selection.
         if !selected.is_empty() {
-            let color = if focused { p.selection } else { p.wash };
+            // a selection the keyboard has left stays in view, in a plain shade as on a Mac
+            let color = if focused { p.selection } else { p.ink.opacity(if p.dark { 0.13 } else { 0.1 }) };
             for r in layout.rects(selected.clone()) {
                 let w = if r.size.width < px(4.) { px(4.) } else { r.size.width };
                 window.paint_quad(fill(Bounds::new(origin + r.origin, size(w, r.size.height)), color));
@@ -3453,8 +3456,8 @@ impl Element for EditorElement {
                         underline: None,
                         strikethrough: None,
                     };
-                    let shaped = window.text_system().shape_line(label.into(), px(10.), &[run], None);
-                    let _ = shaped.paint(point(gx - shaped.width / 2., cy + px(3.)), px(12.), TextAlign::Left, None, window, cx);
+                    let shaped = window.text_system().shape_line(label.into(), px(crate::theme::ts::META), &[run], None);
+                    let _ = shaped.paint(point(gx - shaped.width / 2., cy + px(3.)), px(13.), TextAlign::Left, None, window, cx);
                 }
             }
         }

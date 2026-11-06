@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, HashSet},
     ops::Range,
     rc::Rc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::brain::{Brain, BrainMsg};
@@ -96,6 +96,100 @@ struct TagDrag {
     moved: bool,
     /// Where the tab sat in the window when the drag began, to keep it on screen.
     tab: Option<Bounds<Pixels>>,
+}
+
+/// Where the pointer is in relation to a tag, and since when: what decides whether the
+/// tag drops open on its own.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+enum Hover {
+    /// Not on it.
+    #[default]
+    Away,
+    /// On its tab, its open panel, or both, since `since`: when it came onto the first part.
+    Over { tab: bool, panel: bool, since: Instant },
+    /// It left an open tag at `at` (which had rested since `since`): the tag stays open a
+    /// moment, in case the pointer is on its way from the tab onto the panel, and coming
+    /// back within that moment is the same rest.
+    Left { at: Instant, since: Instant },
+}
+
+impl Hover {
+    /// The pointer came onto (`on`) or left the tag's tab (`tab`), else its panel; `open`
+    /// is whether the tag had rested open. Leaving an open tag starts the grace period;
+    /// leaving one that had not opened yet ends the rest.
+    fn part(self, tab: bool, on: bool, now: Instant, open: bool) -> Hover {
+        match (self, on) {
+            (Hover::Over { tab: t, panel: p, since }, true) => Hover::Over { tab: t || tab, panel: p || !tab, since },
+            (Hover::Left { at, since }, true) if now.duration_since(at) < FOLD_DELAY => Hover::Over { tab, panel: !tab, since },
+            (_, true) => Hover::Over { tab, panel: !tab, since: now },
+            (Hover::Over { tab: t, panel: p, since }, false) => {
+                let (t, p) = if tab { (false, p) } else { (t, false) };
+                if t || p {
+                    Hover::Over { tab: t, panel: p, since }
+                } else if open {
+                    Hover::Left { at: now, since }
+                } else {
+                    Hover::Away
+                }
+            }
+            (other, false) => other,
+        }
+    }
+
+    /// The pointer has rested on the tag for [`HOVER_REST`], and nothing was typed since it
+    /// came to rest (a key in the note folds a tag).
+    fn rested(&self, now: Instant, last_typed: Option<Instant>) -> bool {
+        match self {
+            Hover::Over { since, .. } => now.duration_since(*since) >= HOVER_REST && last_typed.is_none_or(|k| k < *since),
+            _ => false,
+        }
+    }
+
+    /// The pointer just left: the tag stays open for [`FOLD_DELAY`].
+    fn lingering(&self, now: Instant) -> bool {
+        matches!(self, Hover::Left { at, .. } if now.duration_since(*at) < FOLD_DELAY)
+    }
+
+    /// About to change on its own (a rest about to pass, a grace period running), so the
+    /// page needs a frame without an event to bring it.
+    fn settling(&self, now: Instant) -> bool {
+        match self {
+            Hover::Over { since, .. } => now.duration_since(*since) < HOVER_REST,
+            Hover::Left { at, .. } => now.duration_since(*at) < FOLD_DELAY,
+            Hover::Away => false,
+        }
+    }
+}
+
+/// A tag between frames: where the pointer is, and how far it has dropped open (0 folded,
+/// 1 open) with its spring's speed.
+#[derive(Clone, Copy, Debug, Default)]
+struct Tag {
+    hover: Hover,
+    unfold: f32,
+    unfold_v: f32,
+}
+
+impl Tag {
+    /// One frame of the drop spring toward `target`, `dt` seconds long: whether it still moves.
+    /// A tag opens on a spring that overshoots about 4% and settles, and folds on a stiffer
+    /// one that does not bounce ([`DROP_OPEN`], [`DROP_CLOSE`]).
+    fn step(&mut self, target: f32, dt: f32) -> bool {
+        if (self.unfold - target).abs() < 0.002 && self.unfold_v.abs() < 0.02 {
+            self.unfold = target;
+            self.unfold_v = 0.;
+            return false;
+        }
+        let (k, c) = if target > 0.5 { DROP_OPEN } else { DROP_CLOSE };
+        // small steps, so a slow frame does not throw the spring
+        let steps = (dt * 240.).ceil().max(1.);
+        let h = dt / steps;
+        for _ in 0..steps as usize {
+            self.unfold_v += (k * (target - self.unfold) - c * self.unfold_v) * h;
+            self.unfold += self.unfold_v * h;
+        }
+        true
+    }
 }
 
 /// A thread's colour. The note's own mind wears the thread you chose; every other mind
@@ -554,16 +648,9 @@ pub struct NotePage {
     settle_task: Option<Task<()>>,
     /// Minds a script seats for its next ask.
     pending_room: Vec<String>,
-    /// How far each tag is unfolded (0 folded, 1 open), eased toward its target each frame.
-    unfold: HashMap<String, f32>,
-    /// Tags under the pointer, and when the pointer last left each.
-    /// Which parts of which tags the pointer is over: "<id>:tab" or "<id>:panel".
-    hover_tag: HashSet<String>,
-    hover_left: HashMap<String, std::time::Instant>,
-    /// When the pointer came onto each tag it is over (any part of it).
-    hover_at: HashMap<String, std::time::Instant>,
-    /// Each tag's unfold speed, for its spring.
-    unfold_v: HashMap<String, f32>,
+    /// Each visible tag between frames: the pointer's rest on it and how far it has
+    /// dropped open ([`Tag`]).
+    tags: HashMap<String, Tag>,
     /// A tag being dragged, and when the last drag ended (so its click is ignored).
     drag: Option<TagDrag>,
     last_drag_end: Option<std::time::Instant>,
@@ -685,11 +772,7 @@ impl NotePage {
             rechecking: HashSet::new(),
             settle_task: None,
             pending_room: vec![],
-            unfold: HashMap::new(),
-            hover_tag: HashSet::new(),
-            hover_left: HashMap::new(),
-            hover_at: HashMap::new(),
-            unfold_v: HashMap::new(),
+            tags: HashMap::new(),
             drag: None,
             last_drag_end: None,
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
@@ -813,11 +896,7 @@ impl NotePage {
         self.last_dismissed = None;
         self.drag = None;
         self.last_drag_end = None;
-        self.hover_tag.clear();
-        self.hover_at.clear();
-        self.hover_left.clear();
-        self.unfold.clear();
-        self.unfold_v.clear();
+        self.tags.clear();
         self.tying.clear();
         self.ropes.clear();
         self.snipped.clear();
@@ -965,11 +1044,10 @@ impl NotePage {
             return true;
         }
         // a tag that only unfolded under the pointer folds first
-        let hover_open = self.hover_at.keys().chain(self.hover_left.keys()).any(|id| {
-            self.active.as_deref() != Some(id.as_str()) && self.unfold.get(id).copied().unwrap_or(0.) > 0.5
-        });
-        self.hover_at.clear();
-        self.hover_left.clear();
+        let hover_open = self.tags.iter().any(|(id, t)| t.hover != Hover::Away && self.active.as_deref() != Some(id.as_str()) && t.unfold > 0.5);
+        for t in self.tags.values_mut() {
+            t.hover = Hover::Away;
+        }
         if hover_open {
             cx.notify();
             return true;
@@ -2787,9 +2865,12 @@ impl NotePage {
             Step::WriteIn | Step::UndoWriteIn => self.write_in_step(step, window, cx),
             Step::Jump(forward) => self.jump_to_open(*forward, window, cx),
             Step::Hover(n) => {
-                let ids: Vec<String> = self.hover_tag.drain().filter_map(|k| k.split_once(':').map(|(id, _)| id.to_string())).collect();
-                for id in ids {
-                    self.hover_left.insert(id, std::time::Instant::now());
+                // the pointer moves away from every tag it was on
+                let now = Instant::now();
+                for t in self.tags.values_mut() {
+                    if let Hover::Over { since, .. } = t.hover {
+                        t.hover = Hover::Left { at: now, since };
+                    }
                 }
                 if let Some(id) = (*n > 0).then(|| self.nth_thread(*n)).flatten() {
                     self.set_tag_hover(&id, "tab", true, cx);
@@ -2930,7 +3011,7 @@ impl NotePage {
             "first_run": self.note.first_run,
             "statuses": self.note.threads.iter().map(|t| format!("{}:{:?}:{}", short(&t.id), t.status, t.mind_name)).collect::<Vec<_>>(),
             // tags more than half unfolded, and tags moved from where the margin puts them
-            "unfolded": self.unfold.iter().filter(|(_, u)| **u > 0.5).map(|(id, _)| short(id)).collect::<Vec<_>>(),
+            "unfolded": self.tags.iter().filter(|(_, t)| t.unfold > 0.5).map(|(id, _)| short(id)).collect::<Vec<_>>(),
             "moved_tags": self.note.threads.iter().filter(|t| t.tag_offset != (0., 0.)).map(|t| format!("{}:{:.0},{:.0}", short(&t.id), t.tag_offset.0, t.tag_offset.1)).collect::<Vec<_>>(),
         });
         // the paper you can see and each tab, in the window at the last paint: a dragged tag
@@ -3588,7 +3669,7 @@ impl NotePage {
         let is_active = self.active.as_deref() == Some(id.as_str());
         let tied = thread.status == ThreadStatus::Resolved;
         let thread_color = if thread.own { own::ink(&t) } else { mind_thread(&thread.mind_name, &self.mind.name, cx.global::<Store>().settings.ink, &t) };
-        let unfold = self.unfold.get(&id).copied().unwrap_or(0.);
+        let unfold = self.tags.get(&id).map_or(0., |t| t.unfold);
         let since = self.tying.get(&id).map(|at| anim_since(*at, std::time::Instant::now()));
         let fade = if tied && !is_active { tag_fade(since) } else { 1. };
         let number = self.numbers.get(&id).copied();
@@ -4057,32 +4138,12 @@ impl NotePage {
     /// Pointer over a tag (its tab or its open panel). Leaving starts a short grace
     /// period so moving from the tab onto the panel does not fold it.
     fn set_tag_hover(&mut self, id: &str, part: &str, hovered: bool, cx: &mut Context<Self>) {
-        let key = format!("{id}:{part}");
-        if hovered {
-            self.hover_tag.insert(key);
-            self.hover_at.entry(id.to_string()).or_insert_with(std::time::Instant::now);
-        } else {
-            let was_open = self.tag_rested(id);
-            self.hover_tag.remove(&key);
-            if !self.tag_pointed(id) {
-                self.hover_at.remove(id);
-                if was_open {
-                    self.hover_left.insert(id.to_string(), std::time::Instant::now());
-                }
-            }
-        }
+        let now = Instant::now();
+        let last_typed = self.last_typed;
+        let tag = self.tags.entry(id.to_string()).or_default();
+        let open = tag.hover.rested(now, last_typed);
+        tag.hover = tag.hover.part(part == "tab", hovered, now, open);
         cx.notify();
-    }
-
-    fn tag_pointed(&self, id: &str) -> bool {
-        self.hover_tag.contains(&format!("{id}:tab")) || self.hover_tag.contains(&format!("{id}:panel"))
-    }
-
-    /// The pointer has rested on this tag long enough to unfold it, and you have not
-    /// typed since it came to rest (a key in the note folds it).
-    fn tag_rested(&self, id: &str) -> bool {
-        let Some(at) = self.hover_at.get(id) else { return false };
-        self.tag_pointed(id) && at.elapsed() >= HOVER_REST && self.last_typed.is_none_or(|k| k < *at)
     }
 
     /// Click a tab: open it (and its reply box), or close it if it is the open one.
@@ -4201,14 +4262,15 @@ impl NotePage {
         if th.status == ThreadStatus::Resolved {
             return 0.;
         }
-        if self.tag_rested(id) {
+        let now = Instant::now();
+        let hover = self.tags.get(id).map_or(Hover::Away, |t| t.hover);
+        if hover.rested(now, self.last_typed) {
             return 1.;
         }
         // a tag the pointer just left stays open a moment, unless another one has opened:
         // one tag unfolded at a time
-        let lingering = self.hover_left.get(id).is_some_and(|t| t.elapsed() < FOLD_DELAY);
-        let other = self.hover_at.keys().any(|o| o != id && self.tag_rested(o));
-        if lingering && !other && self.last_typed.is_none_or(|k| k.elapsed() > FOLD_DELAY) { 1. } else { 0. }
+        let other = self.tags.iter().any(|(o, t)| o != id && t.hover.rested(now, self.last_typed));
+        if hover.lingering(now) && !other && self.last_typed.is_none_or(|k| now.duration_since(k) > FOLD_DELAY) { 1. } else { 0. }
     }
 
     fn toolbar(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -4920,33 +4982,16 @@ impl Render for NotePage {
         let mut unfolding = false;
         for th in &threads {
             let target = self.unfold_target(th);
-            let x = self.unfold.entry(th.id.clone()).or_insert(0.);
-            let v = self.unfold_v.entry(th.id.clone()).or_insert(0.);
-            if (*x - target).abs() < 0.002 && v.abs() < 0.02 {
-                *x = target;
-                *v = 0.;
-                continue;
-            }
-            let (k, c) = if target > 0.5 { DROP_OPEN } else { DROP_CLOSE };
-            // small steps, so a slow frame does not throw the spring
-            let steps = (dt * 240.).ceil().max(1.);
-            let h = dt / steps;
-            for _ in 0..steps as usize {
-                *v += (k * (target - *x) - c * *v) * h;
-                *x += *v * h;
-            }
-            unfolding = true;
+            unfolding |= self.tags.entry(th.id.clone()).or_default().step(target, dt);
         }
-        self.unfold.retain(|id, _| threads.iter().any(|t| &t.id == id));
-        self.unfold_v.retain(|id, _| threads.iter().any(|t| &t.id == id));
+        self.tags.retain(|id, _| threads.iter().any(|t| &t.id == id));
         // tabs and panels drawn this frame put their bounds back as they paint
         self.tab_bounds.borrow_mut().retain(|id, _| !jmw && slots.iter().any(|s| &s.id == id));
-        self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.unfold.get(id).is_some_and(|u| *u > 0.01));
+        self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.tags.get(id).is_some_and(|t| t.unfold > 0.01));
         // a pointer resting on a tag, or one that just left, changes it without an event
-        if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) || self.hover_at.values().any(|t| t.elapsed() < HOVER_REST) {
+        if self.tags.values().any(|t| t.hover.settling(now)) {
             unfolding = true;
         }
-        self.hover_left.retain(|_, t| t.elapsed() < FOLD_DELAY * 4);
         if unfolding {
             window.request_animation_frame();
         }
@@ -5041,7 +5086,7 @@ impl Render for NotePage {
                 // A thread is quiet until you look at it: faint at rest, stronger while its
                 // tag unfolds under the pointer, full strength while it is open, and while it
                 // is being tied off.
-                let unfolded = self.unfold.get(&s.id).copied().unwrap_or(0.);
+                let unfolded = self.tags.get(&s.id).map_or(0., |t| t.unfold);
                 let opacity = if th.status == ThreadStatus::Resolved {
                     tag_fade(since)
                 } else if self.active.as_deref() == Some(s.id.as_str()) {
@@ -5276,6 +5321,47 @@ mod tests {
         assert_eq!(inkling, crate::theme::ink_color(InkColor::Red, &t.p));
         assert_ne!(inkling, mind_thread("Socratic tutor", "Coach", InkColor::Ink, &t));
         assert_ne!(inkling, mind_thread("Coach", "Coach", InkColor::Ink, &t));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_tag_opens_after_the_pointer_rests_and_lingers_after_it_leaves() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        // onto the tab: a rest begins, and passes after HOVER_REST
+        let on_tab = Hover::Away.part(true, true, at(0), false);
+        assert!(matches!(on_tab, Hover::Over { tab: true, panel: false, .. }));
+        assert!(!on_tab.rested(at(100), None) && on_tab.rested(at(120), None));
+        assert!(on_tab.settling(at(100)) && !on_tab.settling(at(130)));
+        assert!(!on_tab.rested(at(200), Some(at(150))), "a key after the rest folds it");
+        // onto the panel too, then off the tab: still resting, since the start
+        let both = on_tab.part(false, true, at(130), true);
+        let panel_only = both.part(true, false, at(140), true);
+        assert!(matches!(panel_only, Hover::Over { tab: false, panel: true, .. }) && panel_only.rested(at(140), None));
+        // off the panel while open: it lingers for FOLD_DELAY, and coming back within that is the same rest
+        let left = panel_only.part(false, false, at(150), true);
+        assert!(matches!(left, Hover::Left { .. }) && left.lingering(at(300)) && !left.lingering(at(400)) && left.settling(at(300)));
+        assert!(left.part(true, true, at(200), false).rested(at(200), None));
+        assert!(!left.part(true, true, at(500), false).rested(at(500), None), "back too late: a new rest");
+        // leaving before it opened ends the rest, with no lingering
+        assert_eq!(Hover::Away.part(true, true, at(0), false).part(true, false, at(50), false), Hover::Away);
+        assert!(!Hover::Away.lingering(at(0)) && !Hover::Away.settling(at(0)));
+    }
+
+    #[std::prelude::v1::test]
+    fn the_drop_spring_overshoots_a_little_and_the_fold_does_not_bounce() {
+        let mut tag = Tag::default();
+        let (mut peak, mut frames) = (0f32, 0);
+        while tag.step(1., 1. / 60.) {
+            peak = peak.max(tag.unfold);
+            frames += 1;
+            assert!(frames < 600, "never settles");
+        }
+        assert!(peak > 1.02 && peak < 1.07, "overshoot {peak}");
+        assert!((tag.unfold - 1.).abs() < 0.002 && frames < 90, "{frames} frames to open");
+        while tag.step(0., 1. / 60.) {
+            assert!(tag.unfold > -0.005, "the fold bounced to {}", tag.unfold);
+        }
+        assert_eq!(tag.unfold, 0.);
     }
 
     #[std::prelude::v1::test]

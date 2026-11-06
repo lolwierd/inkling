@@ -9,14 +9,16 @@ and the welcome tour.
 
 **Severity**: High means broken, or data at risk. Medium means wrong, confusing or
 plainly visible. Low means polish.
-**Status**: Fixed (on this branch); Reported (in code someone else owns); Open (mine, but
-needs a design call); Gone (no longer applies after the rebase).
+**Status**: Fixed (on this branch); Fixed (audit-fixes), in the second pass below;
+Reported (in code someone else owns); Open (mine, but needs a design call); Gone (no
+longer applies after the rebase, or after Settings became a window).
 
 Screenshots are in `design/qa/shots/`:
 - `before-*`: the build this pass started on;
 - `after-*`: this branch, on the new UI;
 - `report-*`: findings left to the owners of that code;
-- `new-ui-*`: what master changed.
+- `new-ui-*`: what master changed;
+- `fix2-*`: the second pass (branch `audit-fixes`).
 
 ## Summary
 
@@ -24,9 +26,10 @@ Screenshots are in `design/qa/shots/`:
 |---|---|
 | Findings | 59 |
 | Fixed on this branch | 45 |
-| Reported to the owners of that code | 11 |
-| Open (design call) | 1 |
-| Gone after the rebase | 2 |
+| Fixed in the second pass (`audit-fixes`) | 10 |
+| Reported to the owners of that code | 1 (#58, QA tooling) |
+| Open (design call) | 0 |
+| Gone (after the rebase, or with the Settings sheet) | 3 |
 | High severity | 7, all fixed |
 
 The worst, all fixed:
@@ -39,6 +42,28 @@ The worst, all fixed:
   be used.
 - The palette card stretched to its full height whatever it held.
 - Escape did nothing in most of the boxes that said "Esc to cancel".
+
+## Second pass: the findings left open (branch `audit-fixes`, 6 Nov 2026)
+
+The open and reported findings, fixed on one branch, each with a scenario or a unit test,
+and looked at in linen and lamplight. Screenshots are `fix2-*`.
+
+| # | What changed | Checked by |
+|---|---|---|
+| 8 | The keyboard reaches every control. The one it is on wears a running stitch in its thread's colour, 3 px outside it, only when a key put it there; a click never takes the keyboard from the note. Tab runs ☰, the notes list, the header, the note, the open tag (reply box, Resolve, Dismiss, Make a note, Copy), the question box, the chat. The note keeps Tab for lists: ⇧Tab in a paragraph and ⌃Tab leave it. The mind and mode menus take ↑ ↓ Home End, Return or Space, and give the keyboard back to their button. Tab stays inside Export and ⌘K. | u09; fix2-focus-ring, fix2-menu-keys, fix2-tag-ring |
+| 27 | Threads on the same words share one running stitch and take its stitches in turn, so every mind's colour shows. | unit tests in `stitch.rs`; fix2-room-stitches |
+| 45, 46 | Every toast is in one stack at the bottom centre (the app's, "Thread dismissed" and the error notice), on a small fabric label with a running-stitch edge. A problem is ochre, with an alert mark and a close control; a click on it closes it too. Motion from the board; the pointer holds a toast; ⌥⌘Z still undoes. | u07, unit tests in `toast.rs`; fix2-toasts |
+| 52 | Gone: Settings is a window now, and the switch sits inside its card. | fix2-settings-switch |
+| 53 | Settings sizes come from `theme::ts` (a test keeps them there; the pane title is `ts::PANE`), it uses `ui::switch`, fields are padded once, and the ✕ on a keycap has a hover. The ink dots, the close ✕ and the missing shadow went with the sheet. | unit test in `settings.rs`; fix2-settings-fields |
+| 54 | Marks only draws a ? (× for a correction, as its tab shows); Settings says so and pictures it. | t12; fix2-marks-only |
+| 55 | Beside the chat the margin slims to a strip for the folded tabs, then the gap, then the cloth, and last the column, so the page fits a 720 px window with the chat open. An open tag opens over the page, not under the chat; the header wraps in two groups. | unit test over every width, r13; fix2-narrow-chat |
+| 56 | A left tab's thread comes up past the gutter's knot and number, and left tabs hang 24 px further out. | u08; fix2-left-thread |
+| 57 | The Chat pill is 12 px (`ts::SMALL`). | |
+| 59 | Copy turns to a tick for a moment, and "Thread copied" shows in the toasts. | t13; fix2-copy-tick |
+
+Tooling on the way: `scripts/dev shot --window settings --env INKLING_SETTINGS_TAB=…`
+shoots the Settings window (and `INKLING_SETTINGS_SCROLL` scrolls it); `size:` and `width:`
+steps now land, where the window's jiggle used to undo them on a busy machine.
 
 ## Rebase onto master `90bdf62`
 
@@ -95,7 +120,7 @@ UI: folded tabs, a tab unfolded under the pointer, and an open tag.
 | 5 | Header menus, brief editor, sketch seen larger, chat box | Esc did nothing in any of them. Now one Escape path closes the innermost thing, one per press, and gives the keyboard back to the note. | Medium | Fixed | |
 | 6 | ⌘K palette | ⌘⌫ never deleted the highlighted note, because the search box's own ⌘⌫ binding ran first. The documented shortcut did nothing. | High | Fixed | |
 | 7 | ⌘K palette | Deleting a note had no confirmation and no undo, and ⌘⌫ is one key away from clearing the search box. Now "Note deleted · Undo" shows for 8 s. Undo puts the note back where it was, opens it, and removes the blank note made to stand in for it. | High | Fixed | after-delete-undo-toast.jpg |
-| 8 | Everywhere | No visible focus ring on any control, no Tab order between buttons, no arrow keys in the mind and mode menus, and the sidebar works only with the mouse. | Low | Open (design call: needs focusable controls) | |
+| 8 | Everywhere | No visible focus ring on any control, no Tab order between buttons, no arrow keys in the mind and mode menus, and the sidebar works only with the mouse. | Low | Fixed (audit-fixes) | fix2-focus-ring.jpg, fix2-focus-ring-dark.jpg, fix2-menu-keys.jpg, fix2-tag-ring.jpg |
 
 ## ⌘K palette
 
@@ -134,7 +159,7 @@ UI: folded tabs, a tab unfolded under the pointer, and an open tag.
 | 24 | Room chips | Pressing a fourth mind's chip did nothing, with no sign why. It now greys out while three minds are seated. | Low | Fixed | |
 | 25 | Ask box | The hint wrapped to two lines at the margin's width. | Low | Fixed | |
 | 26 | Room tags | Room threads on the same words were numbered in id order, so the tags read 3, 2, 1 from the top. | Low | Gone (fixed on master) | report-room-numbers-and-stitches.jpg |
-| 27 | Room stitches | Several threads on the same words draw their running stitches on top of each other, so only one mind's colour shows. One idea: interleave the dashes, one colour per mind. | Low | Reported (`stitch.rs`) | report-room-numbers-and-stitches.jpg |
+| 27 | Room stitches | Several threads on the same words draw their running stitches on top of each other, so only one mind's colour shows. One idea: interleave the dashes, one colour per mind. | Low | Fixed (audit-fixes) | report-room-numbers-and-stitches.jpg → fix2-room-stitches.jpg, fix2-room-stitches-dark.jpg |
 
 ## Chat
 
@@ -182,8 +207,8 @@ UI: folded tabs, a tab unfolded under the pointer, and an open tag.
 | # | Screen | What was wrong | Severity | Status | Screenshot |
 |---|---|---|---|---|---|
 | 44 | Errors | The usage-limit message never said when the limit resets, though the brain knows. The sign-in message showed literal backticks. A brain that was not running was reported as "Couldn't reach the model". | Low | Fixed | |
-| 45 | Errors | The error notice and "Thread dismissed · Undo" both sit at the bottom left, and they overlap. | Medium | Reported (`render`) | report-error-and-undo-overlap.jpg |
-| 46 | Errors | The error notice cannot be closed, and it stays for 12 s. | Low | Reported (`render`) | |
+| 45 | Errors | The error notice and "Thread dismissed · Undo" both sit at the bottom left, and they overlap. | Medium | Fixed (audit-fixes) | report-error-and-undo-overlap.jpg → fix2-toasts.jpg, fix2-toasts-dark.jpg |
+| 46 | Errors | The error notice cannot be closed, and it stays for 12 s. | Low | Fixed (audit-fixes) | fix2-toasts.jpg |
 | 47 | First run | The invitation placeholder ran past the column into the margin. The wider column on master hides this at the default width, but it still happens in narrow windows. | Medium | Fixed | before-first-run-placeholder-overflow.jpg |
 | 48 | Corner hint | "Hold ⌥ to speak · ⌘J chat · ⌘K notes" drew on top of the dimmed dialogs and the drawer. | Low | Fixed | before-export.jpg |
 | 49 | Thread to note | "Make a note" cut the title mid-word at 60 characters. | Low | Fixed | |
@@ -197,16 +222,16 @@ UI: folded tabs, a tab unfolded under the pointer, and an open tag.
 
 ## Reported to the owners of that code
 
-| # | Area (owner) | What is wrong | Severity | Screenshot |
-|---|---|---|---|---|
-| 52 | Settings | The "Ink from the pointer" switch overflows the right edge of its card. | Medium | report-settings-switch-overflow.jpg |
-| 53 | Settings | Several small issues: text inside fields is indented by the component kit's padding; the dots by the title and in the minds list are ink, not thread colours; the close ✕ has no hover; the 15, 12.5, 11 and 10.5 px sizes are off the shared scale; it keeps its own switch, though `ui::switch` now exists; it has no shadow, unlike the other dialogs. | Low | report-settings-dark.jpg, report-settings-newmind-dark.jpg |
-| 54 | Settings and the page | In Marks only, Settings promises "a small ? after the passage", but the page draws a plain dot. | Low | report-marks-only-dot.jpg |
-| 55 | Page geometry (`Metrics`) | In a narrow window with the chat open, the page runs under the chat, and the header row and the right-hand tags are cut off. | Medium | report-narrow-chat-overflow.jpg |
-| 56 | Margin and gutter (`render`) | A left-margin tab's thread runs across the gutter knot and number of its paragraph. | Low | report-gutter-under-left-thread.jpg |
-| 57 | Window chrome | The Chat pill's text is 11.5 px, off the scale. | Low | |
-| 58 | QA tooling | The `computer-use` app tools pick one process per bundle id, and every build is `dev.local.inkling`. With the owner's Inkling running, a QA window cannot be screenshotted or clicked that way. Scripts with `scripts/dev shot` work. | Low | |
-| 59 | Open tag (`card`, new on master) | Copy is an unlabelled icon, with no tooltip, no hover state and no confirmation when it copies. The design's rule 3 asks for plain words on every control. | Low | |
+| # | Area (owner) | What is wrong | Severity | Status | Screenshot |
+|---|---|---|---|---|---|
+| 52 | Settings | The "Ink from the pointer" switch overflows the right edge of its card. | Medium | Gone (Settings is a window now) | report-settings-switch-overflow.jpg → fix2-settings-switch.jpg |
+| 53 | Settings | Several small issues: text inside fields is indented by the component kit's padding; the dots by the title and in the minds list are ink, not thread colours; the close ✕ has no hover; the 15, 12.5, 11 and 10.5 px sizes are off the shared scale; it keeps its own switch, though `ui::switch` now exists; it has no shadow, unlike the other dialogs. | Low | Fixed (audit-fixes) | report-settings-dark.jpg, report-settings-newmind-dark.jpg → fix2-settings-fields.jpg |
+| 54 | Settings and the page | In Marks only, Settings promises "a small ? after the passage", but the page draws a plain dot. | Low | Fixed (audit-fixes) | report-marks-only-dot.jpg → fix2-marks-only.jpg, fix2-marks-only-dark.jpg |
+| 55 | Page geometry (`Metrics`) | In a narrow window with the chat open, the page runs under the chat, and the header row and the right-hand tags are cut off. | Medium | Fixed (audit-fixes) | report-narrow-chat-overflow.jpg → fix2-narrow-chat.jpg, fix2-narrow-chat-dark.jpg |
+| 56 | Margin and gutter (`render`) | A left-margin tab's thread runs across the gutter knot and number of its paragraph. | Low | Fixed (audit-fixes) | report-gutter-under-left-thread.jpg → fix2-left-thread.jpg, fix2-left-thread-dark.jpg |
+| 57 | Window chrome | The Chat pill's text is 11.5 px, off the scale. | Low | Fixed (audit-fixes) | |
+| 58 | QA tooling | The `computer-use` app tools pick one process per bundle id, and every build is `dev.local.inkling`. With the owner's Inkling running, a QA window cannot be screenshotted or clicked that way. Scripts with `scripts/dev shot` work. | Low | Reported | |
+| 59 | Open tag (`card`, new on master) | Copy is an unlabelled icon, with no tooltip, no hover state and no confirmation when it copies. The design's rule 3 asks for plain words on every control. | Low | Fixed (master: tooltip, hover; audit-fixes: confirmation) | fix2-copy-tick.jpg |
 
 ## How it was tested
 

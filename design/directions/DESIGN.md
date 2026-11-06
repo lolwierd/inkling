@@ -500,3 +500,19 @@ The owner asked for Settings to "think macos", with Liquid Glass, and every shor
   listening (the recording keycap); ochre with a warning shape marks a clash.
 - **Shortcuts.** Grouped by where they work (anywhere, or while writing), keys drawn as macOS
   draws them (⌃⌥⇧⌘), plain keys refused with the reason. Only changed shortcuts are saved.
+
+## The keyboard and the toasts (6 Nov 2026)
+
+- **Where the keyboard is.** A running stitch in the thread's colour, 3 px outside the
+  control, like the stitched edge of a tag. It shows only when a key put the keyboard
+  there (as `:focus-visible` does); a click never leaves a ring, and never takes the
+  keyboard away from the note.
+- **The Tab order** follows the parts of the window: ☰, the notes list, the page header,
+  the note, the open tag, the question box, the chat. The note keeps Tab for its lists;
+  ⇧Tab in a paragraph and ⌃Tab leave it, as in a Mac text view. The mind and mode menus
+  take the arrow keys and give the keyboard back to their button.
+- **Toasts** are one stack at the bottom centre, a small fabric label on paper with a
+  running-stitch edge rather than a dark pill. A problem has an ochre edge and an alert
+  mark (madder is Inkling's voice) and a close control. Motion from the board: in 180 ms
+  rising 8 px, out 160 ms dropping 4 px, a replacement crossfades in place; with reduced
+  motion, fades only.

@@ -45,7 +45,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Reopen, Copy, Make a note | from an open tag; Make a note turns a thread into a new note |
 | Jump between threads | ⌥⌘↓ and ⌥⌘↑ |
 | Hide threads | ⌘⇧. leaves just your words |
-| Where threads go | both margins, the right margin, or marks only (a ? in the text that opens on click) |
+| Where threads go | both margins, the right margin, or marks only (a ? in the text, × for a correction, that opens on click) |
 | How many are open | "N loose threads" above the title |
 
 ## Asking
@@ -86,3 +86,5 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Runs on your Claude | the Claude Code login on this Mac; nothing to set up |
 | Pick the model and effort | Settings > Model: the models Claude Code offers (from the Agent SDK), kept for when it is not running; reading and answering have their own effort, from the levels the model takes |
 | Every shortcut can be changed | Settings > Shortcuts: click keys and press new ones, add or remove keys, clashes flagged on both rows, reset one or all; new keys work at once, menus included |
+| Everything from the keyboard | Tab and ⇧Tab move between controls, a running-stitch ring shows where you are, Return or Space presses; the note keeps Tab for lists, so ⌃Tab leaves it; ↑ ↓ in the mind and mode menus |
+| Messages in passing | one stack of small stitched labels at the bottom: Undo for a deleted note or a snipped thread, problems in ochre with a close control; the pointer holds a label |

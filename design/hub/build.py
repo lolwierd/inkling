@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 01:57 IST"
+UPDATED = "7 Nov 2026, 02:04 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -30,13 +30,14 @@ RUNNING = [
     ("Nine features from the manifesto, being built",
      "Seven agents, one per feature or pair: Answer in the note with Write it in; Let it stand with Turn it over; Threads of your own; "
      "Show its working; Loose ends; Threads between notes; Read it through. Each writes a short design, then builds straight away on its "
-     "own branch. I merge them as they finish, each one catching up with master first. Rough ETA: built by about 04:15, Threads between "
-     "notes by about 04:30. Keep the old words is skipped for now."),
+     "own branch. To go faster, the two pairs and Threads between notes each get a second builder once their design is written, so ten "
+     "agents build at once. I merge them in whatever order they finish, each one catching up with master first. Rough ETA: built by about "
+     "03:45, Threads between notes by about 04:00. Keep the old words is skipped for now."),
     ("The film, re-cut",
      "A much quieter score: one calm piece under the whole film, almost no sound effects, no sewing machine or ticking. "
      "The running plan is replaced by a technical note, in the film and in the app's Start here guide, with fresh real answers from the model. "
-     "The last chapter ends on Initial. Rough ETA 03:00. A second cut that shows the new features follows: it gets ready from their designs "
-     "while they are built, and switches to the real app as each one lands, rough ETA 05:00."),
+     "The last chapter ends on Initial. It renders at 720p only, for the phone. Rough ETA 02:45. A second cut that shows the new features "
+     "follows: it gets ready from their designs while they are built, then re-renders only the chapters that change. Rough ETA 04:30."),
     ("UI polish, every screen and flow",
      "A fresh agent on Opus at max effort, looking for the small things that are easy to miss: pixel alignment, states, "
      "wording, empty and error states, keyboard flows, light and dark, four window sizes."),

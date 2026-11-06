@@ -252,7 +252,8 @@ pub fn tile(id: impl Into<ElementId>, on: bool, t: &Theme, body: impl IntoElemen
         .border_1()
         .border_color(if on { p.ink } else { p.rule })
         .cursor_pointer()
-        .when(!on, |d| d.hover(move |s| s.border_color(p.faint)))
+        // half way to the faint ink: a tile under the pointer must not look chosen
+        .when(!on, |d| d.hover(move |s| s.border_color(p.faint.opacity(0.5))))
         .child(body)
         .when(on, |d| d.child(tick(t)))
 }

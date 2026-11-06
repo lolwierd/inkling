@@ -1,8 +1,8 @@
 # Code health pass, 7 November 2026
 
-Branch `code-health`, rebased onto master `c9b8e04` (Let it stand, Show its working, the UI
+Branch `code-health`, rebased onto master `8cd16d4` (Let it stand, Show its working, the UI
 polish with `panel_fit`, Loose ends, Turn it over, Threads between notes, Read it through,
-web sources and the app icon merged) with every side's changes kept: the features' new page state (`goto`,
+web sources, Threads of your own and the app icon merged) with every side's changes kept: the features' new page state (`goto`,
 `disputes`, `unanswered`, `read_through`, the visitors of threads between notes) sits beside
 `Tag` and `ChatReply` and needed no folding, since none of it read the old tag maps or the
 chat's two Options. The ask: find the performance problems, bugs, implicit state
@@ -190,11 +190,11 @@ Where: `src/note_page.rs` `open`, `read_line`, `send_task`, `flush`, `note_reche
 - `open` reset the editor, the threads' replies and the menus, and left two dozen fields
   of the old note in place: looks-again due at the next pause (`rechecks`), the needle on
   a thread being looked at (`rechecking`), questions waiting for a pause (`arrived`), the
-  dismissal that Undo could put back (`last_dismissed`: ⌥⌘Z after switching notes added
-  the old thread's anchor, at the old offsets, to the new note's editor), a drag in
-  progress, the pointer's rest on tags, the springs, the ropes, the measured tag heights,
-  the room a script had seated. It clears them. No scenario caught this because switching
-  notes mid-drag or mid-recheck is rare; the Undo case was reproducible by hand.
+  a drag in progress, the pointer's rest on tags, the springs, the ropes, the measured tag
+  heights, the room a script had seated. It clears them. (Not the last dismissal: master's
+  `undo_dismiss` already skips a thread the note does not have and re-finds the words, and
+  Threads between notes puts a cut thread back from either end by design, `t32`.) No
+  scenario caught the rest because switching notes mid-drag or mid-recheck is rare.
 - A read's callback anchored its question at the line the paragraph had when the read was
   sent. `note_edit` moved `reading.line` as lines were added or removed meanwhile, but the
   callback used the captured value, so a quote that appears twice could land in the wrong
@@ -310,6 +310,12 @@ ran without the jiggle while the window was visible.
 | Tests | — | 189 Rust, 101 brain | 218 Rust, 136 brain (master added some; this branch adds 9 Rust tests and scenario `u12`) |
 
 ## Left, and why
+
+- Two scenarios fail on master itself, not from this branch: `s01-shortcuts` records ⌥⌘→
+  as New note, which Threads between notes now binds to Follow (the recording clashes, no
+  note is made); `u10-keyboard`'s Tab order gains the buttons of whichever tag the owner's
+  parked pointer has opened (its first dump shows `t2` open before any step). Both for their
+  authors.
 
 - `u06-drop-tags`'s first check (`just-pointed`: not yet unfolded 250 ms after `hover: 1`)
   failed whenever the window drew at full rate, on the baseline binary too: the rest is

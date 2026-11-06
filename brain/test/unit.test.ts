@@ -257,3 +257,38 @@ describe("accountStatus", () => {
     expect(err?.kind).toBe("auth");
   });
 });
+
+describe("points the writer let stand", async () => {
+  const { letStandBlock, systemPrompt, readPrompt, probePrompt, THOUGHT_SCHEMA, PROBE_SCHEMA } = await import("../src/prompts.ts");
+  const mind = { name: "Editor", description: "", howItThinks: "", voice: "plain" as const, frequency: "when_it_matters" as const };
+  const base = { noteTitle: "Plan", noteText: "Four days a week.", brief: null, mind, aboutMe: null, threads: [], now: "Saturday 7 November 2026" };
+  const points = [
+    { quote: "four days a week", point: "Is pace the problem, or the last 3 km?", kind: "question" as const, mind: "Skeptic", reason: "Pace is the problem." },
+    { quote: "always", point: "Always? What is the evidence?", kind: "correction" as const, mind: "Inkling", reason: null },
+  ];
+
+  test("numbered, each with its mind, kind and reason", () => {
+    const block = letStandBlock(points);
+    expect(block).toContain("Never raise any of them again, in any words");
+    expect(block).toContain("1. On «four days a week», Skeptic's question: Is pace the problem, or the last 3 km? Their reason: Pace is the problem.");
+    expect(block).toContain("2. On «always», Inkling's correction: Always? What is the evidence? (No reason given.)");
+  });
+
+  test("every mind's system prompt carries them, and none when there are none", () => {
+    const told = systemPrompt({ ...base, letStand: points });
+    expect(told).toContain("You are Editor");
+    expect(told).toContain("Points the writer let stand.");
+    expect(told.indexOf("Points the writer let stand.")).toBeLessThan(told.indexOf("Today is"));
+    expect(systemPrompt({ ...base, letStand: [] })).not.toContain("let stand");
+  });
+
+  test("read and probe ask the model which point its note repeats, last", () => {
+    expect(readPrompt({ ...base, letStand: points }, "Four days a week.")).toContain("or one the writer let stand");
+    expect(probePrompt({ ...base, letStand: points }, "four days")).toContain("find the next most useful one");
+    for (const schema of [THOUGHT_SCHEMA, PROBE_SCHEMA]) {
+      expect(schema.required.at(-1)).toBe("repeats");
+      expect(Object.keys(schema.properties).at(-1)).toBe("repeats");
+      expect(schema.properties.repeats).toEqual({ type: "integer" });
+    }
+  });
+});

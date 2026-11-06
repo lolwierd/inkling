@@ -26,6 +26,11 @@
 //   [[tallsvg]]           draw: a valid but absurdly tall viewBox (10 x 2000)
 //   [[empty]]             empty text                   [[null]] done with data null
 //   [[learn:TEXT]]        learn: update=true, aboutMe=TEXT;  [[nolearn]] update=false
+//   [[again]]             read/probe: speak even on words the writer let stand (below)
+//
+// Like the real brain, a read or probe never raises a point the writer let stand: when
+// the quote it would use (or a probe's whole selection) is exactly the quote of one of
+// `ctx.letStand`, it answers {speak: false, repeats: n}, n counting from 1.
 //
 // Prefix a directive with a task to scope it: [[draw>badsvg]], [[reply>resolved]],
 // [[chat>error:overloaded]]. Directives are only read from the request's own
@@ -171,6 +176,9 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): { data?:
       const raw = arg("rawquote");
       const q = arg("quote");
       const quote = raw !== null ? raw : snapQuote(q ?? firstWords(target, 3), target);
+      const stood: Any[] = Array.isArray(input.ctx?.letStand) ? input.ctx.letStand : [];
+      const n = stood.findIndex((s) => s.quote === quote || (task === "probe" && s.quote === shown));
+      if (n >= 0 && !has("again")) return { data: { speak: false, repeats: n + 1 } };
       const text = has("empty") ? "" : `[${id}] ${task === "read" ? "Read" : "Probe"}: what about “${clean(quote)}”?`;
       if (task === "read" && !text.trim()) return { data: { speak: false } };
       return {

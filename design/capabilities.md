@@ -41,7 +41,8 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |
 | Tie off | Resolve: the knot is tied and joins the border at the top of the page |
-| Snip | Dismiss (⇧⌘⌫); Undo for a few seconds, or ⌥⌘Z |
+| Let it stand | on a mind's question or correction, Let stand (⇧⌘⌫): what you typed in its box goes with it as your reason, and every mind that reads the note is told the point, so none raises it again, in any words; Find a loose thread looks past it; Undo for a few seconds, or ⌥⌘Z |
+| Snip | your own asks, sketches and answers: Dismiss (⇧⌘⌫); Undo for a few seconds, or ⌥⌘Z |
 | Reopen, Copy, Make a note | from an open tag; Make a note turns a thread into a new note |
 | Jump between threads | ⌥⌘↓ and ⌥⌘↑ |
 | Hide threads | ⇧⌘. leaves just your words |

@@ -1,0 +1,41 @@
+# Let it stand: a mind's point let stand with the words in its box as the reason; Undo puts it
+# back on its words; every later read and probe carries the point, and the same point does not
+# come back, though a new one on the same words still lands (design/features/let-it-stand.md).
+# fixture: running-plan
+wait: 1500
+stand: 2 I start at 8 km, and the race is ten weeks out.
+dump: stood
+expect: d.threads.find(t => t.id === "t2").status === "Dismissed" && d.threads.find(t => t.id === "t2").ending === "LetStand"
+expect: d.threads.find(t => t.id === "t2").reason === "I start at 8 km, and the race is ten weeks out."
+expect: d.toasts.some(t => t.kind === "thread_dismissed" && t.live && t.text === "Let stand, with your reason. No mind will raise it again.")
+expect: d.undo === "t2" && !d.anchors.some(a => a.id === "t2")
+undo-dismiss
+dump: undone
+expect: d.threads.find(t => t.id === "t2").status === "Open" && d.threads.find(t => t.id === "t2").reason === null
+expect: d.anchors.some(a => a.id === "t2" && a.open)
+stand: 2 I start at 8 km, and the race is ten weeks out.
+caret: end
+type: I add a kilometre every week until I reach 16, then hold it [[quote:add a kilometre every week until I reach 16]].
+settle
+dump: told
+expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand.length === 1
+expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand[0].quote === "add a kilometre every week until I reach 16"
+expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand[0].reason === "I start at 8 km, and the race is ten weeks out."
+expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand[0].mind === "Inkling"
+expect: events.some(e => e.ev === "done" && e.data && e.data.repeats === 1)
+expect: log.some(r => r.msg.includes("read held back"))
+expect: d.threads.filter(t => t.status === "Open").length === 1   // only t1: the point did not come back
+type: Sunday will add a kilometre every week until I reach 16, then hold [[quote:add a kilometre every week until I reach 16]] [[again]].
+settle
+dump: other
+expect: d.threads.filter(t => t.status === "Open").length === 2   // a new point on the same words still lands
+select: add a kilometre every week until I reach 16
+probe
+settle
+dump: probed
+expect: d.toasts.some(t => t.kind === "done" && t.text === "Nothing new to ask here: you let its point stand.")
+expect: d.threads.filter(t => t.status === "Open").length === 2 && d.threads.length === 3   // the probe's empty thread went
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").reason === "I start at 8 km, and the race is ten weeks out."
+expect: typeof note("Sub-50 10k by March").threads.find(t => t.id === "t2").ended_at === "string"
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t1").reason === undefined   // nothing new written on threads that did not change
+quit

@@ -40,6 +40,7 @@
 //! resolve: 1      reopen: 1      dismiss: 2      mark: 1   (the "?" in Marks only)
 //! copy: 1         (logs what Copy would put on the clipboard; the clipboard is left alone)
 //! makenote: 1
+//! retry: 1        (Try again on a thread whose question or reply got no answer)
 //! hover: 2        (the pointer rests on thread 2's tag, which unfolds; `hover: 0` moves away)
 //! drag: 1 -40 120 (move thread 1's tag by that many pixels, as a finished drag would)
 //! ```
@@ -128,6 +129,8 @@ pub enum Step {
     Mark(usize),
     Copy(usize),
     MakeNote(usize),
+    /// Try again on a thread whose question or reply got no answer.
+    Retry(usize),
     ClearChat,
     Switch(String),
     /// Import a vault, as File > Import from Obsidian… does once a folder is picked.
@@ -219,6 +222,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "mark" => Step::Mark(n()),
                 "copy" => Step::Copy(n()),
                 "makenote" => Step::MakeNote(n()),
+                "retry" => Step::Retry(n()),
                 "clear" => Step::ClearChat,
                 "switch" => Step::Switch(arg),
                 "import" => Step::Import(arg),

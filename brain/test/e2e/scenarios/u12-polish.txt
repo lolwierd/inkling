@@ -1,0 +1,22 @@
+# Small things from the polish pass (design/qa/ui-polish.md), each checked where it can be.
+# A question that gets no answer (here the brain stops on it) says why in its tag, under
+# your words, with Try again, which sends the question again. (Every brain in this run
+# stops on its first request, so the second try fails too and says so again.)
+# fixture: running-plan
+# env: FAKE_EXIT_AFTER=1
+wait: 1500
+select: four days a week
+ask: Is four too many?
+settle
+wait: 600
+dump: unanswered
+expect: d.unanswered.length === 1 && d.unanswered[0].why.includes("brain stopped")
+expect: d.threads.some(t => t.kind === "Ask" && t.msgs === 1)
+shot: unanswered
+retry: 3
+settle
+wait: 600
+dump: tried-again
+expect: requests.filter(r => r.input.task === "ask").length === 2
+expect: d.unanswered.length === 1 && d.threads.filter(t => t.kind === "Ask").length === 1
+quit

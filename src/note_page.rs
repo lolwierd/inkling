@@ -450,6 +450,9 @@ pub struct NotePage {
     chat_scroll: ScrollHandle,
     /// Why the last chat question got no answer, shown under it with Try again.
     chat_error: Option<String>,
+    /// Threads whose question or reply got no answer: the request to send again, and why,
+    /// shown in the tag under your words with Try again, as the chat does.
+    unanswered: HashMap<String, (Value, String)>,
     chat_pending: Option<(String, String)>,
     pub just_my_words: bool,
     /// How present the window's controls are, 0..1: the app fades them while you type
@@ -564,6 +567,7 @@ impl NotePage {
             chat_input,
             chat_scroll: ScrollHandle::new(),
             chat_error: None,
+            unanswered: HashMap::new(),
             chat_pending: None,
             just_my_words: false,
             enlarged: None,
@@ -1505,9 +1509,38 @@ impl NotePage {
         cx.notify();
     }
 
+    /// A question or reply on this thread got no answer: the tag says why under your
+    /// words and offers Try again, which sends `again`. Set after the update the failure
+    /// came in (describing it reads the brain, as `report` does).
+    fn fail_thread(&mut self, tid: String, kind: String, message: String, again: Value, cx: &mut Context<Self>) {
+        self.later(cx, move |page, cx| {
+            if page.note.threads.iter().any(|t| t.id == tid) {
+                let why = page.describe_failure(&kind, &message, cx);
+                page.unanswered.insert(tid, (again, why));
+                cx.notify();
+            }
+        });
+    }
+
+    /// Send a thread's unanswered question or reply again.
+    fn retry_thread(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.pending.contains_key(id) {
+            return;
+        }
+        let Some((input, _)) = self.unanswered.remove(id) else { return };
+        if input["task"] == "reply" {
+            let asked = input["message"].as_str().unwrap_or_default().to_string();
+            self.run_reply(id.to_string(), input, asked, cx);
+        } else {
+            self.stream_into(id.to_string(), input, cx);
+        }
+    }
+
     /// Run a streaming task whose answer becomes the thread's next message.
     fn stream_into(&mut self, thread: String, input: Value, cx: &mut Context<Self>) {
         let tid = thread.clone();
+        let again = input.clone();
+        self.unanswered.remove(&thread);
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Delta(d) => {
                 if let Some((_, Pending::Streaming(s))) = page.pending.get_mut(&tid) {
@@ -1532,6 +1565,7 @@ impl NotePage {
                 page.drop_if_empty(&tid, cx);
                 if kind != "cancelled" {
                     page.report(&kind, &message, cx);
+                    page.fail_thread(tid.clone(), kind, message, again.clone(), cx);
                 }
                 cx.notify();
             }
@@ -1865,8 +1899,14 @@ impl NotePage {
             "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": m.text})).collect::<Vec<_>>(),
             "message": text,
         });
-        let tid = id.to_string();
-        let asked = text.clone();
+        self.run_reply(id.to_string(), input, text, cx);
+    }
+
+    /// Send a reply on a thread (`input`, the reply task) and take in the answer.
+    fn run_reply(&mut self, tid: String, input: Value, asked: String, cx: &mut Context<Self>) {
+        let id = tid.clone();
+        let again = input.clone();
+        self.unanswered.remove(&tid);
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);
@@ -1893,12 +1933,13 @@ impl NotePage {
                 page.pending.remove(&tid);
                 if kind != "cancelled" {
                     page.report(&kind, &message, cx);
+                    page.fail_thread(tid.clone(), kind, message, again.clone(), cx);
                 }
                 cx.notify();
             }
             BrainMsg::Delta(_) => {}
         });
-        self.pending.insert(id.to_string(), (req, Pending::Thinking));
+        self.pending.insert(id, (req, Pending::Thinking));
         cx.notify();
     }
 
@@ -2310,7 +2351,7 @@ impl NotePage {
             Step::Escape => {
                 self.escape(window, cx);
             }
-            Step::Resolve(n) | Step::Reopen(n) | Step::Dismiss(n) | Step::Mark(n) | Step::Copy(n) | Step::MakeNote(n) => {
+            Step::Resolve(n) | Step::Reopen(n) | Step::Dismiss(n) | Step::Mark(n) | Step::Copy(n) | Step::MakeNote(n) | Step::Retry(n) => {
                 let Some(id) = self.nth_thread(*n) else {
                     log::warn!("script: no thread {n}");
                     return;
@@ -2324,6 +2365,7 @@ impl NotePage {
                         log::info!("script copy: {:?}", self.thread_text(&id));
                         self.show_copied(&id, cx);
                     }
+                    Step::Retry(_) => self.retry_thread(&id, cx),
                     _ => self.make_note_from_thread(&id, cx),
                 }
             }
@@ -2515,6 +2557,8 @@ impl NotePage {
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
         state["paper"] = json!([l, t, r, b]);
+        // threads whose question or reply got no answer, with why (Try again in the tag)
+        state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -3354,6 +3398,28 @@ impl NotePage {
                     );
                 }
                 None => {}
+            }
+            // A question or reply that got no answer says why under your words, with Try
+            // again once the tag is open, as the chat does under its question.
+            if let (None, Some((_, why))) = (&pending, self.unanswered.get(&id)) {
+                let id_retry = id.clone();
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_start()
+                        .gap(px(4.))
+                        .text_size(px(ts::SMALL))
+                        .line_height(px(17.))
+                        .text_color(p.graphite)
+                        .child(why.clone())
+                        .when(is_active, |d| {
+                            d.child(
+                                ui::ghost_button(SharedString::from(format!("retry-{id}")), "Try again", &t)
+                                    .keyed_as("tag:retry", 4., thread_color, cx, move |this, _, cx| this.retry_thread(&id_retry, cx)),
+                            )
+                        }),
+                );
             }
             if !is_active && replies > 0 {
                 body = body.child(

@@ -1760,6 +1760,8 @@ pub struct AnchorStyle {
     pub color: Hsla,
     /// A correction starts with a cross-stitch; a question does not.
     pub correction: bool,
+    /// Your own thread: seed stitches (dots) instead of a running stitch.
+    pub own: bool,
 }
 
 /// The mark beside a paragraph in the gutter: what Inkling has made of it.
@@ -3407,7 +3409,7 @@ impl Element for EditorElement {
         // A correction starts with a cross-stitch. Tied-off threads keep faint stitches,
         // the record of a question answered. Threads on the same words share one running
         // stitch, a stitch each in turn, so every mind's colour shows.
-        let mut rows: Vec<(Pixels, Vec<(crate::stitch::Run, Hsla)>)> = vec![];
+        let mut rows: Vec<(Pixels, Vec<(crate::stitch::Run, Hsla, bool)>)> = vec![];
         for a in anchors.iter().filter(|a| !a.range.is_empty()) {
             let Some(style) = styles.get(&a.id) else { continue };
             let is_active = active.as_deref() == Some(a.id.as_str());
@@ -3426,15 +3428,20 @@ impl Element for EditorElement {
                 }
                 let run = crate::stitch::Run { x0: x0.as_f32(), x1: x1.as_f32(), seed: seed.wrapping_add(row as u64), cross };
                 match rows.iter_mut().find(|(at, _)| (*at - y).abs() < px(0.5)) {
-                    Some((_, runs)) => runs.push((run, color)),
-                    None => rows.push((y, vec![(run, color)])),
+                    Some((_, runs)) => runs.push((run, color, style.own)),
+                    None => rows.push((y, vec![(run, color, style.own)])),
                 }
             }
         }
         for (y, runs) in &rows {
-            let plain: Vec<crate::stitch::Run> = runs.iter().map(|(r, _)| *r).collect();
+            let plain: Vec<crate::stitch::Run> = runs.iter().map(|(r, ..)| *r).collect();
             for (i, dash) in crate::stitch::shared_stitches(&plain) {
-                crate::stitch::paint_dash(window, dash, *y, runs[i].1);
+                // your own thread's turns are seed stitches
+                if runs[i].2 {
+                    crate::stitch::paint_seed(window, dash, *y, runs[i].1);
+                } else {
+                    crate::stitch::paint_dash(window, dash, *y, runs[i].1);
+                }
             }
         }
 

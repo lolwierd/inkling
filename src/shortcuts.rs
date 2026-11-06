@@ -20,6 +20,7 @@ use crate::app::{
     OpenSettings, PrevThread, Quit, ReadThrough, ToggleChat, ToggleSidebar, TurnOver, UndoDismiss,
 };
 use crate::app::FollowThread;
+use crate::app::AskYourself;
 use crate::store::Store;
 
 /// The app's shortcuts out of the box. They work anywhere in the window.
@@ -46,6 +47,7 @@ fn app_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-shift-b", TurnOver, None),
         // a pass spends reads, so it takes ⇧ as well as ⌘, like the other note-wide keys
         KeyBinding::new("cmd-shift-r", ReadThrough, None),
+        KeyBinding::new("cmd-shift-enter", AskYourself, None),
     ]
 }
 
@@ -111,6 +113,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("app::ExportNote", "Export…", Group::Notes, None),
     ("app::FindLooseThread", "Find a loose thread", Group::Threads, Some("In a selection. With a thread open, it ties it off.")),
     ("app::ReadThrough", "Read it through", Group::Threads, Some("Reads every paragraph not read yet, once. Press it again to stop.")),
+    ("app::AskYourself", "Ask yourself", Group::Threads, Some("About a selection. No mind answers unless you call one.")),
     ("app::NextThread", "Next open thread", Group::Threads, None),
     ("app::PrevThread", "Previous open thread", Group::Threads, None),
     ("app::LooseEnds", "Loose ends", Group::Threads, Some("Every open thread in the notebook, oldest first.")),

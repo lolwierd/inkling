@@ -6,7 +6,7 @@
 //! callout is Obsidian's `> [!note]`, a box in its thread in HTML, and a quote headed by
 //! its kind in Word; code is fenced with its language, or `<pre><code>`.
 
-use crate::store::{BlockKind, Callout, Mark, MarkSpan, Note, Role, Thread, ThreadStatus, markdown_blocks};
+use crate::store::{BlockKind, Callout, Mark, MarkSpan, Message, Note, Role, Thread, ThreadStatus, markdown_blocks};
 
 /// A mark as an export writes it, in the order marks nest (outermost first), so a stack
 /// of open marks closes and reopens cleanly wherever the set changes.
@@ -201,8 +201,14 @@ fn title_of(note: &Note) -> &str {
     if title.is_empty() { "Untitled" } else { title }
 }
 
-fn mind_name(t: &Thread) -> &str {
-    if t.mind_name.trim().is_empty() { "Inkling" } else { &t.mind_name }
+/// Who hung a thread, as the export says it: "Me" for a thread of your own.
+fn mind_name(t: &Thread) -> String {
+    if t.own { "Me".into() } else { t.asker() }
+}
+
+/// Who wrote a message, as the export says it: "Me" for your words, else the mind.
+fn speaker(t: &Thread, m: &Message) -> String {
+    if m.role == Role::You { "Me".into() } else { t.author(m) }
 }
 
 /// A thread between notes: the other note's title and the words it quotes there.
@@ -216,7 +222,7 @@ fn thread_markdown(note: &Note, t: &Thread) -> String {
     let name = mind_name(t);
     let mut out = format!("> **{name}** on “{}”\n", t.quote.replace('\n', " "));
     for m in &t.messages {
-        let who = if m.role == Role::Mind { name } else { "Me" };
+        let who = speaker(t, m);
         out.push_str(&format!(">\n> *{who}:* {}\n", m.text.replace('\n', "\n> ")));
         // the check a correction carries, struck through once it was taken back
         if let Some(c) = &m.check {
@@ -258,12 +264,14 @@ fn thread_html(note: &Note, t: &Thread) -> String {
     let name = mind_name(t);
     let mut out = format!(
         "<div class=\"thread\"><div class=\"on\"><span class=\"who\">{}</span> on “{}”</div>\n",
-        esc(name),
+        esc(&name),
         esc(&t.quote.replace('\n', " "))
     );
     for m in &t.messages {
         let class = if m.role == Role::Mind { "mind" } else { "me" };
-        out.push_str(&format!("<p class=\"{class}\">{}</p>\n", esc(&m.text).replace('\n', "<br>")));
+        // in a thread of yours, a mind you called is named, since the thread's name is yours
+        let who = if t.own && m.role == Role::Mind { format!("<span class=\"who\">{}:</span> ", esc(&speaker(t, m))) } else { String::new() };
+        out.push_str(&format!("<p class=\"{class}\">{who}{}</p>\n", esc(&m.text).replace('\n', "<br>")));
         if let Some(c) = &m.check {
             let (open, close) = if c.taken_back { ("<s>", "</s>") } else { ("", "") };
             for (label, body) in crate::working::parts(c) {
@@ -491,7 +499,7 @@ pub fn write(note: &Note, with_threads: bool, format: Format, path: &std::path::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{Block, Mark, MarkSpan, Message, Mode, Side, ThoughtKind};
+    use crate::store::{Block, Mark, MarkSpan, Mode, Side, ThoughtKind};
 
     #[std::prelude::v1::test]
     fn markdown_includes_threads_under_their_paragraph() {
@@ -543,6 +551,7 @@ mod tests {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     }
 
@@ -592,6 +601,25 @@ mod tests {
         assert!(to_markdown(&note, true).contains("> *Working, taken back:* ~~5:30 × 10 = 55:00"));
         assert!(to_html(&note, true).contains("Working, taken back: <s>5:30"));
         assert!(!to_markdown(&note, false).contains("Working"));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_of_your_own_is_yours_and_names_each_mind_you_called() {
+        let mut note = Note::new("Plan", Mode::ThinksWithYou, None);
+        note.blocks = vec![b(BlockKind::Title, "Plan"), b(BlockKind::Paragraph, "Run four days a week.")];
+        let mut own = thread(&note, "four days a week", ThreadStatus::Open, &[(Role::You, "Too many?"), (Role::Mind, "Two of them easy.")]);
+        own.own = true;
+        own.mind_name.clear();
+        own.messages[1].mind = "Skeptic".into();
+        note.threads = vec![own];
+        let md = to_markdown(&note, true);
+        assert!(md.contains("> **Me** on “four days a week”\n>\n> *Me:* Too many?\n>\n> *Skeptic:* Two of them easy.\n"), "{md}");
+        let html = to_html(&note, true);
+        assert!(html.contains("<span class=\"who\">Me</span> on “four days a week”"), "{html}");
+        assert!(html.contains("<p class=\"me\">Too many?</p>") && html.contains("<p class=\"mind\"><span class=\"who\">Skeptic:</span> Two of them easy.</p>"), "{html}");
+        // a mind's own thread reads as before
+        let theirs = to_markdown(&sample(), true);
+        assert!(theirs.contains("> **Editor** on “Caching fixes it”\n>\n> *Editor:* Fixes what, exactly?\n>\n> *Me:* Latency."), "{theirs}");
     }
 
     #[std::prelude::v1::test]

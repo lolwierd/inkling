@@ -80,6 +80,29 @@ pub fn running_stitch(window: &mut Window, x0: Pixels, x1: Pixels, y: Pixels, co
     }
 }
 
+/// Your own thread's stitches: seed stitches, small dots in pairs, two to each stitch of
+/// the running stitch it stands in for, so the row keeps the same rhythm and a thread of
+/// yours differs from a mind's in shape and not only in colour. Returns each dot's centre.
+pub fn seed_dots(d: Dash) -> Vec<f32> {
+    const R: f32 = SEED_D / 2.;
+    if d.x1 - d.x0 < 2. * SEED_D + 0.6 {
+        return vec![(d.x0 + d.x1) / 2.];
+    }
+    vec![d.x0 + R, d.x1 - R]
+}
+
+/// A seed stitch is a little wider than the thread is thick, so it reads as a dot.
+const SEED_D: f32 = 2.2;
+
+/// One stitch of your own thread, as its dots (see [`seed_dots`]).
+pub fn paint_seed(window: &mut Window, d: Dash, y: Pixels, color: Hsla) {
+    let r = px(SEED_D / 2.);
+    for cx in seed_dots(d) {
+        let b = Bounds::new(point(px(cx) - r, y - r + px(d.dy)), size(r * 2., r * 2.));
+        window.paint_quad(fill(b, color).corner_radii(r));
+    }
+}
+
 /// One thread's words on one row of text: where its stitches run.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Run {
@@ -562,6 +585,22 @@ mod tests {
             last = c;
         }
         turns
+    }
+
+    #[std::prelude::v1::test]
+    fn seed_stitches_stay_on_their_words_with_an_even_step() {
+        let dashes = stitch_dashes(10., 210., seed_of("own"), false);
+        let dots: Vec<f32> = dashes.iter().flat_map(|d| seed_dots(*d)).collect();
+        assert!(dots.len() >= 30, "two dots a stitch: {}", dots.len());
+        for (d, c) in dashes.iter().flat_map(|d| seed_dots(*d).into_iter().map(move |c| (*d, c))) {
+            assert!(c - SEED_D / 2. >= d.x0 - 0.01 && c + SEED_D / 2. <= d.x1 + 0.01, "a dot inside its stitch");
+        }
+        for w in dots.windows(2) {
+            let step = w[1] - w[0];
+            assert!((3.0..=7.5).contains(&step), "even enough to read as one dotted row: {step}");
+        }
+        // a stitch cut short by the end of the words keeps one dot, centred
+        assert_eq!(seed_dots(Dash { x0: 0., x1: 3., dy: 0. }), vec![1.5]);
     }
 
     #[std::prelude::v1::test]

@@ -16,17 +16,28 @@ const FREQUENCY: Record<Frequency, string> = {
     "Speak whenever you have a genuinely useful question, even about smaller things. Still skip filler.",
 };
 
+/** Who wrote a thread message, as the mind being prompted sees it: the writer, itself,
+ * or another mind the writer called into a thread of their own, by name. */
+function speaker(ctx: Context, m: ThreadMessage): string {
+  if (m.role === "you") return "Writer";
+  return m.mind && m.mind.trim().toLowerCase() !== ctx.mind.name.trim().toLowerCase() ? m.mind.trim() : "You";
+}
+
+/** Said once, under the threads, when the writer hung any of them themselves. */
+export const OWN_THREADS_RULE =
+  "Threads marked as the writer's own are questions they hung on their own words, for themselves. Unless they ask you about one directly, do not answer it, and do not ask it again in other words.";
+
 function threadsBlock(ctx: Context): string {
   if (ctx.threads.length === 0) return "No margin threads yet.";
-  return ctx.threads
+  const threads = ctx.threads
     .map((t, i) => {
-      const msgs = t.messages
-        .map((m) => `  ${m.role === "you" ? "Writer" : "You"}: ${m.text}`)
-        .join("\n");
+      const msgs = t.messages.map((m) => `  ${speaker(ctx, m)}: ${m.text}`).join("\n");
       const also = t.elsewhere ? `, which also quotes «${t.elsewhere.quote}» in the note «${t.elsewhere.noteTitle}»` : "";
-      return `Thread ${i + 1}${t.resolved ? " (resolved)" : ""} on «${t.quote}»${also}:\n${msgs}`;
+      const marks = [t.own ? "the writer's own" : "", t.resolved ? "resolved" : ""].filter(Boolean).join(", ");
+      return `Thread ${i + 1}${marks ? ` (${marks})` : ""} on «${t.quote}»${also}:\n${msgs}`;
     })
     .join("\n\n");
+  return ctx.threads.some((t) => t.own) ? `${threads}\n\n${OWN_THREADS_RULE}` : threads;
 }
 
 /** The points the writer let stand, numbered as `repeats` counts them. Every mind is told
@@ -156,14 +167,24 @@ export function probePrompt(ctx: Context, target: string, web = false): string {
   ].join("\n");
 }
 
-export function askPrompt(ctx: Context, target: string, question: string, web = false): string {
+export function askPrompt(ctx: Context, target: string, question: string, web = false, history: ThreadMessage[] = []): string {
+  const answer =
+    "They asked directly, so answer directly and concretely, grounded in their note. Under 120 words, plain prose (two short paragraphs at most). If it helps, end with one question that pushes their thinking further.";
+  if (history.length === 0) {
+    return [noteBlock(ctx), "", `The writer selected «${target}» and asked you:`, `<question>${question}</question>`, "", answer, web ? WEB_PROSE : ""]
+      .filter(Boolean)
+      .join("\n");
+  }
+  // A thread the writer hung on their own words, which they have now called this mind into.
   return [
     noteBlock(ctx),
     "",
-    `The writer selected «${target}» and asked you:`,
+    `On «${target}» the writer hung a question of their own:`,
     `<question>${question}</question>`,
+    "What has been said in that thread since:",
+    ...history.map((m) => `${speaker(ctx, m)}: ${m.text}`),
     "",
-    "They asked directly, so answer directly and concretely, grounded in their note. Under 120 words, plain prose (two short paragraphs at most). If it helps, end with one question that pushes their thinking further.",
+    `They have now called you into the thread. ${answer} If their last line there is addressed to you, answer that. Stay on this thread's point; other parts of the note belong in other threads.`,
     web ? WEB_PROSE : "",
   ]
     .filter(Boolean)

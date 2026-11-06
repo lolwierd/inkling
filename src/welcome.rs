@@ -96,6 +96,7 @@ pub fn welcome_note(mode: Mode) -> Note {
         reason: None,
         ended_at: None,
         first_quote: None,
+        ..Default::default()
     });
     for b in note.blocks.iter().skip(1) {
         note.read_hashes.push(crate::store::hash_text(&b.text));
@@ -194,6 +195,7 @@ pub fn first_run_note(mode: Mode) -> Note {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     };
     let mind = |text: &str| Message::new(Role::Mind, text);

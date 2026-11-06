@@ -302,6 +302,21 @@ owner.
    note are enough to recognise a thread, and its question is one Return away. Built that
    way; showing it is a one-line change if you want it.
 
+## Screens
+
+In `design/features/shots/`, taken with `scripts/dev shot` from the fixtures above:
+
+| Shot | Linen | Lamplight |
+|---|---|---|
+| The card, four threads in three notes | `loose-ends-list-light.jpg` | `loose-ends-list-dark.jpg` |
+| After Return: the waiting note, its tag open, the keyboard in Write back… | `loose-ends-went-light.jpg` | `loose-ends-went-dark.jpg` |
+| A thread tied off while the card is open | `loose-ends-tied-light.jpg` | `loose-ends-tied-dark.jpg` |
+| 200 open threads | `loose-ends-many-light.jpg` | `loose-ends-many-dark.jpg` |
+| Words thirty paragraphs down, brought to a third of the window | | `loose-ends-far-dark.jpg` |
+| No open threads | `loose-ends-empty-light.jpg` | |
+| The sidebar's row | `loose-ends-sidebar-light.jpg` | |
+| ⌘K's footer naming ⇧⌘K | `loose-ends-palette-light.jpg` | |
+
 ## Build notes (7 Nov 2026)
 
 Built as designed, on `feat-loose-ends`. What the build taught:

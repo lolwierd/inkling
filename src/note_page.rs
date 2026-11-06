@@ -3109,6 +3109,10 @@ impl NotePage {
                         div()
                             .id(SharedString::from(format!("copy-{id_copy}")))
                             .cursor_pointer()
+                            .p(px(2.))
+                            .rounded(px(4.))
+                            .hover(move |s| s.bg(p.wash))
+                            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
                             .child(icon("copy", 12., p.faint))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 let text = this.thread_text(&id_copy);

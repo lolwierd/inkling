@@ -1,0 +1,27 @@
+# Write it in on a thread between notes: a reply at the far end ties it off, but the tag
+# there offers nothing (its answer belongs in its home note's words); in its home note the
+# tag offers it, and the reply goes in there, under the thread's own paragraph.
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race calendar
+settle
+activate: 1
+reply: The race moved to Sunday 22 March this year, a week later. [[resolved]]
+settle
+dump: far
+expect: d.note.title === "Race calendar" && d.active === "b1" && d.statuses.includes("b1:Resolved:Inkling")
+expect: d.tied_by.b1 === "reply" && d.offer === null
+switch: Race-week plan
+settle
+activate: 1
+dump: home
+expect: d.note.title === "Race-week plan" && d.active === "b1" && d.offer === "b1"
+writein
+settle
+dump: written
+expect: d.answers.length === 1 && d.answers[0].thread === "b1" && d.knots.includes("b1") && d.offer === null
+quit
+expect: note("Race-week plan").threads.find(t => t.id === "b1").answer.quote.startsWith("The race moved to Sunday 22 March")
+expect: !note("Race calendar").blocks.some(b => b.text.startsWith("The race moved"))

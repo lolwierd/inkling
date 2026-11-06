@@ -9,7 +9,7 @@ Show its working, Loose ends, Turn it over, Threads between notes, Read it throu
 sources and Threads of your own (`settle`, like every read, never looks things up; a thread
 of your own is never answered). The shared part and Answer in the note are done (scenarios
 t40 to t45; six live checks against the real model, below). Write it in is built on top of
-the shared part (scenarios t46 and t47). Screenshots, light and dark:
+the shared part (scenarios t46 to t48). Screenshots, light and dark:
 `design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, the back of
 the note, `answer-in-the-note-back-light.jpg`, and Write it in's offer and what it writes,
 `write-it-in-{offer,written}-{light,dark}.jpg`.
@@ -516,6 +516,9 @@ Write it in, as built:
 - `t47-write-it-in-keys-marks.txt` (fixture `replied`, thread 2 tied off by your reply):
   ⌃Tab out of the note reaches the button and Return presses it; no offer while threads are
   hidden; Marks only offers it in the card; the export says "Answered in the note".
+- `t48-write-it-in-between.txt`: a reply at a thread's far end (threads between notes) ties
+  it off with no offer there; in its home note the tag offers it, and the reply goes in
+  there.
 
 ### Live checks (the real model, a handful of calls)
 
@@ -569,7 +572,7 @@ date fixed, all six pass.
 | `src/note_page.rs` (hooks) | `mod write_in;`; `tag_panel` adds `write_in_offer`; `NotePage.written_in` (what the toast's Undo takes out); `script_step` and `debug_state` (`offer`, `written_in`) |
 | `src/toast.rs`, `src/app.rs` | `Kind::WrittenIn` (8 s, Undo) and its arm in the stack's Undo |
 | `src/script.rs` | `writein`, `undo-writein` |
-| scenarios `t46`, `t47`, fixture `replied`; `design/capabilities.md` | one row under Threads |
+| scenarios `t46` to `t48`, fixture `replied`; `design/capabilities.md` | one row under Threads |
 
 The two meet only in `tag_panel` (one line each, on different lines) and in
 `capabilities.md` (one row each). Write it in reads `tied_by` and writes `answer` through

@@ -25,7 +25,7 @@ key: cmd-shift-r
 dump: again
 expect: d.read_through === null && d.toasts.some(t => t.text === "Nothing new to read.")
 # a new paragraph: the next pass reads only it (u24 starts a pass from the mode menu)
-type: The cache is warmed from the nightly build, so the first run is never cold. [[silent]]
+type: The cache is warmed from the nightly build, so the first run is never cold. [[silent]] [[delay:1500]]
 settle
 read-through
 dump: second

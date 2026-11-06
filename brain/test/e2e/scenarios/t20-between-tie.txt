@@ -1,4 +1,4 @@
-# t20-between-tie: a reply at the far end carries the other end as it is now and is answered by
+# A reply at the far end carries the other end as it is now and is answered by
 # the thread's mind (the home note's Inkling, though Race calendar's own mind is Skeptic); fixing
 # the far words looks again at both ends, and the thread ties off in both notes (the fake brain
 # resolves when the words say [[resolved]]).

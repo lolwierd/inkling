@@ -1,4 +1,4 @@
-# t19-between-follow: Go there opens the other note at its words, with the same thread open
+# Go there opens the other note at its words, with the same thread open
 # and its words in view, and comes back; ⌥⌘→ does the same from the open thread.
 # fixture: between
 # env: FAKE_READ_DEFAULT=silent

@@ -9,13 +9,13 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "6 Nov 2026, 21:40 IST"
+UPDATED = "6 Nov 2026, 22:05 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
     "motion": "https://claude.ai/artifact/9g3xaUjjCLsiFTHZx6ZGe7",
     "directions": "https://claude.ai/artifact/6m7FAViLq1HpYS1DdJgi1U",
-    "film": None,  # the re-cut gets its own page; set its link here when it is published
+    "film": "https://claude.ai/artifact/KncyvgBKvh3Gx8kxeW5WYD",
 }
 
 WAITING = [
@@ -31,9 +31,6 @@ WAITING = [
 ]
 
 RUNNING = [
-    ("The film, re-cut",
-     "Every capability on screen, motion design in the thread language, and a score made from needle, thread and cloth. "
-     "It gets a page of its own; the link appears here when it lands."),
     ("Sewn blocks in the editor",
      "Checklists that take a cross-stitch, callouts sewn on as patches (note, warning, tip), code blocks with stitched-in "
      "syntax colours, and quotes on a back-stitched seam. From the motion board, as you picked."),
@@ -47,6 +44,7 @@ RUNNING = [
 ]
 
 DONE = [
+    ("The film, re-cut", "3:28, all 44 capabilities on screen, a camera that moves with the thread, and a score made from needle, thread and cloth. It has its own page, linked under The film."),
     ("The logo: Darn · Border", "Your pick. It is the app icon now, and the wordmark in the app dots its i with one cross-stitch."),
     ("Loose Threads, in the app", "Stitches under your words, a hanging thread with real rope physics, tags in the margin, a knot when a thread is answered."),
     ("Tags that fold and drop", "A tag stays folded until you rest on it, drops open on a spring, and drags anywhere."),

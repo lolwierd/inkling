@@ -1,16 +1,24 @@
 #!/bin/bash
-# Mixes the score (audio/music.wav) and the foley (audio/fx.wav) into audio/mix.wav:
-# the music ducks under the effects, the lamp-out fades both, and the whole is brought to
-# -16 LUFS with a -3 dBTP ceiling (AAC overshoots sharp clicks by a dB or so) (two-pass loudnorm). Run after `render.ts audio`.
+# Balances the score (audio/music.wav) and the foley (audio/fx.wav) into audio/mix.wav at
+# -16 LUFS integrated, with the true peak at or under -2 dBTP so the AAC in the film stays
+# at or under -1.5. The balance is set in audio.js; here the stems are summed as they are,
+# lightly tilted (a little less below 150 Hz, a little more above 4.5 kHz: the thumps and
+# plucked bass are the heaviest part of the score), brought to the target by one measured gain, and a limiter set below the ceiling catches
+# the few stacked clicks (it touches transients only, so the loudness holds). It runs at four
+# times the sample rate, so it sees the peaks between samples that bright clicks make.
+# Run after `render.ts audio`.
 set -euo pipefail
 cd "$(dirname "$0")/audio"
 FF=/opt/homebrew/bin/ffmpeg
-PRE='[0:a]volume=-7dB[m];[1:a]volume=+5dB,asplit=2[fx][key];[m][key]sidechaincompress=threshold=0.035:ratio=2.5:attack=6:release=300:makeup=1[md];[md][fx]amix=inputs=2:normalize=0,afade=t=out:st=96.9:d=1.1'
-# pass 1: measure
-M=$("$FF" -hide_banner -nostats -i music.wav -i fx.wav -filter_complex "$PRE,loudnorm=I=-16:TP=-3:LRA=11:print_format=json" -f null - 2>&1 | sed -n '/^{/,/^}/p')
-get() { echo "$M" | python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
-# pass 2: apply, linearly, so the dynamics stay as mixed
-"$FF" -hide_banner -loglevel error -y -i music.wav -i fx.wav -filter_complex \
-  "$PRE,loudnorm=I=-16:TP=-3:LRA=11:measured_I=$(get input_i):measured_TP=$(get input_tp):measured_LRA=$(get input_lra):measured_thresh=$(get input_thresh):offset=$(get target_offset):linear=true,aresample=48000" \
-  -c:a pcm_s24le mix.wav
-"$FF" -hide_banner -nostats -i mix.wav -af ebur128=peak=true -f null - 2>&1 | grep -A 12 Summary | grep -E "I:|Peak:|LRA:"
+SUM='[0:a][1:a]amix=inputs=2:normalize=0,bass=g=-4:f=150:w=0.7,treble=g=3:f=4500:w=0.7'
+loud() { "$FF" -hide_banner -nostats -i "$@" -af ebur128=peak=true -f null - 2>&1 | grep -A 20 Summary; }
+I0=$("$FF" -hide_banner -nostats -i music.wav -i fx.wav -filter_complex "$SUM,ebur128" -f null - 2>&1 | grep -A 6 Summary | awk '/I:/ {print $2}')
+G=$(python3 -c "print(round(-16 - ($I0), 2))")
+for pass in 1 2 3; do
+  "$FF" -hide_banner -loglevel error -y -i music.wav -i fx.wav -filter_complex \
+    "$SUM,volume=${G}dB,aresample=192000,alimiter=limit=0.68:attack=3:release=60:level=false,aresample=48000" -c:a pcm_s24le mix.wav
+  I1=$(loud mix.wav | awk '/I:/ {print $2; exit}')
+  G=$(python3 -c "print(round($G + (-16 - ($I1)), 2))")
+done
+echo "summed: $I0 LUFS; gain ${G} dB"
+loud mix.wav | grep -E "I:|LRA:|Peak:"

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkling walkthrough film</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..650&family=Figtree:wght@400..700&display=swap">
+<style>
+/* The film first, on the app's own linen; chapters and moments are buttons that move the
+   film, so the page works as its index. One column, for a phone. */
+:root {
+  --paper: #fbf8f2;
+  --cloth: #efe8db;
+  --ink: #26232b;
+  --faint: #6f6862;
+  --rule: #e3dacb;
+  --madder: #a63f32;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "Figtree", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1f1d22; --cloth: #18161a; --ink: #ede6da; --faint: #a39a8f; --rule: #3a353d; --madder: #d9705e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1f1d22; --cloth: #18161a; --ink: #ede6da; --faint: #a39a8f; --rule: #3a353d; --madder: #d9705e; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--cloth); color: var(--ink); font: 16px/1.55 var(--body); }
+.sheet { max-width: 760px; margin: 0 auto; padding: 22px 16px 56px; background: var(--paper); }
+@media (min-width: 800px) { .sheet { margin: 24px auto; border-radius: 6px; padding: 36px 36px 64px; box-shadow: 0 12px 32px -18px rgba(38, 35, 43, .35); } }
+.border { height: 2px; margin: 0 0 18px; background: repeating-linear-gradient(90deg, var(--madder) 0 9px, transparent 9px 15px); opacity: .8; border-radius: 2px; }
+.eyebrow { margin: 0; font-size: 13px; color: var(--faint); }
+h1 { margin: 4px 0 14px; font: 600 32px/1.1 var(--display); font-variation-settings: "opsz" 72; text-wrap: balance; }
+.film { margin: 0 -16px; background: #18161a; }
+@media (min-width: 800px) { .film { margin: 0; border-radius: 10px; overflow: hidden; } }
+video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #18161a; }
+.facts { margin: 12px 0 0; font-size: 14px; color: var(--faint); }
+.lede { margin: 18px 0 0; }
+section { margin-top: 30px; }
+h2 { margin: 0 0 6px; font: 600 23px/1.2 var(--display); text-wrap: balance; }
+h3 { margin: 22px 0 6px; font: 600 17px/1.3 var(--display); }
+.note { margin: 0 0 10px; color: var(--faint); font-size: 14px; }
+ol.chapters, ol.moments { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+button.seek {
+  width: 100%; display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: start;
+  padding: 10px 12px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 10px;
+}
+button.seek:hover { border-color: var(--faint); }
+button.seek:active { transform: translateY(1px); }
+button.seek:focus-visible { outline: 2px dashed var(--madder); outline-offset: 2px; }
+button.seek.on { border-color: var(--madder); }
+.time { font: 600 14px/1.5 var(--body); font-variant-numeric: tabular-nums; color: var(--madder); }
+.what strong { display: block; font-weight: 600; font-size: 15px; }
+.what span { display: block; color: var(--faint); font-size: 14px; }
+ul.plain { margin: 6px 0 0; padding-left: 20px; }
+ul.plain li { margin: 0 0 6px; }
+.stitch-rule { height: 1px; margin: 30px 0 0; background: repeating-linear-gradient(90deg, var(--rule) 0 7px, transparent 7px 12px); }
+footer { margin-top: 36px; color: var(--faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="border" aria-hidden="true"></div>
+  <p class="eyebrow">Inkling · the walkthrough film</p>
+  <h1>A notebook that asks, in three and a half minutes</h1>
+  <div class="film">
+    <video id="film" controls playsinline preload="metadata" poster="poster.jpg" src="film.mp4"></video>
+  </div>
+  <p class="facts">3:28 · 720p for phones · sound on</p>
+  <p class="lede">Everything Inkling can do, in seven chapters. The words from Inkling are real model output, unedited. The app is rebuilt from screens of today's build, so the camera can move through it: pushing in on the words as a thread is pulled, following the thread out to its tag, and pulling back to the page.</p>
+
+  <section>
+    <h2>Chapters</h2>
+    <p class="note">Tap one to jump there.</p>
+    <ol class="chapters"><li><button type="button" class="seek" data-t="0"><span class="time">0:00</span><span class="what"><strong>A notebook that asks</strong><span>The line is stitched onto the linen and becomes the page&#x27;s border.</span></span></button></li><li><button type="button" class="seek" data-t="8"><span class="time">0:08</span><span class="what"><strong>Start here</strong><span>A new notebook opens on the guide; your first sentence gets a question.</span></span></button></li><li><button type="button" class="seek" data-t="30"><span class="time">0:30</span><span class="what"><strong>Reading along</strong><span>It reads at your pauses, waits while you type, and ties a thread off when you fix the words.</span></span></button></li><li><button type="button" class="seek" data-t="61"><span class="time">1:01</span><span class="what"><strong>Asking</strong><span>Find a loose thread, your own question, the room of three minds, a mind by name, a sketch, the brief, the chat.</span></span></button></li><li><button type="button" class="seek" data-t="112"><span class="time">1:52</span><span class="what"><strong>Threads</strong><span>Unfold, reply, drag, tie off, snip and undo, hide them all.</span></span></button></li><li><button type="button" class="seek" data-t="142"><span class="time">2:22</span><span class="what"><strong>Minds</strong><span>Pick the note&#x27;s mind, make your own, and see who asked what by colour.</span></span></button></li><li><button type="button" class="seek" data-t="159"><span class="time">2:39</span><span class="what"><strong>Make it yours</strong><span>Light and dark, thread colours, lettering, text size, pace, dictation.</span></span></button></li><li><button type="button" class="seek" data-t="179"><span class="time">2:59</span><span class="what"><strong>Your notebook</strong><span>Notes and folders, find, copy, export, Obsidian, shortcuts, the model.</span></span></button></li><li><button type="button" class="seek" data-t="197"><span class="time">3:17</span><span class="what"><strong>The mark</strong><span>A tied-off thread grows the border into darns: Darn · Border.</span></span></button></li></ol>
+  </section>
+
+  <section>
+    <h2>How it sounds</h2>
+    <ul class="plain">
+      <li>The rhythm is the needle: pierce clicks and cloth taps, and a sewing machine that speeds up and stops with the stitching on screen.</li>
+      <li>A bowed string rises as a thread pulls taut, and lets go into the knot.</li>
+      <li>A four-note motif stays unresolved while threads are open and comes home only when one is tied off.</li>
+      <li>Each mind has its own instrument, so a room of three sounds like three voices.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What is real, and what is staged</h2>
+    <ul class="plain">
+      <li>Real: every word Inkling and the other minds say, straight from the model through Inkling's brain.</li>
+      <li>Staged: the app is rebuilt in HTML rather than recorded; typing and model waits are sped up; the dictated words are typed by the film; the Obsidian vault and the email are made up; Copy and Make a note are only pointed at; and the border turning into darns at the end is a film device.</li>
+    </ul>
+  </section>
+
+  <div class="stitch-rule" aria-hidden="true"></div>
+  <section>
+    <h2>Every capability, and when it appears</h2>
+    <p class="note">All 44 from Inkling's capability list. Tap one to see it.</p>
+    <h3>Writing</h3><ol class="moments"><li><button type="button" class="seek" data-t="195"><span class="time">3:15</span><span class="what"><strong>A plain page: title, paragraphs, three heading sizes, bullet and numbered lists, quotes</strong><span>A paragraph is selected and the selection menu&#x27;s first row turns it into H1, H2, H3, a quote, a bullet and a numbered item, one per half beat; the guide&#x27;s headings and bullets are seen in chapter 1</span></span></button></li><li><button type="button" class="seek" data-t="172"><span class="time">2:52</span><span class="what"><strong>Speak instead of typing</strong><span>⌥ is held, the corner shows Listening… and then the words as they come; letting go puts “Race morning I’ll eat by six.” in the note</span></span></button></li><li><button type="button" class="seek" data-t="170"><span class="time">2:50</span><span class="what"><strong>Ink from the pointer</strong><span>The switch in Settings › Appearance turns on; on the page, three drops of ink fall where the pointer rests, dry and fade</span></span></button></li><li><button type="button" class="seek" data-t="160"><span class="time">2:40</span><span class="what"><strong>Your look</strong><span>Settings › Appearance: System, Light and Dark (the whole desk turns to Lamplight), then the seven thread colours, lettering (Inkling’s own, like your notes) and text size (small, large, default)</span></span></button></li><li><button type="button" class="seek" data-t="30"><span class="time">0:30</span><span class="what"><strong>An immersive window</strong><span>No bar: as the title and first paragraphs are typed, the sidebar toggle, Chat and the row above the title fade; caption “No bar. The controls fade while you write.”</span></span></button></li></ol><h3>Reading along</h3><ol class="moments"><li><button type="button" class="seek" data-t="36"><span class="time">0:36</span><span class="what"><strong>Reads each paragraph at your pause</strong><span>After each paragraph the needle bobs in the gutter and leaves a tacking stitch; Settings › Reading shows pace Regular and Slow at 2:48</span></span></button></li><li><button type="button" class="seek" data-t="42"><span class="time">0:42</span><span class="what"><strong>Speaks only when it is worth it</strong><span>Most paragraphs get only a tacking stitch; ¶2 gets a correction (×); the guide’s Moon thread unfolds with its sketch at 0:11</span></span></button></li><li><button type="button" class="seek" data-t="42"><span class="time">0:42</span><span class="what"><strong>Waits while you type</strong><span>The correction arrives while ¶3 is being typed and stays folded on its tab until the writer pauses</span></span></button></li><li><button type="button" class="seek" data-t="50"><span class="time">0:50</span><span class="what"><strong>Fix the words, the thread settles</strong><span>5:30 becomes 4:55 in the text; Inkling reads it again, says why it settles, and the thread ties itself off</span></span></button></li><li><button type="button" class="seek" data-t="14"><span class="time">0:14</span><span class="what"><strong>Your first sentence</strong><span>In the new notebook’s guide, the first sentence you write gets a question (real output)</span></span></button></li><li><button type="button" class="seek" data-t="167"><span class="time">2:47</span><span class="what"><strong>Reads along, or waits to be asked</strong><span>The mode menu in the row above the title switches Reads along to Waits to be asked; Settings › Reading shows the default for new notes</span></span></button></li><li><button type="button" class="seek" data-t="103"><span class="time">1:43</span><span class="what"><strong>Tell Inkling what a note is for</strong><span>Tell Inkling, above the title: the brief is typed and saved; the chat that follows answers with it in mind</span></span></button></li><li><button type="button" class="seek" data-t="175"><span class="time">2:55</span><span class="what"><strong>Learns about you</strong><span>Settings › About you: the switch turns on and what it learned from a reply appears (real output)</span></span></button></li></ol><h3>Threads</h3><ol class="moments"><li><button type="button" class="seek" data-t="19"><span class="time">0:19</span><span class="what"><strong>A thread from the words to the margin</strong><span>Running stitch under your sentence, the thread carried to a folded tag; a correction starts with a cross-stitch at 0:42</span></span></button></li><li><button type="button" class="seek" data-t="115"><span class="time">1:55</span><span class="what"><strong>Tags fold away</strong><span>Pointing at three folded tabs unfolds each in turn; clicking opens one with its reply box at 2:01</span></span></button></li><li><button type="button" class="seek" data-t="120"><span class="time">2:00</span><span class="what"><strong>Move a tag</strong><span>A tab is dragged down the margin, its thread stretching; it opens toward the side with room</span></span></button></li><li><button type="button" class="seek" data-t="113"><span class="time">1:53</span><span class="what"><strong>Numbered questions</strong><span>Open questions numbered 1 to 6 in reading order, each with a knot and its number in the gutter</span></span></button></li><li><button type="button" class="seek" data-t="122"><span class="time">2:02</span><span class="what"><strong>Reply in the tag</strong><span>A reply is written in the tag and the mind answers in the same thread (real output)</span></span></button></li><li><button type="button" class="seek" data-t="128"><span class="time">2:08</span><span class="what"><strong>Tie off</strong><span>Resolve: the thread pulls taut, the knot is tied and flies to the border at the top of the page</span></span></button></li><li><button type="button" class="seek" data-t="131"><span class="time">2:11</span><span class="what"><strong>Snip</strong><span>⇧⌘⌫ snips a thread (the sound stops dead), the stitches come out, “Thread dismissed · Undo ⌥⌘Z” shows, and ⌥⌘Z brings it back</span></span></button></li><li><button type="button" class="seek" data-t="134"><span class="time">2:14</span><span class="what"><strong>Reopen, Copy, Make a note</strong><span>A tied-off thread is opened again: Reopen, the copy icon and Make a note are each pointed at; caption names all three</span></span></button></li><li><button type="button" class="seek" data-t="117"><span class="time">1:57</span><span class="what"><strong>Jump between threads</strong><span>⌥⌘↓ twice: the camera jumps to the next open thread each time</span></span></button></li><li><button type="button" class="seek" data-t="137"><span class="time">2:17</span><span class="what"><strong>Hide threads</strong><span>⇧⌘. lifts every mark off the page and leaves just the words (the sound drops away too); again, and they come back</span></span></button></li><li><button type="button" class="seek" data-t="139"><span class="time">2:19</span><span class="what"><strong>Where threads go</strong><span>Both margins, then everything moves to the right margin, then marks only (a small mark after each passage); Settings › Reading has the three cards</span></span></button></li><li><button type="button" class="seek" data-t="113"><span class="time">1:53</span><span class="what"><strong>How many are open</strong><span>“6 loose threads” above the title, counting down as threads are tied off</span></span></button></li></ol><h3>Asking</h3><ol class="moments"><li><button type="button" class="seek" data-t="62"><span class="time">1:02</span><span class="what"><strong>Find a loose thread</strong><span>Words selected, the selection menu, ⌘↵: a question on the long-run line (real output)</span></span></button></li><li><button type="button" class="seek" data-t="67"><span class="time">1:07</span><span class="what"><strong>Ask your own question</strong><span>Selection menu › Ask Inkling, a question typed in the ask box, the answer streams into a tag in the left margin (real output)</span></span></button></li><li><button type="button" class="seek" data-t="93"><span class="time">1:33</span><span class="what"><strong>Sketch it</strong><span>In another note, words selected › Sketch it: “Stitching a sketch…”, then three steps stitched out with captions, and See it larger (real output)</span></span></button></li><li><button type="button" class="seek" data-t="75"><span class="time">1:15</span><span class="what"><strong>Ask the room</strong><span>Skeptic and Socratic tutor added in the ask box: three threads in three colours, three answers (real output)</span></span></button></li><li><button type="button" class="seek" data-t="85"><span class="time">1:25</span><span class="what"><strong>Call a mind by name</strong><span>A paragraph starting “Skeptic,” gets the Skeptic’s answer on an indigo thread (real output)</span></span></button></li><li><button type="button" class="seek" data-t="106"><span class="time">1:46</span><span class="what"><strong>Chat about the whole note</strong><span>⌘J opens the chat with its three suggested questions; a question, the answer streams (real output); Clear is pointed at</span></span></button></li></ol><h3>Minds</h3><ol class="moments"><li><button type="button" class="seek" data-t="150"><span class="time">2:30</span><span class="what"><strong>Pick the note’s mind</strong><span>The name above the title opens the mind menu; Coach is picked</span></span></button></li><li><button type="button" class="seek" data-t="143"><span class="time">2:23</span><span class="what"><strong>Built-in minds</strong><span>New mind › Start from: Staff engineer, Editor, Skeptic, Socratic tutor, Investor (and Blank); caption lists them with Inkling; the room’s chips show them too</span></span></button></li><li><button type="button" class="seek" data-t="144"><span class="time">2:24</span><span class="what"><strong>Make your own</strong><span>From Blank: name, description, how it thinks, voice (Blunt) and how often (Often), Create mind</span></span></button></li><li><button type="button" class="seek" data-t="156"><span class="time">2:36</span><span class="what"><strong>Each mind has its thread colour</strong><span>The Coach’s question arrives on its own thread; the margin shows madder, indigo and ochre threads side by side</span></span></button></li></ol><h3>Notebook</h3><ol class="moments"><li><button type="button" class="seek" data-t="180"><span class="time">3:00</span><span class="what"><strong>Notes and folders</strong><span>⌘\: the sidebar with folders (one unfolds), dots on notes with open threads, New note, New folder</span></span></button></li><li><button type="button" class="seek" data-t="182"><span class="time">3:02</span><span class="what"><strong>Find or start a note</strong><span>⌘K: the palette filters to “bread” as it is typed</span></span></button></li><li><button type="button" class="seek" data-t="184"><span class="time">3:04</span><span class="what"><strong>Copy a note</strong><span>⇧⌘C: “Copied as Markdown”</span></span></button></li><li><button type="button" class="seek" data-t="185"><span class="time">3:05</span><span class="what"><strong>Export</strong><span>⇧⌘E: Markdown, then Word, then HTML; Include the margin off and on</span></span></button></li><li><button type="button" class="seek" data-t="188"><span class="time">3:08</span><span class="what"><strong>Import from Obsidian</strong><span>File › Import from Obsidian…: a vault’s folders and notes arrive in the sidebar</span></span></button></li><li><button type="button" class="seek" data-t="190"><span class="time">3:10</span><span class="what"><strong>Welcome guide</strong><span>Help › Welcome Guide opens the Start here note</span></span></button></li></ol><h3>Model and keys</h3><ol class="moments"><li><button type="button" class="seek" data-t="194"><span class="time">3:14</span><span class="what"><strong>Runs on your Claude</strong><span>Settings › Model: Claude, signed in through this Mac’s Claude Code login; caption says so</span></span></button></li><li><button type="button" class="seek" data-t="191"><span class="time">3:11</span><span class="what"><strong>Pick the model and effort</strong><span>Settings › Model: the models Claude Code offers (Default, Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, specific versions) and effort for reading along and for asking</span></span></button></li><li><button type="button" class="seek" data-t="176"><span class="time">2:56</span><span class="what"><strong>Every shortcut can be changed</strong><span>Settings › Shortcuts: the Hide threads key is clicked, “Press the new keys”, and ⌥⌘H takes its place</span></span></button></li></ol>
+  </section>
+
+  <footer>Made from <code>design/video</code> in the repo; this page from <code>design/video/page/build.py</code>.</footer>
+</main>
+<script>
+  // chapters and moments move the film; the one playing is marked as it plays
+  const film = document.getElementById("film");
+  const buttons = Array.from(document.querySelectorAll("button.seek"));
+  buttons.forEach((b) => b.addEventListener("click", () => {
+    film.currentTime = Number(b.dataset.t);
+    const go = film.play();
+    if (go && go.catch) go.catch(() => {});
+    film.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }));
+  const chapters = Array.from(document.querySelectorAll("ol.chapters button.seek"));
+  film.addEventListener("timeupdate", () => {
+    let current = null;
+    for (const b of chapters) if (Number(b.dataset.t) <= film.currentTime + 0.2) current = b;
+    chapters.forEach((b) => b.classList.toggle("on", b === current));
+  });
+</script>
+</body>
+</html>

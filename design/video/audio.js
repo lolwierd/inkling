@@ -1,413 +1,454 @@
-/* Inkling film: the score and the foley, synthesised (no samples), on the film's clock.
+/* The walkthrough's sound, made from the material: needle, cloth and thread.
  *
- * Score: 80 bpm in D major, 3 s a bar. The two knots that tie a thread off land on
- * downbeats (bar 15 at 45 s, bar 20 at 60 s) and resolve home to D. Instruments are made
- * here: a felt piano (additive partials), a plucked thread (Karplus-Strong), a soft pad,
- * a round bass, a small bell for knots, and a wooden "flute" for the third mind.
- * Foley: keys, clicks, stitches, a thread drawn through cloth, a knot snugging tight,
- * paper, a lamp's pull chain. Its events come from the film itself (FILM.events).
+ * Synthesised sample by sample from FILM.events (film.js), so every sound sits exactly on
+ * the frame it belongs to and moves across the stereo field with the thing on screen.
+ *   - The needle is the rhythm section: pierce clicks and cloth taps, and a sewing machine
+ *     whose speed follows the stitching on screen and stops when it stops.
+ *   - Tension is a pulled thread: a bowed string that rises as a thread goes taut and lets
+ *     go into the knot.
+ *   - A short motif for a loose thread (E G A F#, in E dorian) stays on the open 2nd while a
+ *     thread is open, and comes home to E only when one is tied off.
+ *   - Each mind has its own instrument, and "speaks" in it while its words appear:
+ *     Inkling a plucked thread, the Skeptic a low muted reed, the Socratic tutor a breathy
+ *     flute, the Coach a blunt wooden mallet.
+ *   - Silence is used on purpose: a held breath before each tie-off, a hard stop on a snip,
+ *     and almost nothing while the threads are hidden.
+ * No pad, no four-on-the-floor, no chord progression: the music is threads and knots.
  *
- * SCORE.render() makes two stems, music and fx; SCORE.wav(stem) returns one as base64 WAV.
- * The mix (ducking, loudness) is done by mix.sh with ffmpeg.
+ * SCORE.render(events) makes two stems, "music" and "fx"; mix.sh balances and levels them.
  */
 (function () {
   "use strict";
-  const SR = 48000, DUR = 98;
-  const N = SR * DUR;
-  const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
-  const PC = { C: 0, "C#": 1, D: 2, "D#": 3, E: 4, F: 5, "F#": 6, G: 7, "G#": 8, A: 9, "A#": 10, B: 11 };
-  const m = (s) => { const x = s.match(/^([A-G]#?)(-?\d)$/); return 12 * (+x[2] + 1) + PC[x[1]]; };
-  function rng(seed) { let s = (seed * 2654435761) >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; }; }
-  const R = rng(7);
-  const bar = (b, beat = 0) => b * 3 + beat * 0.75;
-
-  // ---------------------------------------------------------------- buses
-  const bus = () => ({ L: new Float32Array(N), R: new Float32Array(N) });
-  const B = { piano: bus(), pluck: bus(), pad: bus(), bass: bus(), bell: bus(), flute: bus(), perc: bus(), fx: bus() };
-  function mixIn(b, buf, t, gain, pan) {
-    const i0 = Math.round(t * SR);
-    const gl = gain * Math.cos(((pan + 1) * Math.PI) / 4), gr = gain * Math.sin(((pan + 1) * Math.PI) / 4);
-    for (let i = 0; i < buf.length; i++) {
-      const j = i0 + i;
-      if (j < 0) continue;
-      if (j >= N) break;
-      b.L[j] += buf[i] * gl; b.R[j] += buf[i] * gr;
-    }
-  }
-
-  // ---------------------------------------------------------------- instruments
-  const cache = new Map();
-  const memo = (k, f) => { if (!cache.has(k)) cache.set(k, f()); return cache.get(k); };
-  /** Felt piano: a few partials, the upper ones dying first; a soft hammer; felt keeps it dark. */
-  function piano(midi, dur) {
-    return memo(`p${midi}:${dur}`, () => {
-      const f = hz(midi), len = Math.floor(SR * (dur + 1.6)), b = new Float32Array(len);
-      const ring = 1.1 * Math.pow(261 / f, 0.45) + 0.5;
-      const parts = [[1, 1, 1], [2, 0.36, 1.9], [3, 0.12, 2.8], [4, 0.05, 3.9], [5.01, 0.02, 5]];
-      for (const [k, a, dk] of parts) {
-        if (f * k > 9000) continue;
-        const w = (2 * Math.PI * f * k) / SR;
-        for (let i = 0; i < len; i++) b[i] += a * Math.sin(w * i + k) * Math.exp(-(i / SR) * dk / ring);
-      }
-      let lp = 0;
-      const r = rng(midi);
-      for (let i = 0; i < len; i++) {
-        const t = i / SR;
-        const att = Math.min(1, t / 0.006), rel = t < dur ? 1 : Math.exp(-(t - dur) / 0.35);
-        const ham = t < 0.02 ? (r() * 2 - 1) * 0.25 * (1 - t / 0.02) : 0;
-        lp += 0.5 * (b[i] * att * rel + ham - lp); // felt: a gentle low-pass
-        b[i] = lp * 0.55;
-      }
-      return b;
-    });
-  }
-  /** A plucked thread (Karplus-Strong): a burst of noise circling a delay line, an averaging
-   *  filter taking the brightness out a little each time round, and an all-pass for tuning. */
-  function pluck(midi, dur, bright) {
-    return memo(`k${midi}:${dur}:${bright}`, () => {
-      const P = SR / hz(midi), total = P - 0.5;
-      const n0 = Math.floor(total - 0.1), d = total - n0, C = (1 - d) / (1 + d);
-      const len = Math.floor(SR * (dur + 1.2)), out = new Float32Array(len), line = new Float32Array(n0), r = rng(midi * 3 + 1);
-      let lp = 0;
-      for (let i = 0; i < n0; i++) { lp += (bright || 0.5) * ((r() * 2 - 1) - lp); line[i] = lp; }
-      // no DC in the burst: the loop keeps whatever offset it starts with, as a thump
-      const mean = line.reduce((a, b) => a + b, 0) / n0;
-      for (let i = 0; i < n0; i++) line[i] -= mean;
-      const damp = 0.9965 - Math.max(0, (midi - 72) * 0.0007);
-      let idx = 0, prev = 0, apx = 0, apy = 0, dcx = 0, dcy = 0;
-      for (let i = 0; i < len; i++) {
-        const y = line[idx];
-        const avg = damp * 0.5 * (y + prev);
-        prev = y;
-        const ap = C * avg + apx - C * apy;
-        apx = avg; apy = ap;
-        line[idx] = ap;
-        idx = idx + 1 === n0 ? 0 : idx + 1;
-        const t = i / SR, rel = t < dur ? 1 : Math.exp(-(t - dur) / 0.2);
-        // and a gentle DC blocker on the way out
-        dcy = y - dcx + 0.995 * dcy; dcx = y;
-        out[i] = dcy * rel * Math.min(1, t / 0.0015) * 0.9;
-      }
-      return out;
-    });
-  }
-  /** A small bell for knots: inharmonic partials, bright and short. */
-  function bell(midi, dur) {
-    return memo(`b${midi}:${dur}`, () => {
-      const f = hz(midi), len = Math.floor(SR * (dur + 2)), b = new Float32Array(len);
-      for (const [k, a, d] of [[1, 1, 1.4], [2.76, 0.32, 3.2], [5.4, 0.12, 6], [8.93, 0.05, 9]]) {
-        const w = (2 * Math.PI * f * k) / SR;
-        for (let i = 0; i < len; i++) b[i] += a * Math.sin(w * i) * Math.exp(-(i / SR) * d) * Math.min(1, i / (SR * 0.002));
-      }
-      for (let i = 0; i < len; i++) b[i] *= 0.4;
-      return b;
-    });
-  }
-  /** Pad: soft sines a few cents apart, slow in and slow out. */
-  function pad(midi, dur) {
-    return memo(`d${midi}:${dur}`, () => {
-      const f = hz(midi), len = Math.floor(SR * (dur + 2.2)), b = new Float32Array(len);
-      const att = 1.1, rel = 1.8;
-      for (const [k, a, cents] of [[1, 1, -5], [1, 1, 6], [2, 0.22, 3], [3, 0.06, -4]]) {
-        const w = (2 * Math.PI * f * k * Math.pow(2, cents / 1200)) / SR;
-        for (let i = 0; i < len; i++) b[i] += a * Math.sin(w * i + k * 1.7);
-      }
-      for (let i = 0; i < len; i++) {
-        const t = i / SR;
-        const e = t < att ? Math.sin((Math.PI / 2) * (t / att)) ** 2 : t < dur ? 1 : Math.exp(-(t - dur) / (rel / 3));
-        b[i] *= e * 0.16 * (1 + 0.06 * Math.sin(2 * Math.PI * 0.21 * t));
-      }
-      return b;
-    });
-  }
-  /** Bass: a round sine with a touch of second harmonic, plucked. */
-  function bass(midi, dur) {
-    return memo(`a${midi}:${dur}`, () => {
-      const f = hz(midi), len = Math.floor(SR * (dur + 0.8)), b = new Float32Array(len);
-      for (let i = 0; i < len; i++) {
-        const t = i / SR, e = Math.sin(Math.PI / 2 * Math.min(1, t / 0.03)) * (t < dur ? Math.exp(-t * 0.9) : Math.exp(-dur * 0.9) * Math.exp(-(t - dur) / 0.15));
-        b[i] = (Math.sin(2 * Math.PI * f * t) + 0.25 * Math.sin(4 * Math.PI * f * t)) * e * 0.5;
-      }
-      return b;
-    });
-  }
-  /** A wooden flute for the third mind: a breathy sine with a slow vibrato. */
-  function flute(midi, dur) {
-    return memo(`f${midi}:${dur}`, () => {
-      const f = hz(midi), len = Math.floor(SR * (dur + 0.6)), b = new Float32Array(len), r = rng(midi + 99);
-      let ph = 0, lp = 0;
-      for (let i = 0; i < len; i++) {
-        const t = i / SR, vib = 1 + 0.004 * Math.sin(2 * Math.PI * 5.1 * t) * Math.min(1, t / 0.5);
-        ph += (2 * Math.PI * f * vib) / SR;
-        const e = Math.min(1, t / 0.09) * (t < dur ? 1 : Math.exp(-(t - dur) / 0.12));
-        lp += 0.08 * ((r() * 2 - 1) - lp);
-        b[i] = (Math.sin(ph) + 0.18 * Math.sin(2 * ph) + lp * 0.06) * e * 0.3;
-      }
-      return b;
-    });
-  }
-
-  // ---------------------------------------------------------------- the score
-  const CH = {
-    Dadd9: { pad: ["D3", "A3", "E4", "F#4"], bass: "D2", arp: ["D4", "E4", "F#4", "A4"] },
-    D: { pad: ["D3", "A3", "D4", "F#4"], bass: "D2", arp: ["A4", "D5", "F#5", "A5"] },
-    Bm7: { pad: ["F#3", "A3", "B3", "D4"], bass: "B1", arp: ["F#4", "B4", "D5", "F#5"] },
-    Gmaj7: { pad: ["G3", "B3", "D4", "F#4"], bass: "G1", arp: ["G4", "B4", "D5", "F#5"] },
-    A7sus4: { pad: ["G3", "A3", "D4", "E4"], bass: "A1", arp: ["E4", "A4", "D5", "E5"] },
-    A: { pad: ["E3", "A3", "C#4", "E4"], bass: "A1", arp: ["E4", "A4", "C#5", "E5"] },
-    Asus4: { pad: ["E3", "A3", "D4", "E4"], bass: "A1", arp: ["E4", "A4", "D5", "E5"] },
-    Em7: { pad: ["E3", "G3", "B3", "D4"], bass: "E2", arp: ["E4", "G4", "B4", "D5"] },
-    "F#m7": { pad: ["E3", "F#3", "A3", "C#4"], bass: "F#1", arp: ["F#4", "A4", "C#5", "E5"] },
-    "D/F#": { pad: ["F#3", "A3", "D4", "E4"], bass: "F#1", arp: ["F#4", "A4", "D5", "E5"] },
-    Gmaj9: { pad: ["F#3", "A3", "B3", "D4"], bass: "G1", arp: ["B4", "D5", "F#5", "A5"] },
-    Bm9: { pad: ["F#3", "A3", "C#4", "D4"], bass: "B1", arp: ["F#4", "A4", "C#5", "D5"] },
-  };
-  // one chord per bar (bar = 3 s); the arc follows the film
-  const PROG = ["Dadd9", "Dadd9", "Gmaj7", // cold open, the wordmark, into the window
-    "D", "Bm7", "Gmaj7", "A7sus4", // you write
-    "Em7", // a pause, and a question
-    "Gmaj7", "F#m7", "Em7", "Asus4", // the sketch
-    "Bm7", "Gmaj7", "A7sus4", // fix the words... (A7 at the end of bar 14)
-    "D", "Bm7", "Gmaj7", "Em7", "A7sus4", // ...tied off on the downbeat of bar 15; the second thread
-    "Dadd9", "Gmaj7", "F#m7", "Bm7", // tied off on bar 20; the room
-    "Gmaj7", "D/F#", "Em7", "A", "Bm7", // the brief, the chat, a mind by name
-    "Gmaj9", // hide threads
-    "Bm9", // lamplight
-    "Gmaj7", "Dadd9", "Dadd9"]; // the icon, the name, the end
-  const notes = [];
-  const add = (inst, t, note, dur, vel, pan) => notes.push({ inst, t, midi: typeof note === "number" ? note : m(note), dur, vel, pan: pan == null ? 0 : pan });
-  const hum = (t, amt = 0.008) => t + (R() - 0.5) * 2 * amt;
-
-  PROG.forEach((name, b) => {
-    const c = CH[name], t0 = bar(b);
-    const quiet = b === 29 ? 0.55 : 1;
-    // the pad is under everything, a little louder at the ends
-    c.pad.forEach((p, i) => add("pad", t0, p, 3.05, (b < 3 || b >= 30 ? 1.1 : 0.85) * quiet, (i - 1.5) * 0.35));
-    // bass from the writing on, out for hide threads
-    if (b >= 3 && b !== 29) {
-      add("bass", t0, c.bass, b >= 24 && b <= 28 ? 1.4 : 2.6, 0.9);
-      if (b >= 24 && b <= 28) { add("bass", t0 + 1.5, c.bass, 0.6, 0.6); add("bass", t0 + 2.25, m(c.bass) + 12, 0.5, 0.4); }
-    }
-    if (b === 30 || b >= 31) add("bass", t0, c.bass, 2.8, 0.75);
-    // the felt piano: broken chords in eighths while you write, then through most of the film
-    const arpBars = (b >= 3 && b <= 28 && b !== 7 && !(b >= 8 && b <= 11)) || b === 30;
-    if (arpBars) {
-      const pat = b === 30 ? [0, 2, 3, 1] : [0, 1, 2, 3, 2, 1, 2, 3];
-      const step = b === 30 ? 0.75 : 0.375;
-      pat.forEach((k, i) => {
-        const v = (i % 4 === 0 ? 0.62 : 0.42) * (0.9 + R() * 0.2) * (b >= 20 && b <= 23 ? 0.75 : 1);
-        add("piano", hum(t0 + i * step), c.arp[k], step * 1.6, v, -0.25);
-      });
-    }
-  });
-  // the cold open: a needle's motif as the name is sewn, a bell for the knot
-  [["A4", 0.4], ["D5", 0.9], ["E5", 1.35], ["F#5", 1.8], ["E5", 2.25], ["A5", 2.7], ["F#5", 3.15], ["E5", 3.6]].forEach(([n, t]) => add("pluck", hum(t, 0.01), n, 0.5, 0.55, 0.2));
-  add("bell", 4.5, "D6", 1.5, 0.8, 0.1); add("bell", 4.52, "A5", 1.5, 0.45, -0.1);
-  add("piano", 5.1, "F#4", 2, 0.4, -0.2); add("piano", 5.85, "A4", 2, 0.34, -0.2); add("piano", 6.6, "E5", 2.2, 0.3, -0.2);
-  add("pluck", 7.15, "D5", 0.6, 0.4, 0.3); add("pluck", 7.5, "A5", 0.8, 0.35, 0.3);
-  // a pause, and a question (bar 7): unresolved, rising
-  add("bell", 23.3, "E5", 1, 0.32, 0.2); add("bell", 23.75, "A5", 1.2, 0.3, 0.25);
-  add("piano", 21.0, "B4", 1.5, 0.4, -0.2); add("piano", 21.75, "D5", 1.5, 0.36, -0.2); add("piano", 22.5, "E5", 1.8, 0.32, -0.2);
-  // the sketch (bars 8-11): plucked sixteenths, in and out like a needle
-  for (let b = 8; b <= 11; b++) {
-    const c = CH[PROG[b]], t0 = bar(b);
-    const hi = c.arp.map((x) => m(x) + 12);
-    const pat = [3, 1, 2, 1, 3, 1, 2, 0, 3, 1, 2, 1, 3, 2, 1, 0];
-    pat.forEach((k, i) => add("pluck", hum(t0 + i * 0.1875, 0.005), hi[k], 0.25, (i % 4 === 0 ? 0.42 : 0.26) * (0.9 + R() * 0.2), 0.35));
-    add("piano", t0, c.arp[0], 2.8, 0.45, -0.2);
-  }
-  // each sketch step gets a small bell
-  [29.9, 31.5, 33.1, 34.7].forEach((t, i) => add("bell", t, ["A5", "B5", "C#6", "D6"][i], 0.8, 0.22, 0.3));
-  // fix the words: A7 at the end of bar 14 pulls to D
-  add("piano", bar(14, 2), "G4", 1.4, 0.45, -0.2); add("piano", bar(14, 2.5), "C#5", 1.2, 0.45, -0.2); add("piano", bar(14, 3), "E5", 1, 0.5, -0.2);
-  // tied off: home, on the downbeat, with a little strum of thread
-  const tieOff = (t) => {
-    add("bell", t, "D6", 2, 0.7, 0.1); add("bell", t + 0.01, "F#5", 2, 0.35, -0.1);
-    ["D5", "F#5", "A5", "D6"].forEach((n, i) => add("pluck", t + 0.05 + i * 0.06, n, 1.2, 0.4 - i * 0.05, 0.3));
-  };
-  tieOff(45.0); tieOff(60.0);
-  add("piano", bar(19, 2), "G4", 1.4, 0.42, -0.2); add("piano", bar(19, 2.5), "C#5", 1.2, 0.42, -0.2); add("piano", bar(19, 3), "E5", 1, 0.46, -0.2);
-  // the room (bars 20-23): three minds, three voices — thread (pluck), piano, flute
-  [["F#5", 0], ["E5", 1], ["D5", 1.5], ["E5", 2], ["A4", 3]].forEach(([n, bt]) => add("pluck", hum(bar(20, bt)), n, 0.9, 0.42, 0.45));
-  [["D5", 0], ["B4", 1], ["D5", 2], ["F#5", 2.5], ["E5", 3]].forEach(([n, bt]) => add("pluck", hum(bar(21, bt)), n, 0.9, 0.4, 0.45));
-  [["C#5", 0], ["E5", 1], ["A5", 2], ["G#5", 3]].forEach(([n, bt]) => add("piano", hum(bar(22, bt)), n, 0.8, 0.42, -0.45));
-  [["F#5", 0], ["E5", 1.5], ["D5", 2]].forEach(([n, bt]) => add("flute", bar(23, bt), n, bt === 2 ? 1.2 : 1.3, 0.55, 0.05));
-  [["A5", 0], ["F#5", 2]].forEach(([n, bt]) => add("flute", bar(22, bt), n, 1.8, 0.5, 0.05));
-  [66.2, 66.3, 66.4].forEach((t, i) => add("bell", t, ["F#5", "A5", "D6"][i], 1.2, 0.3, [-0.4, 0, 0.4][i]));
-  // a soft brush through the brief and the chat (bars 24-28)
-  for (let b = 24; b <= 28; b++) for (let i = 0; i < 8; i++) add("perc", bar(b) + i * 0.375 + (i % 2 ? 0.02 : 0), 0, 0.08, i % 2 ? 0.35 : 0.55, (i % 2 ? 0.3 : -0.3));
-  // hide threads: one note held (bar 29), then the threads come back
-  add("piano", 87.9, "D5", 2.4, 0.45, 0); add("piano", 88.65, "A4", 2, 0.3, 0);
-  ["F#5", "A5", "D6"].forEach((n, i) => add("pluck", 89.7 + i * 0.07, n, 0.8, 0.35, 0.3));
-  // the close: the needle's motif on the bell, the knot, home
-  [["A4", 93.0], ["D5", 93.375], ["E5", 93.75], ["F#5", 94.125]].forEach(([n, t]) => add("pluck", t, n, 0.6, 0.4, 0.2));
-  add("bell", 94.5, "D6", 2.5, 0.7, 0.05); add("bell", 94.52, "A5", 2.5, 0.35, -0.05);
-  add("bell", 96.0, "F#5", 2.4, 0.3, 0.2); add("bell", 96.02, "A5", 2.4, 0.25, -0.2);
-  add("piano", 96.0, "D4", 2.5, 0.4, -0.2); add("piano", 96.0, "A4", 2.5, 0.32, -0.2);
-
-  function renderNotes() {
-    for (const n of notes) {
-      const v = n.vel;
-      if (n.inst === "piano") mixIn(B.piano, piano(n.midi, n.dur), n.t, v * 0.55, n.pan);
-      else if (n.inst === "pluck") mixIn(B.pluck, pluck(n.midi, n.dur, 0.72), n.t, v * 0.5, n.pan);
-      else if (n.inst === "bell") mixIn(B.bell, bell(n.midi, n.dur), n.t, v * 0.42, n.pan);
-      else if (n.inst === "pad") mixIn(B.pad, pad(n.midi, n.dur), n.t, v * 0.5, n.pan);
-      else if (n.inst === "bass") mixIn(B.bass, bass(n.midi, n.dur), n.t, v * 0.42, 0);
-      else if (n.inst === "flute") mixIn(B.flute, flute(n.midi, n.dur), n.t, v * 0.6, n.pan);
-      else if (n.inst === "perc") mixIn(B.perc, brush(n.dur), n.t, v * 0.05, n.pan);
-    }
-  }
-
-  // ---------------------------------------------------------------- foley
-  function noise(len, seed, color) {
-    const r = rng(seed), b = new Float32Array(len);
-    let lp = 0;
-    for (let i = 0; i < len; i++) { const x = r() * 2 - 1; lp += (color || 1) * (x - lp); b[i] = lp; }
-    return b;
-  }
-  /** A biquad band-pass, applied in place (RBJ cookbook). */
-  function bandpass(b, f0, q, f1) {
+  const SR = 48000;
+  const out = {};
+  let N = 0;
+  const BUS = {};
+  const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  // ---- a repeatable noise source
+  let seed = 12345;
+  const rnd = () => { seed ^= seed << 13; seed >>>= 0; seed ^= seed >>> 17; seed ^= seed << 5; seed >>>= 0; return (seed / 4294967296) * 2 - 1; };
+  // ---- RBJ biquads, per-sample
+  function biquad(type, f, q) {
+    let B0, B1, B2, A1, A2;
+    const set = (f) => {
+      const w = (2 * Math.PI * clamp(f, 10, SR * 0.45)) / SR, c = Math.cos(w), s = Math.sin(w), a = s / (2 * q);
+      let b0, b1, b2, a0, a1, a2;
+      if (type === "lp") { b0 = (1 - c) / 2; b1 = 1 - c; b2 = (1 - c) / 2; a0 = 1 + a; a1 = -2 * c; a2 = 1 - a; }
+      else if (type === "hp") { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; a0 = 1 + a; a1 = -2 * c; a2 = 1 - a; }
+      else { b0 = a; b1 = 0; b2 = -a; a0 = 1 + a; a1 = -2 * c; a2 = 1 - a; } // band-pass, 0 dB peak
+      B0 = b0 / a0; B1 = b1 / a0; B2 = b2 / a0; A1 = a1 / a0; A2 = a2 / a0;
+    };
+    set(f);
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
-    for (let i = 0; i < b.length; i++) {
-      const f = f1 ? f0 * Math.pow(f1 / f0, i / b.length) : f0;
-      const w = (2 * Math.PI * f) / SR, al = Math.sin(w) / (2 * q), a0 = 1 + al;
-      const b0 = al / a0, b2 = -al / a0, a1 = (-2 * Math.cos(w)) / a0, a2 = (1 - al) / a0;
-      const x = b[i], y = b0 * x + b2 * x2 - a1 * y1 - a2 * y2;
-      x2 = x1; x1 = x; y2 = y1; y1 = y; b[i] = y;
-    }
-    return b;
+    const fn = (x) => { const y = B0 * x + B1 * x1 + B2 * x2 - A1 * y1 - A2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; };
+    fn.set = set;
+    return fn;
   }
-  const env = (b, att, dec) => { for (let i = 0; i < b.length; i++) { const t = i / SR; b[i] *= Math.min(1, t / att) * Math.exp(-Math.max(0, t - att) / dec); } return b; };
-  function brush(dur) { return memo(`br${dur}`, () => env(bandpass(noise(Math.floor(SR * (dur + 0.1)), 5, 1), 7000, 0.7), 0.004, dur / 2.5)); }
-  let seed = 1000;
-  const FX = {
-    key(gain) {
-      const s = seed++, len = Math.floor(SR * 0.05);
-      const click = env(bandpass(noise(len, s, 1), 2400 + (s % 7) * 220, 1.4), 0.0008, 0.006);
-      const thock = new Float32Array(len), f = 150 + (s % 5) * 14;
-      for (let i = 0; i < len; i++) { const t = i / SR; thock[i] = Math.sin(2 * Math.PI * f * t) * Math.exp(-t / 0.012) * 0.6; }
-      for (let i = 0; i < len; i++) click[i] = click[i] * 1.6 + thock[i] * 0.5;
-      return { b: click, g: 0.16 * gain };
-    },
-    space(gain) { const k = FX.key(gain); const len = k.b.length; for (let i = 0; i < len; i++) k.b[i] += Math.sin(2 * Math.PI * 110 * i / SR) * Math.exp(-i / SR / 0.02) * 0.4; return k; },
-    enter(gain) { const k = FX.key(1.2); return k; },
-    chord() { const a = FX.key(1), b2 = FX.key(1), out = new Float32Array(a.b.length + Math.floor(SR * 0.09)); out.set(a.b, 0); for (let i = 0; i < b2.b.length; i++) out[i + Math.floor(SR * 0.09)] += b2.b[i]; return { b: out, g: 0.17 }; },
-    click() {
-      const len = Math.floor(SR * 0.04), s = seed++;
-      const b = env(bandpass(noise(len, s, 1), 3800, 2.5), 0.0005, 0.004);
-      for (let i = 0; i < len; i++) b[i] += Math.sin(2 * Math.PI * 95 * i / SR) * Math.exp(-i / SR / 0.008) * 0.25;
-      return { b, g: 0.2 };
-    },
-    stitch(gain, i) {
-      // the needle through the cloth: a tiny tick, then the thread following it
-      const len = Math.floor(SR * 0.06), s = seed++;
-      const tick = env(bandpass(noise(len, s, 1), (i % 2 ? 5200 : 4300), 2), 0.0004, 0.003);
-      const draw = env(bandpass(noise(len, s + 1, 1), 1800, 1.2), 0.008, 0.018);
-      for (let j = 0; j < len; j++) tick[j] = tick[j] * 1.0 + draw[j] * 0.35;
-      return { b: tick, g: 0.1 * gain };
-    },
-    pull(gain) { const len = Math.floor(SR * 0.34); return { b: env(bandpass(noise(len, seed++, 1), 700, 6, 3200), 0.03, 0.12), g: 0.5 * gain }; },
-    pop(gain) {
-      const len = Math.floor(SR * 0.14), b = new Float32Array(len);
-      let ph = 0;
-      for (let i = 0; i < len; i++) { const t = i / SR, f = 560 * Math.pow(260 / 560, Math.min(1, t / 0.09)); ph += 2 * Math.PI * f / SR; b[i] = Math.sin(ph) * Math.min(1, t / 0.003) * Math.exp(-t / 0.035); }
-      const c = env(bandpass(noise(len, seed++, 1), 2600, 1.5), 0.0005, 0.004);
-      for (let i = 0; i < len; i++) b[i] += c[i] * 0.4;
-      return { b, g: 0.42 * gain };
-    },
-    paper(gain) { const len = Math.floor(SR * 0.45); return { b: env(bandpass(noise(len, seed++, 0.9), 900, 0.6, 2600), 0.07, 0.14), g: 0.26 * gain }; },
-    slide(gain) { const len = Math.floor(SR * 0.4); return { b: env(bandpass(noise(len, seed++, 0.9), 1400, 0.8, 600), 0.05, 0.12), g: 0.22 * gain }; },
-    lift(gain) { const len = Math.floor(SR * 0.4); return { b: env(bandpass(noise(len, seed++, 1), 5000, 0.9, 2500), 0.06, 0.1), g: 0.12 * gain }; },
-    lamp(gain) {
-      // a lamp's pull chain: two small metal clicks, and the warmth coming up
-      const len = Math.floor(SR * 0.3), b = new Float32Array(len);
-      for (const [at, f] of [[0, 3400], [0.055, 2900]]) {
-        const c = env(bandpass(noise(Math.floor(SR * 0.05), seed++, 1), f, 6), 0.0004, 0.006);
-        const o = Math.floor(at * SR);
-        for (let i = 0; i < c.length && o + i < len; i++) b[o + i] += c[i] * 1.2;
-      }
-      return { b, g: 0.3 * gain };
-    },
-    settle(gain) { return FX.paper(gain * 0.8); },
-  };
-  function renderFx(events) {
-    for (const e of events) {
-      const f = FX[e.kind];
-      if (!f) continue;
-      const { b, g } = f(e.gain == null ? 1 : e.gain, e.i || 0);
-      const pan = e.kind === "stitch" ? 0.15 : e.kind === "key" || e.kind === "space" ? -0.1 : 0;
-      mixIn(B.fx, b, e.t, g, pan);
+  // ---- writing into a bus, with equal-power panning
+  function bus(name) { if (!BUS[name]) BUS[name] = [new Float32Array(N), new Float32Array(N)]; return BUS[name]; }
+  function put(name, t, mono, gain, pan) {
+    const [L, R] = bus(name);
+    const i0 = Math.round(t * SR);
+    const panAt = typeof pan === "function" ? pan : () => pan || 0;
+    for (let i = 0; i < mono.length; i++) {
+      const j = i0 + i;
+      if (j < 0 || j >= N) continue;
+      const p = clamp(panAt(i / SR), -1, 1), a = ((p + 1) * Math.PI) / 4;
+      const v = mono[i] * gain;
+      L[j] += v * Math.cos(a); R[j] += v * Math.sin(a);
     }
+  }
+  const env = (n, att, dec, curve) => { const e = new Float32Array(n); const A = Math.max(1, Math.round(att * SR)); for (let i = 0; i < n; i++) e[i] = i < A ? i / A : Math.pow(Math.max(0, 1 - (i - A) / Math.max(1, n - A)), curve || 2); return e; };
+
+  // ================================================================ instruments
+  /** Karplus-Strong: a plucked thread. Fractional delay keeps it in tune. */
+  const ksCache = new Map();
+  function pluck(f, dur, bright, decay) {
+    const key = [f.toFixed(2), dur, bright, decay].join(":");
+    if (ksCache.has(key)) return ksCache.get(key);
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    const L = SR / f, Li = Math.floor(L), fr = L - Li;
+    const buf = new Float32Array(Li + 2);
+    let lp = 0;
+    for (let i = 0; i < buf.length; i++) { lp = lp + (rnd() - lp) * (0.25 + 0.7 * bright); buf[i] = lp; }
+    let idx = 0, prev = 0;
+    const damp = decay || 0.996;
+    let dc = 0;
+    for (let i = 0; i < n; i++) {
+      const a = buf[idx % buf.length], b = buf[(idx + 1) % buf.length];
+      const s = a * (1 - fr) + b * fr;
+      const nv = damp * (0.5 * (s + prev) * (0.5 + 0.5 * bright) + s * (0.5 - 0.5 * bright));
+      prev = s;
+      buf[idx % buf.length] = nv;
+      idx++;
+      dc += (nv - dc) * 0.002;
+      y[i] = (nv - dc) * Math.min(1, i / 24);
+    }
+    // a little body: the thread over a wooden hoop
+    const body = biquad("bp", 220, 1.2), body2 = biquad("bp", 520, 2.0);
+    for (let i = 0; i < n; i++) y[i] = y[i] * 0.85 + body(y[i]) * 0.6 + body2(y[i]) * 0.3;
+    ksCache.set(key, y);
+    return y;
+  }
+  /** A bowed thread, gliding from f0 to f1: the sound of a thread going taut. */
+  function bowed(f0, f1, dur, opts = {}) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    let ph1 = 0, ph2 = 0;
+    const lp = biquad("lp", 900, 0.7), body = biquad("bp", 300, 1.4), bowN = biquad("bp", 2400, 1.5);
+    const att = opts.att || Math.min(0.12, dur * 0.4), rel = opts.rel || 0.05;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, k = t / dur;
+      const glide = opts.curve === "lin" ? k : k * k * (3 - 2 * k);
+      const f = f0 * Math.pow(f1 / f0, glide) * (1 + 0.0035 * Math.sin(2 * Math.PI * 5.2 * t) * Math.min(1, t * 4));
+      ph1 += f / SR; ph2 += (f * 1.0035) / SR;
+      const saw = (ph1 % 1) * 2 - 1 + ((ph2 % 1) * 2 - 1) * 0.7;
+      const e = Math.min(1, t / att) * Math.min(1, (dur - t) / rel) * (opts.cresc ? 0.35 + 0.65 * k : 1);
+      const bright = 0.4 + 0.6 * (opts.cresc ? k : 0.6);
+      y[i] = (lp(saw) * (0.6 + bright * 0.5) + body(saw) * 0.4 + bowN(rnd()) * 0.06 * e) * e;
+    }
+    return y;
+  }
+  /** The Socratic tutor: a breathy flute. */
+  function flute(f, dur) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    const br = biquad("bp", f * 2, 3);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, e = Math.min(1, t / 0.05) * Math.min(1, (dur - t) / 0.12);
+      ph += (f * (1 + 0.005 * Math.sin(2 * Math.PI * 5 * t) * Math.min(1, t * 3))) / SR;
+      y[i] = (Math.sin(2 * Math.PI * ph) + 0.22 * Math.sin(4 * Math.PI * ph) + br(rnd()) * 0.5) * e;
+    }
+    return y;
+  }
+  /** The Skeptic: a low reed, muted, with a doubting little bend down. */
+  function reed(f, dur) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    const lp = biquad("lp", 750, 0.9), lp2 = biquad("lp", 1400, 0.6);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR, e = Math.min(1, t / 0.015) * Math.exp(-t * 3.2) * Math.min(1, (dur - t) / 0.04);
+      ph += (f * (1 - 0.03 * Math.min(1, t / 0.12))) / SR;
+      const sq = (ph % 1) < 0.5 ? 1 : -1;
+      y[i] = lp2(lp(sq)) * e * 1.4;
+    }
+    return y;
+  }
+  /** The Coach: a blunt wooden mallet. */
+  function mallet(f, dur) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    let p1 = 0, p2 = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR;
+      const fp = f * (1 + 0.6 * Math.exp(-t * 90));
+      p1 += fp / SR; p2 += (f * 2.76) / SR;
+      y[i] = Math.sin(2 * Math.PI * p1) * Math.exp(-t * 7) + 0.35 * Math.sin(2 * Math.PI * p2) * Math.exp(-t * 26) + (i < 120 ? rnd() * 0.3 * (1 - i / 120) : 0);
+    }
+    return y;
+  }
+  /** Small bells (the Editor) and a dry block (Staff engineer), a brass breath (Investor): chips only. */
+  function bell(f, dur) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const t = i / SR; const m = Math.sin(2 * Math.PI * f * 3.5 * t) * 2.2 * Math.exp(-t * 6); y[i] = Math.sin(2 * Math.PI * f * t + m) * Math.exp(-t * 4.5); }
+    return y;
+  }
+  function block(f, dur) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const t = i / SR; y[i] = (Math.sin(2 * Math.PI * f * t) * 0.8 + Math.sin(2 * Math.PI * f * 1.58 * t) * 0.5) * Math.exp(-t * 38); }
+    return y;
+  }
+  function brass(f, dur) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    const lp = biquad("lp", 900, 1.2);
+    let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i / SR; ph += f / SR; const e = Math.min(1, t / 0.06) * Math.exp(-t * 3); y[i] = lp((ph % 1) * 2 - 1) * e; }
+    return y;
+  }
+  const VOICE = {
+    inkling: { make: (f, d) => pluck(f, d, 0.55, 0.997), base: 64, span: [0, 7], gain: 0.5 },
+    skeptic: { make: (f, d) => reed(f, d), base: 40, span: [0, 7], gain: 0.42 },
+    tutor: { make: (f, d) => flute(f, d), base: 76, span: [0, 7], gain: 0.16 },
+    coach: { make: (f, d) => mallet(f, d), base: 52, span: [0, 5], gain: 0.5 },
+    staff: { make: (f, d) => block(f, d), base: 71, span: [0, 4], gain: 0.4 },
+    editor: { make: (f, d) => bell(f, d), base: 83, span: [0, 4], gain: 0.16 },
+    investor: { make: (f, d) => brass(f, d), base: 47, span: [0, 4], gain: 0.22 },
+  };
+  // E dorian
+  const SCALE = [0, 2, 3, 5, 7, 9, 10];
+  const deg = (base, d) => base + SCALE[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
+
+  // ================================================================ foley
+  function noiseBurst(dur, filters, curve) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    const fs = filters.map(([t, f, q]) => biquad(t, f, q));
+    for (let i = 0; i < n; i++) { let v = rnd(); for (const F of fs) v = F(v); y[i] = v * Math.pow(1 - i / n, curve || 3); }
+    return y;
+  }
+  const FX = {
+    pierce: () => mix([noiseBurst(0.004, [["hp", 2500, 0.7]], 2), 1.2], [noiseBurst(0.09, [["bp", 5200, 12]], 4), 0.9], [noiseBurst(0.03, [["lp", 900, 0.7]], 3), 0.5]),
+    click: () => mix([noiseBurst(0.003, [["hp", 1800, 0.7]], 2), 1], [noiseBurst(0.035, [["bp", 4300, 9]], 4), 0.6]),
+    tick: () => mix([noiseBurst(0.0025, [["bp", 3000, 1.5]], 2), 1], [noiseBurst(0.02, [["bp", 1800, 6]], 4), 0.3]),
+    tap: () => mix([noiseBurst(0.03, [["lp", 1300, 0.7]], 3), 0.9], [sine(160, 0.03, 60), 0.35], [noiseBurst(0.002, [["hp", 3000, 0.7]], 2), 0.25]),
+    key: () => mix([noiseBurst(0.05, [["lp", 800, 0.8]], 3), 1], [sine(110, 0.06, 45), 0.7], [noiseBurst(0.004, [["bp", 2600, 3]], 2), 0.6]),
+    thump: () => mix([sine(120, 0.07, 40, 70), 0.9], [noiseBurst(0.04, [["lp", 500, 0.7]], 3), 0.6]),
+    stitch: () => mix([noiseBurst(0.002, [["hp", 3500, 0.7]], 2), 0.8], [noiseBurst(0.018, [["hp", 4200, 0.8]], 3), 0.5], [noiseBurst(0.012, [["lp", 700, 0.7]], 3), 0.35]),
+    tack: () => mix([noiseBurst(0.012, [["hp", 3800, 0.7]], 3), 0.5], [noiseBurst(0.02, [["lp", 600, 0.7]], 3), 0.4]),
+    pop: () => mix([sine(520, 0.05, 30, 900), 0.6], [noiseBurst(0.01, [["bp", 1500, 2]], 3), 0.4]),
+    drop: () => mix([sine(900, 0.035, 20, 1600), 0.7], [noiseBurst(0.07, [["lp", 1100, 0.9]], 3), 0.45], [sine(220, 0.05, 40), 0.25]),
+  };
+  function sine(f, dur, decay, f2) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    let ph = 0;
+    for (let i = 0; i < n; i++) { const k = i / n; const ff = f2 ? f2 + (f - f2) * Math.exp(-k * 6) : f; ph += ff / SR; y[i] = Math.sin(2 * Math.PI * ph) * Math.exp(-(i / SR) * decay); }
+    return y;
+  }
+  function mix(...parts) {
+    const n = Math.max(...parts.map(([p]) => p.length)), y = new Float32Array(n);
+    for (const [p, g] of parts) for (let i = 0; i < p.length; i++) y[i] += p[i] * g;
+    return y;
+  }
+  /** A cloth swish: noise through a band that sweeps. */
+  function swish(dur, f0, f1, q) {
+    const n = Math.round(dur * SR), y = new Float32Array(n);
+    const F = biquad("bp", f0, q || 0.8);
+    for (let i = 0; i < n; i++) {
+      const k = i / n;
+      if ((i & 31) === 0) F.set(f0 * Math.pow(f1 / f0, k));
+      y[i] = F(rnd()) * Math.sin(Math.PI * k) * Math.sin(Math.PI * k);
+    }
+    return y;
+  }
+  /** The sewing machine: needle-down clicks at its rate, the take-up tick between, a felt
+   *  thump on every third stitch (it falls in threes, never four-square), and the motor. */
+  function machine(t0, t1, r0, r1, pan0, pan1, gain, opts = {}) {
+    const dur = t1 - t0;
+    let t = 0, k = 0;
+    const panAt = (u) => pan0 + (pan1 - pan0) * clamp(u / dur, 0, 1);
+    while (t < dur) {
+      const u = t / dur, r = r0 + (r1 - r0) * (u * u * (3 - 2 * u));
+      const acc = k % 3 === 0;
+      put("fx", t0 + t, FX.click(), gain * (acc ? 0.5 : 0.32) * (opts.soft ? 0.6 : 1), panAt(t));
+      put("fx", t0 + t + 0.45 / r, FX.tick(), gain * 0.12, panAt(t) + 0.08);
+      if (acc) put("fx", t0 + t, FX.thump(), gain * 0.18 * (opts.soft ? 0.5 : 1), panAt(t));
+      if (opts.triple) { put("fx", t0 + t + 0.012, FX.click(), gain * 0.18, panAt(t) - 0.2); put("fx", t0 + t + 0.021, FX.click(), gain * 0.14, panAt(t) + 0.2); }
+      t += 1 / r; k++;
+    }
+    // the motor, its pitch following the speed
+    const n = Math.round((dur + 0.08) * SR), y = new Float32Array(n);
+    const lp = biquad("lp", 420, 0.8);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const tt = i / SR, u = clamp(tt / dur, 0, 1), r = r0 + (r1 - r0) * (u * u * (3 - 2 * u));
+      ph += (r * 4.2) / SR;
+      const e = Math.min(1, tt / 0.05) * Math.min(1, Math.max(0, (dur + 0.06 - tt) / 0.07));
+      y[i] = lp((ph % 1) * 2 - 1) * e;
+    }
+    put("fx", t0, y, gain * 0.05 * (opts.soft ? 0.6 : 1), (tt) => panAt(tt));
   }
 
-  // ---------------------------------------------------------------- the room
-  /** An impulse response: a short early cluster and a warm, decaying tail. */
-  function ir(ctx, secs, damp, seed0) {
-    const len = Math.floor(SR * secs), buf = ctx.createBuffer(2, len, SR);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch), r = rng(seed0 + ch);
-      let lp = 0;
-      for (let i = 0; i < len; i++) {
-        const t = i / SR;
-        lp += damp * ((r() * 2 - 1) - lp);
-        d[i] = lp * Math.exp(-t * 3.2 / secs) * (t < 0.012 ? t / 0.012 : 1);
+  // ================================================================ the motif
+  const MOTIF = [64, 67, 69, 66]; // E G A ... F#: left open
+  function loose(t, pan, mind, step) {
+    const V = VOICE[mind] || VOICE.inkling;
+    const shift = mind === "skeptic" ? -24 : mind === "tutor" ? 12 : mind === "coach" ? -12 : 0;
+    const notes = step != null ? MOTIF.slice(0, 2 + step) : MOTIF;
+    notes.forEach((m, i) => {
+      const last = i === notes.length - 1;
+      put("mus", t + i * 0.085, V.make(midi(m + shift), last ? 1.6 : 0.6), V.gain * (last ? 0.9 : 0.7), pan);
+    });
+  }
+  /** The knot: 0 a plain knot; 1 a half close (on B); 2 the motif comes home (F# to E);
+   *  3 the last knot of the film. */
+  function knot(t, pan, resolve, v) {
+    v = v == null ? 1 : v;
+    put("fx", t, mix([sine(180, 0.09, 30, 90), 0.8], [noiseBurst(0.03, [["lp", 900, 0.7]], 3), 0.6], [noiseBurst(0.004, [["hp", 2500, 0.7]], 2), 0.4]), 0.45 * v, pan);
+    if (resolve === 0) return;
+    if (resolve === 1) { put("mus", t, pluck(midi(71), 1.4, 0.5, 0.997), 0.42 * v, pan); put("mus", t, pluck(midi(59), 1.6, 0.4, 0.997), 0.3 * v, pan); return; }
+    // home: the F# from the motif falls to E, over E and B below
+    put("mus", t - 0.07, pluck(midi(66), 0.25, 0.6, 0.994), 0.38 * v, pan);
+    put("mus", t, pluck(midi(64), 2.2, 0.55, 0.998), 0.6 * v, pan);
+    put("mus", t, pluck(midi(40), 2.6, 0.35, 0.998), 0.55 * v, 0);
+    put("mus", t + 0.02, bowed(midi(47), midi(47), resolve === 3 ? 4.5 : 1.3, { att: 0.08, rel: resolve === 3 ? 2.4 : 0.6 }), 0.16 * v, 0);
+    if (resolve === 3) { put("mus", t + 0.03, pluck(midi(52), 3.2, 0.45, 0.999), 0.4, -0.2); put("mus", t + 0.05, pluck(midi(71), 3.2, 0.5, 0.999), 0.3, 0.25); put("mus", t + 0.07, pluck(midi(78), 3.2, 0.6, 0.999), 0.18, 0.4); }
+  }
+  /** A mind speaks in its own instrument while its words appear: a note a word, the line
+   *  rising at a question and settling at a full stop. */
+  function voice(e) {
+    const V = VOICE[e.mind] || VOICE.inkling;
+    const words = e.text.replace(/\s+/g, " ").trim().split(" ");
+    const take = Math.min(words.length, e.words || 9);
+    const dur = e.t1 - e.t0, step = dur / Math.max(1, take + 1);
+    let d = 2;
+    const r = mulberry(e.text.length * 7 + e.mind.length);
+    for (let i = 0; i < take; i++) {
+      const w = words[i];
+      const end = /[?]$/.test(w) ? "q" : /[.]$/.test(w) ? "s" : /[,:;]$/.test(w) ? "c" : "";
+      d += r() < 0.5 ? -1 : 1;
+      if (r() < 0.25) d += r() < 0.5 ? -1 : 1;
+      d = clamp(d, V.span[0], V.span[1] + 2);
+      if (end === "q") d = Math.min(V.span[1] + 3, d + 3);
+      if (end === "s") d = 0;
+      const t = e.t0 + (i + 0.5) * step + (i % 2 ? step * 0.12 : 0);
+      const len = end ? 0.55 : Math.min(0.35, step * 1.6);
+      let g = V.gain * (e.gain == null ? 1 : e.gain) * (0.75 + 0.25 * Math.min(1, w.length / 6));
+      if (e.gainAt) for (const [tg, gv] of e.gainAt) if (t >= tg) g = V.gain * gv;
+      put("mus", t, V.make(midi(deg(V.base, d)), len + 0.4), g * 0.55, e.pan);
+    }
+  }
+  function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+  // ================================================================ the score
+  const ducks = [];
+  function render(events, dur) {
+    N = Math.ceil((dur + 1.5) * SR);
+    for (const k in BUS) delete BUS[k];
+    bus("fx"); bus("mus");
+    seed = 12345;
+    for (const e of events) {
+      switch (e.type) {
+        case "pierce": put("fx", e.t, FX.pierce(), 0.8, e.pan); break;
+        case "tap": put("fx", e.t, FX.tap(), 0.17 * (e.v || 1), e.pan); break;
+        case "key": put("fx", e.t, FX.key(), 0.42 * (e.v || 1), e.pan); if (e.hold) put("fx", e.t + e.hold, FX.tap(), 0.22, e.pan); break;
+        case "tick": put("fx", e.t, FX.tick(), 0.3 * (e.v || 1), e.pan); break;
+        case "thump": put("fx", e.t, FX.thump(), 0.32 * (e.v || 1), e.pan); break;
+        case "stitch": put("fx", e.t, FX.stitch(), 0.45 * (e.v || 1), e.pan); break;
+        case "tack": put("fx", e.t, FX.tack(), 0.35, e.pan); break;
+        case "pop": put("fx", e.t, FX.pop(), 0.3, e.pan); break;
+        case "drop": put("fx", e.t, FX.drop(), 0.42, e.pan); break;
+        case "stitchrun": { const n = Math.max(3, Math.round((e.t1 - e.t0) * 16)); for (let i = 0; i < n; i++) { const u = i / (n - 1); put("fx", e.t0 + u * (e.t1 - e.t0), FX.stitch(), 0.16 * (e.v || 1) * (0.7 + 0.3 * Math.sin(i * 2.3)), e.pan0 + (e.pan1 - e.pan0) * u); } break; }
+        case "needle": { for (let t = e.t0; t < e.t1; t += 0.45) { put("fx", t, FX.stitch(), 0.12 * (e.v || 1), e.pan); put("fx", t + 0.22, FX.tack(), 0.08 * (e.v || 1), e.pan); } break; }
+        case "sew": machine(e.t0, e.t1, e.r0, e.r1, e.pan0, e.pan1, e.gain || 1, { triple: e.triple, soft: e.soft }); break;
+        case "taut": { const d = e.t1 - e.t0; const y = bowed(e.f0, e.f1, d + 0.02, { cresc: true, att: Math.min(0.2, d * 0.5), rel: 0.015 }); put("mus", e.t0, y, 0.2 * (e.v || 1), (tt) => e.pan0 + (e.pan1 - e.pan0) * clamp(tt / d, 0, 1)); break; }
+        case "knot": knot(e.t, e.pan, e.resolve, e.v); break;
+        case "loose": loose(e.t, e.pan, e.mind || "inkling", e.step); break;
+        case "voice": voice(e); break;
+        case "chip": { const V = VOICE[e.mind] || VOICE.inkling; put("mus", e.t, V.make(midi(deg(V.base, 4)), 0.9), V.gain * 0.8, e.pan); break; }
+        case "unfold": put("fx", e.t, swish(0.26, 500, 1700, 0.9), 0.1, e.pan); break;
+        case "fold": put("fx", e.t, swish(0.18, 1400, 500, 0.9), 0.07, e.pan); break;
+        case "whoosh": { const y = e.low ? swish(e.dur, 160, 700, 0.7) : swish(e.dur, 380, 1900, 0.8); put("fx", e.t, y, 0.16 * (e.v || 1), (tt) => e.pan0 + (e.pan1 - e.pan0) * clamp(tt / e.dur, 0, 1)); break; }
+        case "lift": put("fx", e.t, e.back ? swish(0.35, 2400, 500, 0.9) : swish(0.35, 500, 2600, 0.9), 0.14, e.pan); break;
+        case "marks": [0, 0.07, 0.14].forEach((d, i) => put("mus", e.t + d, pluck(midi(76 + i * 3), 0.5, 0.7, 0.995), 0.18, -0.3 + i * 0.3)); break;
+        case "snip": {
+          // two blades closing, then nothing at all
+          put("fx", e.t, mix([noiseBurst(0.012, [["bp", 3900, 7]], 2), 1], [noiseBurst(0.006, [["hp", 6000, 0.7]], 2), 0.6]), 0.75, e.pan);
+          put("fx", e.t + 0.065, mix([noiseBurst(0.014, [["bp", 6800, 8]], 2), 1], [noiseBurst(0.02, [["hp", 4500, 0.7]], 3), 0.5]), 0.85, e.pan);
+          ducks.push({ t0: e.t + 0.1, t1: e.t + 0.1 + e.stop, level: 0, hard: true });
+          break;
+        }
+        case "unsnip": put("fx", e.t, swish(0.3, 2200, 500, 0.9), 0.12, e.pan); put("mus", e.t + 0.25, pluck(midi(69), 0.8, 0.5, 0.996), 0.3, e.pan); break;
+        case "duck": ducks.push({ t0: e.t0, t1: e.t1, level: e.level, hard: e.hard }); break;
+        case "groove": groove(e.t0, e.t1, e.bpm); break;
+        case "bass": put("mus", e.t, pluck(midi(e.note), 2.2, 0.35, 0.998), 0.5, -0.05); put("mus", e.t, sine(midi(e.note), 0.6, 4), 0.12, 0); break;
+        case "pluck": put("mus", e.t, pluck(midi(e.note), 0.9, 0.6, 0.996), 0.32 * (e.v || 1), e.pan); break;
+        case "swell": put("mus", e.t0, bowed(midi(e.note), midi(e.note), e.t1 - e.t0, { att: (e.t1 - e.t0) * 0.45, rel: (e.t1 - e.t0) * 0.5 }), 0.14, 0); put("mus", e.t0 + 0.05, bowed(midi(e.note + 7), midi(e.note + 7), e.t1 - e.t0 - 0.05, { att: (e.t1 - e.t0) * 0.5, rel: (e.t1 - e.t0) * 0.45 }), 0.08, 0.1); break;
+        case "breath": { const y = swish(e.t1 - e.t0, 700, 900, 1.2); for (let i = 0; i < y.length; i++) y[i] *= 0.5 + 0.5 * Math.sin((2 * Math.PI * i) / (SR * 0.45)); put("fx", e.t0, y, 0.07, e.pan); break; }
+        case "weave": weave(e.t0, e.t1, e.blocks); break;
       }
     }
-    return buf;
+    roomTone(dur);
+    applyDucks();
   }
-  async function master(stems, wetSend, irSecs) {
-    const ctx = new OfflineAudioContext(2, N, SR);
-    const out = ctx.createGain(); out.gain.value = 1;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -16; comp.ratio.value = 2.2; comp.attack.value = 0.01; comp.release.value = 0.25; comp.knee.value = 8;
-    const verb = ctx.createConvolver(); verb.normalize = true; verb.buffer = ir(ctx, irSecs, 0.35, 11);
-    const vg = ctx.createGain(); vg.gain.value = 1;
-    verb.connect(vg).connect(out);
-    out.connect(comp).connect(ctx.destination);
-    for (const [b, gain, send] of stems) {
-      const buf = ctx.createBuffer(2, N, SR);
-      buf.copyToChannel(b.L, 0); buf.copyToChannel(b.R, 1);
-      const src = ctx.createBufferSource(); src.buffer = buf;
-      const g = ctx.createGain(); g.gain.value = gain;
-      const s = ctx.createGain(); s.gain.value = send * wetSend;
-      src.connect(g).connect(out);
-      src.connect(s).connect(verb);
-      src.start(0);
+  /** The montage's groove: the machine running in 16ths at the tempo, accents in 3+3+2. */
+  function groove(t0, t1, bpm) {
+    const s16 = 60 / bpm / 4;
+    let i = 0;
+    for (let t = t0; t < t1 - 0.01; t += s16, i++) {
+      const p = i % 8, acc = p === 0 || p === 3 || p === 6;
+      put("fx", t, FX.click(), acc ? 0.2 : 0.09, acc ? -0.12 : 0.12);
+      if (acc) put("fx", t, FX.thump(), p === 0 ? 0.09 : 0.05, 0);
+      if (p === 2 || p === 5) put("fx", t, FX.tack(), 0.06, 0.3);
     }
+    // the motor under it, thin and quiet: a hum you would hear in the room, not a bed
+    const n = Math.round((t1 - t0) * SR), y = new Float32Array(n);
+    const lp = biquad("lp", 380, 0.8), hp = biquad("hp", 110, 0.7);
+    let ph = 0;
+    for (let k = 0; k < n; k++) { ph += 26 / SR; const e = Math.min(1, k / (SR * 0.4)) * Math.min(1, (n - k) / (SR * 0.05)); y[k] = hp(lp((ph % 1) * 2 - 1)) * e; }
+    put("fx", t0, y, 0.012, 0);
+  }
+  /** Darning the border: per block, the warp laid down in a run of plucks, then the weft woven across. */
+  function weave(t0, t1, blocks) {
+    const per = (t1 - t0) / blocks;
+    const runs = [[64, 66, 67, 69, 71], [67, 69, 71, 73, 74], [69, 71, 73, 74, 76], [71, 74, 76, 78, 79]];
+    for (let b = 0; b < blocks; b++) {
+      const s = t0 + b * per, pan = -0.45 + b * 0.3;
+      runs[b % 4].forEach((m, i) => put("mus", s + i * per * 0.1, pluck(midi(m), 0.8, 0.6, 0.996), 0.2, pan));
+      for (let w = 0; w < 3; w++) put("fx", s + per * 0.55 + w * per * 0.13, swish(0.16, 600, 2400, 1), 0.08, pan - 0.2 + w * 0.2);
+      put("fx", s + per * 0.98, FX.stitch(), 0.3, pan);
+    }
+  }
+  /** The air of the room: cloth and a little lamp hum, very low. */
+  function roomTone(dur) {
+    const [L, R] = bus("fx");
+    const lpL = biquad("lp", 700, 0.6), lpR = biquad("lp", 650, 0.6);
+    for (let i = 0; i < Math.min(N, Math.round(dur * SR)); i++) { L[i] += lpL(rnd()) * 0.006; R[i] += lpR(rnd()) * 0.006; }
+  }
+  /** Held breaths, hard stops, and the hush while threads are hidden: one gain over everything. */
+  function applyDucks() {
+    const g = new Float32Array(N).fill(1);
+    for (const d of ducks) {
+      const i0 = Math.round(d.t0 * SR), i1 = Math.round(d.t1 * SR);
+      const fadeIn = Math.round((d.hard ? 0.004 : 0.18) * SR), fadeOut = Math.round(0.22 * SR);
+      for (let i = Math.max(0, i0); i < Math.min(N, i1 + fadeOut); i++) {
+        let k;
+        if (i < i0 + fadeIn) k = 1 - (1 - d.level) * ((i - i0) / fadeIn);
+        else if (i < i1) k = d.level;
+        else k = d.level + (1 - d.level) * ((i - i1) / fadeOut);
+        g[i] = Math.min(g[i], k);
+      }
+    }
+    for (const name of ["fx", "mus"]) { const [L, R] = BUS[name]; for (let i = 0; i < N; i++) { L[i] *= g[i]; R[i] *= g[i]; } }
+  }
+
+  // ================================================================ the room, and the files
+  async function master(name, wet, irLen) {
+    const [L, R] = BUS[name];
+    const ctx = new OfflineAudioContext(2, N, SR);
+    const src = ctx.createBufferSource();
+    const b = ctx.createBuffer(2, N, SR);
+    b.copyToChannel(L, 0); b.copyToChannel(R, 1);
+    src.buffer = b;
+    // a small room for the foley, a warmer one for the music: decaying noise, a little dark
+    const ir = ctx.createBuffer(2, Math.round(irLen * SR), SR);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c);
+      let lp = 0;
+      for (let i = 0; i < d.length; i++) { lp += (rnd() - lp) * 0.35; d[i] = lp * Math.pow(1 - i / d.length, 3.2); }
+    }
+    const conv = ctx.createConvolver(); conv.normalize = true; conv.buffer = ir;
+    const wetG = ctx.createGain(); wetG.gain.value = wet;
+    const dry = ctx.createGain(); dry.gain.value = 1;
+    src.connect(dry); src.connect(conv); conv.connect(wetG);
+    dry.connect(ctx.destination); wetG.connect(ctx.destination);
+    src.start(0);
     return ctx.startRendering();
   }
-  function wav(buf) {
-    const ch = [buf.getChannelData(0), buf.getChannelData(1)], len = ch[0].length;
-    const bytes = new DataView(new ArrayBuffer(44 + len * 2 * 3));
-    const str = (o, s) => { for (let i = 0; i < s.length; i++) bytes.setUint8(o + i, s.charCodeAt(i)); };
-    str(0, "RIFF"); bytes.setUint32(4, 36 + len * 6, true); str(8, "WAVE"); str(12, "fmt ");
-    bytes.setUint32(16, 16, true); bytes.setUint16(20, 1, true); bytes.setUint16(22, 2, true); bytes.setUint32(24, SR, true);
-    bytes.setUint32(28, SR * 6, true); bytes.setUint16(32, 6, true); bytes.setUint16(34, 24, true); str(36, "data"); bytes.setUint32(40, len * 6, true);
+  function wav(abuf, gain) {
+    const ch = 2, n = abuf.length, bytes = 44 + n * ch * 2, buf = new ArrayBuffer(bytes), v = new DataView(buf);
+    const W = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    W(0, "RIFF"); v.setUint32(4, bytes - 8, true); W(8, "WAVE"); W(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); W(36, "data"); v.setUint32(40, n * ch * 2, true);
+    const L = abuf.getChannelData(0), R = abuf.getChannelData(1);
     let o = 44;
-    for (let i = 0; i < len; i++) for (let c = 0; c < 2; c++) {
-      const v = Math.max(-1, Math.min(1, ch[c][i])) * 8388607;
-      const x = Math.round(v) & 0xffffff;
-      bytes.setUint8(o, x & 255); bytes.setUint8(o + 1, (x >> 8) & 255); bytes.setUint8(o + 2, (x >> 16) & 255); o += 3;
-    }
-    const u8 = new Uint8Array(bytes.buffer);
+    for (let i = 0; i < n; i++) { v.setInt16(o, clamp(Math.round(L[i] * gain * 32767), -32768, 32767), true); v.setInt16(o + 2, clamp(Math.round(R[i] * gain * 32767), -32768, 32767), true); o += 4; }
     let s = "";
+    const u8 = new Uint8Array(buf);
     for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
     return btoa(s);
   }
-
-  const out = {};
+  const peak = (ab) => { let p = 0; for (let c = 0; c < 2; c++) { const d = ab.getChannelData(c); for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; } } return p; };
   window.SCORE = {
-    ready: false, error: null,
     async render(events) {
-      renderNotes();
-      renderFx(events);
-      // the score: dry instruments with a warm room; the foley: close, with a little air
-      out.music = await master([[B.pad, 0.3, 0.55], [B.piano, 1.25, 0.36], [B.pluck, 1.1, 0.42], [B.bell, 1.0, 0.6], [B.bass, 0.62, 0.06], [B.flute, 0.9, 0.45], [B.perc, 1, 0.2]], 0.55, 2.8);
-      out.fx = await master([[B.fx, 1, 0.12]], 1, 0.7);
-      return { music: out.music.length / SR, fx: out.fx.length / SR, notes: notes.length, events: events.length };
+      ducks.length = 0;
+      const t0 = performance.now();
+      render(events, window.FILM.DUR);
+      out.music = await master("mus", 0.24, 2.2);
+      out.fx = await master("fx", 0.07, 0.5);
+      // one gain for both stems, so the balance set here survives into mix.sh
+      const p = Math.max(peak(out.music), peak(out.fx));
+      out.gain = 0.95 / p;
+      return { seconds: out.music.length / SR, events: events.length, peak: p, gain: out.gain, ms: Math.round(performance.now() - t0) };
     },
-    /** The WAV as base64, handed over in pieces (a 98 s stereo stem is about 37 MB of text). */
-    wav(stem) { out[stem + "64"] = wav(out[stem]); return out[stem + "64"].length; },
+    wav(stem) { out[stem + "64"] = wav(out[stem], out.gain); return out[stem + "64"].length; },
     chunk(stem, i, size) { return out[stem + "64"].slice(i * size, (i + 1) * size); },
   };
 })();

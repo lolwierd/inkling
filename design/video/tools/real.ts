@@ -5,7 +5,8 @@
 // model said earlier, the way the app would.
 //
 //   bun run design/video/tools/real.ts <scratch-dir> <stage> [<stage>...]
-//   stages: reads, draw, settle, reply, room, chat, name
+//   stages: reads, draw, settle, reply, room, chat, name (the first cut)
+//           v2_first v2_ask v2_room v2_tutor v2_call v2_chat v2_reply v2_mind v2_sketch v2_learn (the re-cut)
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -201,7 +202,122 @@ const STAGES: Record<string, () => Promise<unknown>> = {
     real.note.call = line;
     await call("call_by_name", HEAVY, { task: "answer", ctx: ctx([P1, P2_FIXED, P3, P4, line], { brief: BRIEF, mind: SKEPTIC }), target: line });
   },
+
+  // ----- the re-cut (Nov 2026): the film's new order, each call with the context the
+  // app would send at that point. Old outputs above stay; these are the `v2_` ones.
+  //   Start here: the first sentence of a new notebook (probe, as `first_run` does)
+  //   Asking: find (probe_p3, kept), ask Inkling, the room (built-in Socratic tutor), call by name, the brief, chat
+  //   Threads: the reply on the long-run thread, now with the asked threads around it
+  //   Minds: a mind of your own reads the next paragraph
+  //   Sketch it on another note; Inkling learns about you
+  async v2_first() {
+    const guide = JSON.parse(readFileSync(join(VIDEO, "data", "start-here.json"), "utf8"));
+    const blocks = guide.blocks.slice();
+    blocks[blocks.length - 1] = { kind: "paragraph", text: FIRST };
+    real.v2 = real.v2 || {};
+    real.v2.first = { sentence: FIRST };
+    await call("v2_first", HEAVY, { task: "probe", ctx: { ...ctx([]), noteTitle: guide.title, noteText: markdown(blocks), threads: guide.threads.map((t: Json) => ({ quote: t.quote, messages: t.messages, resolved: false })) }, target: FIRST });
+  },
+  async v2_ask() {
+    const threads = v2Threads(["t1", "t2"]);
+    real.v2 = real.v2 || {};
+    real.v2.ask = { target: ASK_TARGET, question: ASK_QUESTION };
+    await call("v2_ask", HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads }), target: ASK_TARGET, question: ASK_QUESTION });
+  },
+  async v2_room() {
+    const threads = v2Threads(["t1", "t2", "ask"]);
+    await Promise.all([INKLING, SKEPTIC, SOCRATIC].map((mind) =>
+      call(`v2_room_${mind.name.split(" ").pop()!.toLowerCase()}`, HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads, mind }), target: ROOM_TARGET, question: ROOM_QUESTION })));
+  },
+  async v2_call() {
+    const threads = v2Threads(["t1", "t2", "ask", "room"]);
+    await call("v2_call", HEAVY, { task: "answer", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE], { threads, mind: SKEPTIC }), target: CALL_LINE });
+  },
+  async v2_chat() {
+    const threads = v2Threads(["t1", "t2", "ask", "room", "call"]);
+    await call("v2_chat", HEAVY, { task: "chat", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE], { threads, brief: BRIEF }), history: [], message: CHAT_MESSAGE, near: null });
+  },
+  async v2_reply() {
+    const threads = v2Threads(["t1", "t2", "ask", "room", "call"]);
+    const q = out("probe_p3");
+    await call("v2_reply", HEAVY, { task: "reply", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE], { threads, brief: BRIEF }), quote: q.quote, messages: [{ role: "mind", text: q.text }], message: REPLY });
+  },
+  async v2_mind() {
+    const threads = v2Threads(["t1", "t2r", "ask", "room", "call"]);
+    real.v2 = real.v2 || {};
+    real.v2.mind = { ...COACH, line: COACH_LINE };
+    await call("v2_mind", LIGHT, { task: "read", ctx: ctx([P1, P2_FIXED, P3, P4, CALL_LINE, COACH_LINE], { threads, brief: BRIEF, mind: COACH }), target: COACH_LINE });
+  },
+  // a second take of the tutor's answer in the room (the first came back almost word for
+  // word the same as Inkling's); the first take stays in real.json as v2_room_tutor_take1
+  async v2_tutor() {
+    if (real.calls.v2_room_tutor && !real.calls.v2_room_tutor_take1) real.calls.v2_room_tutor_take1 = real.calls.v2_room_tutor;
+    const threads = v2Threads(["t1", "t2", "ask"]);
+    await call("v2_room_tutor", HEAVY, { task: "ask", ctx: ctx([P1, P2_FIXED, P3, P4], { threads, mind: SOCRATIC }), target: ROOM_TARGET, question: ROOM_QUESTION });
+  },
+  async v2_sketch() {
+    real.v2 = real.v2 || {};
+    real.v2.bread = { title: BREAD_TITLE, paras: BREAD, target: BREAD_TARGET };
+    const bctx = { ...ctx([]), noteTitle: BREAD_TITLE, noteText: BREAD.join("\n\n") };
+    const s = await call("v2_sketch", HEAVY, { task: "sketch", ctx: bctx, target: BREAD_TARGET });
+    await call("v2_draw", HEAVY, { task: "draw", ctx: { ...bctx, threads: [{ quote: s.quote, messages: [{ role: "mind", text: s.text }], resolved: false }] }, quote: s.quote, thought: s.text, request: null });
+  },
+  async v2_learn() {
+    real.v2 = real.v2 || {};
+    real.v2.learn = { message: LEARN_MESSAGE };
+    await call("v2_learn", LIGHT, { task: "learn", aboutMe: null, message: LEARN_MESSAGE });
+  },
 };
+
+// ----- the re-cut's words ------------------------------------------------------------
+const FIRST = "I can run 10 km in under 50 minutes by March.";
+const ASK_TARGET = "walked twice after the 7 km mark";
+const ASK_QUESTION = "Was that my pace or my fitness?";
+const CALL_LINE = "Skeptic, is going from 56:40 to 49:10 in one season realistic?";
+const REPLY = "From 8 km. Every fourth week is an easy one, and I taper the last two.";
+const SOCRATIC = { name: "Socratic tutor", description: "Never gives the answer; asks the question that leads to it.", howItThinks: "The writer is learning. Find the misunderstanding underneath what they wrote and ask the smallest question that would let them discover it. Do not state the answer. Say so when they get it right.", voice: "warm", frequency: "when_it_matters" };
+const COACH = { name: "Coach", description: "Has trained a lot of first-time racers.", howItThinks: "Read training plans like a running coach. Ask about easy days, recovery, and what the last weeks before the race look like. Never prescribe paces.", voice: "blunt", frequency: "often" };
+const COACH_LINE = "The last two weeks, I’ll add a fifth run to sharpen up.";
+const BREAD_TITLE = "Why the bread didn’t rise";
+const BREAD = [
+  "I fed the starter at nine and mixed the dough at noon, the same as last week.",
+  "By noon the starter had already risen and fallen back, so there was little left to lift the dough.",
+];
+const BREAD_TARGET = "the starter had already risen and fallen back";
+const LEARN_MESSAGE = "I work night shifts, so my runs have to fit in before noon.";
+
+/** The note's threads at a point in the re-cut, as the app sends them (dismissed ones never). */
+function v2Threads(which: string[]): Json[] {
+  const r2 = out("read_p2"), s = out("settle"), q = out("probe_p3");
+  const all: Record<string, () => Json[]> = {
+    t1: () => [{ quote: r2.quote, messages: [{ role: "mind", text: r2.text }, { role: "mind", text: s.text }], resolved: true }],
+    t2: () => [{ quote: q.quote, messages: [{ role: "mind", text: q.text }], resolved: false }],
+    t2r: () => [{ quote: q.quote, messages: [{ role: "mind", text: q.text }, { role: "you", text: REPLY }, { role: "mind", text: out("v2_reply").text }], resolved: true }],
+    ask: () => [{ quote: ASK_TARGET, messages: [{ role: "you", text: ASK_QUESTION }, { role: "mind", text: out("v2_ask").text }], resolved: false }],
+    room: () => ["inkling", "skeptic", "tutor"].map((m) => ({ quote: ROOM_TARGET, messages: [{ role: "you", text: ROOM_QUESTION }, { role: "mind", text: out(`v2_room_${m}`).text }], resolved: false })),
+    call: () => [{ quote: CALL_LINE, messages: [{ role: "mind", text: out("v2_call").text }], resolved: false }],
+  };
+  return which.flatMap((w) => all[w]());
+}
+
+/** The note's text as the app sends it (store.rs `plain_text_of`: Markdown, title left out). */
+function markdown(blocks: Json[]): string {
+  let s = "", n = 0, list: string | null = null;
+  for (const b of blocks.slice(1)) {
+    if (!b.text.trim()) continue;
+    if (list && list !== b.kind) s += "\n";
+    if (b.kind !== "numbered") n = 0;
+    if (b.kind === "h1") s += `# ${b.text}\n\n`;
+    else if (b.kind === "h2") s += `## ${b.text}\n\n`;
+    else if (b.kind === "h3") s += `### ${b.text}\n\n`;
+    else if (b.kind === "bullet") s += `- ${b.text}\n`;
+    else if (b.kind === "numbered") s += `${++n}. ${b.text}\n`;
+    else if (b.kind === "quote") s += `> ${b.text}\n\n`;
+    else s += `${b.text}\n\n`;
+    list = b.kind === "bullet" || b.kind === "numbered" ? b.kind : null;
+  }
+  return s.trimEnd();
+}
 
 try {
   await waitFor((e) => e.ev === "ready", 15_000);

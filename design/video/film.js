@@ -1,370 +1,101 @@
-/* Inkling: a walkthrough film in the Loose Threads look.
+/* Inkling: the walkthrough film, re-cut on 6 Nov 2026.
  *
- * Every frame is renderAt(t), a pure function of time: no timers, no CSS animation, no
- * state carried from one frame to the next that could change what a frame looks like.
- * Rope physics is the one simulation, and it is stepped at a fixed rate from the start of
- * each phase, so frame 1234 is the same whether a worker starts there or arrives there.
+ * Every frame is renderAt(t), a pure function of time. The rope is the one simulation, and
+ * it is stepped at a fixed rate from the start of each motion, so frame 4321 comes out the
+ * same whichever worker renders it.
  *
- * Inkling's words come from data/real.js (the brain's real output, see tools/real.ts).
- * The stitch, knot and rope code is the design board's (design/directions/threads.html).
+ * The film is a desk of linen with the app's windows on it and a virtual camera moving over
+ * them: pushing in to the words as a thread is pulled, tracking the thread to its tag,
+ * pulling back to the sheet. Captions are stitched in and tied off; chapters hang in on
+ * woven labels whose knots fly down to the sampler border at the foot of the frame, which
+ * is the film's progress bar. Inkling's words are the brain's real output (data/real.js).
+ * FILM.events is the cue list audio.js scores from; FILM.coverage maps design/capabilities.md.
  */
 (function () {
   "use strict";
-  const REAL = window.REAL, ASSETS = window.ASSETS;
-  const C = REAL.calls, NOTE = REAL.note;
-  const FPS = 30, DUR = 98;
+  const A = window.APP, { fx, clamp, lerp, prog, esc, E, spring, knotSVG, knotScale, motifSVG, capsule, runningStitch } = A;
+  const REAL = window.REAL, C = REAL.calls, START = window.START;
+  const FPS = 30, BEAT = 0.625;
   const $ = (s, r) => (r || document).querySelector(s);
-  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
-  const fx = (v) => Math.round(v * 100) / 100;
-  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
-  const lerp = (a, b, k) => a + (b - a) * k;
-  const prog = (t, t0, t1) => (t1 <= t0 ? (t >= t1 ? 1 : 0) : clamp((t - t0) / (t1 - t0)));
-  const easeIO = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
-  const easeOut = (k) => 1 - Math.pow(1 - k, 3);
-  const easeIn = (k) => k * k * k;
-  const sine = (k) => 0.5 - 0.5 * Math.cos(Math.PI * k);
-  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const within = (t, a, b) => t >= a && t < b;
+  const rng = A.rng;
 
-  // A fixed sequence of "random" numbers per seed, so a redraw never moves a stitch.
-  function rng(seed) {
-    let s = (seed * 2654435761) >>> 0 || 1;
-    return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; };
-  }
-
-  // ======================================================================== words
+  // ======================================================================= words (all real)
+  const P1 = "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes.";
+  const P2 = "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I’ll come in just under 50.";
+  const P3 = "Sunday is the long run. I’ll add a kilometre every week until I reach 16.";
+  const P4 = "Strength work twice a week, mostly calves and hips, because that’s where it fell apart last year.";
+  const P5 = "Skeptic, is going from 56:40 to 49:10 in one season realistic?";
+  const P6 = REAL.v2.mind.line;
+  const P7 = "Race morning I’ll eat by six.";
+  const FIRST = REAL.v2.first.sentence;
   const TXT = {
-    title: NOTE.title,
-    p1: NOTE.paras[0], p2: NOTE.paras[1], p3: NOTE.paras[2], p4: NOTE.paras[3],
-    p2fixed: NOTE.p2Fixed,
-    p5: NOTE.call,
-    correction: C.read_p2.output.text,
-    settle: C.settle.output.text,
-    question: C.probe_p3.output.text,
-    reply: NOTE.reply,
-    answer: C.reply.output.text,
-    roomTarget: NOTE.room.target, roomQ: NOTE.room.question,
-    brief: NOTE.brief,
-    chatQ: NOTE.chat, chatA: C.chat.output.text,
-    call: C.call_by_name.output.text,
-    svg: C.draw.output.svg,
+    first: C.v2_first.output.text, correction: C.read_p2.output.text, settle: C.settle.output.text, probe: C.probe_p3.output.text,
+    ask: C.v2_ask.output.text, askQ: REAL.v2.ask.question, askTarget: REAL.v2.ask.target,
+    room: { inkling: C.v2_room_inkling.output.text, skeptic: C.v2_room_skeptic.output.text, tutor: C.v2_room_tutor.output.text },
+    roomQ: "Is four days a week enough? One sentence.", call: C.v2_call.output.text, chat: C.v2_chat.output.text, chatQ: "What’s the weakest part of this plan now?",
+    reply: "From 8 km. Every fourth week is an easy one, and I taper the last two.", answer: C.v2_reply.output.text,
+    coach: C.v2_mind.output.text, brief: "I want a strong last 3 km this time, not just a fast first 7.",
+    idea: C.v2_sketch.output.text, svg: C.v2_draw.output.svg, learned: C.v2_learn.output.aboutMe, learnMsg: REAL.v2.learn.message,
+    bread: REAL.v2.bread,
   };
-  const EDIT1 = { from: "5:30", to: "4:55" };
-  const EDIT2 = { from: " and hold 5:30 per km on every run", to: ", two of them at 4:55 per km" };
+  const COACH = REAL.v2.mind;
 
-  // ======================================================================== timeline (seconds)
-  // 80 bpm: a bar is 3 s. Knots land on downbeats: bar 16 (45 s) and bar 21 (60 s).
+  // ======================================================================= the timeline
+  // 96 bpm: a beat is 0.625 s. Knots and cuts land on beats; the montages run on them.
+  const c1 = 8.75, c2 = 29.75, c3 = 61.25, c4 = 111.875, c5 = 142.5, c6 = 159.375, c7 = 179.375, cEnd = 197.5;
+  const DUR = cEnd + 10.5;
   const T = {
-    sew0: 0.35, glyphGap: 0.4, glyphDur: 0.62, fill0: 3.05, fill1: 3.85, knotPull: 4.28, knotPop: 4.5,
-    line0: 5.1, line1: 5.7, lineOut0: 6.9, lineOut1: 7.3,
-    fly0: 7.1, fly1: 8.55, win0: 7.75, win1: 8.95,
-    title: [9.3, 10.6], p1: [11.0, 14.0], p2: [14.3, 17.7], p3: [18.0, 19.6], p4: [19.9, 21.9],
-    enter: { p1: 10.75, p2: 14.15, p3: 17.85, p4: 19.75, p5: 80.85 },
-    read: { p1: [14.4, 15.5], p2: [18.1, 19.4], p3: [19.95, 21.0], p4: [22.1, 22.9] },
-    // thread 1: the correction
-    t1Arrive: 19.4, t1Sew: [23.3, 24.6], t1Carry: [24.65, 25.15], t1Open: 24.9, t1Hover: 27.55,
-    skClick: 28.9, skThink: [29.0, 29.85], skSteps: [[29.9, 31.15], [31.5, 32.75], [33.1, 34.35], [34.7, 35.95]],
-    e1Sel: 38.1, e1Type: [38.45, 38.85], e2Drag: [39.5, 40.05], e2Type: [40.25, 41.5],
-    t1Reread: [41.9, 42.7], t1Settle: [42.7, 43.85], t1Tie: 44.4, t1Knot: 45.0, t1Fold: 45.2, t1Motif: 45.25, t1Fade: [46.9, 47.35],
-    // thread 2: find a loose thread
-    t2Drag: [47.35, 48.1], t2Bar: 48.25, t2Click: 49.15, t2Think: [49.25, 50.1], t2Sew: [50.1, 50.9], t2Carry: [50.95, 51.45], t2Text: 51.2,
-    t2ReplyClick: 54.3, t2Type: [54.6, 56.6], t2Send: 56.7, t2Read: [56.75, 57.5], t2Answer: [57.5, 58.8],
-    t2Tie: 59.4, t2Knot: 60.0, t2Fold: 60.2, t2Motif: 60.25, t2Fade: [61.9, 62.35],
-    // ask the room
-    roomDrag: [61.3, 61.9], roomBar: 62.0, roomClick: 62.75, askBox: 62.85, chipSkeptic: 63.3, chipTutor: 63.7,
-    roomType: [64.0, 65.3], roomSend: 65.45, roomSew: [65.55, 66.15], roomCarry: [[66.2, 66.7], [66.3, 66.8], [66.4, 66.9]],
-    roomStream: { inkling: [66.85, 69.5], skeptic: [66.95, 69.1], tutor: [67.05, 69.85] }, roomFold: 72.3,
-    // brief, chat, call by name
-    briefClick: 72.5, briefOpen: [72.55, 72.8], briefType: [72.9, 74.5], briefSet: 74.65,
-    chatKey: 75.0, chatIn: [75.0, 75.35], chatType: [75.6, 76.5], chatSend: 76.6, chatThink: [76.65, 77.0], chatStream: [77.0, 80.0], chatOut: [80.4, 80.7],
-    p5: [81.0, 82.5], callArrive: 83.0, callSew: [83.1, 83.7], callCarry: [83.75, 84.25], callThink: [83.8, 84.2], callStream: [84.2, 86.4],
-    // hide threads, lamplight, close
-    hideClick: 87.9, hide: [87.9, 88.15], showClick: 89.7, show: [89.7, 89.95],
-    lamp: [90.2, 91.1], winOut: [92.6, 93.4], fadeOut: [96.9, 98.0],
-    icon: [93.4, 94.05], closeWm: [94.0, 94.45], closeKnot: 94.5, closeLine: [94.95, 95.6],
+    // cold open
+    pierce: 0.9, sew0: 1.0, sew1: 3.2, tail: 3.25, openTie: 5.625, lineUp: 5.9, pull0: 6.2, pull1: 8.9,
+    // ch1: the guide, then your first sentence
+    glide0: c1 + 0.2, glide1: c1 + 5.6, type1: [c1 + 6.1, c1 + 9.4], read1: [c1 + 9.9, c1 + 11.0], sew1a: c1 + 11.0, sew1b: c1 + 12.1, carry1: c1 + 12.15,
+    hover1: c1 + 13.2, wipe1: [c2 - 1.0, c2 + 0.35],
+    // ch2: reading along
+    title2: [c2 + 0.45, c2 + 1.85], p1: [c2 + 2.15, c2 + 6.65], read2a: [c2 + 6.85, c2 + 7.65], p2: [c2 + 7.85, c2 + 11.65], read2b: [c2 + 11.75, c2 + 12.75],
+    p3: [c2 + 11.95, c2 + 14.15], t1arrive: c2 + 12.75, pause2: c2 + 14.15, t1hover: c2 + 16.25, t1fold: c2 + 19.85,
+    e1sel: c2 + 20.25, e1type: [c2 + 20.55, c2 + 21.15], e2drag: [c2 + 21.35, c2 + 21.85], e2type: [c2 + 22.05, c2 + 23.45],
+    reread: [c2 + 23.65, c2 + 24.65], settleOpen: c2 + 24.65, settle: [c2 + 24.85, c2 + 26.45], breath2: c2 + 26.9, tie2: c2 + 27.75, knot2: c2 + 28.375,
+    fly2: [c2 + 28.45, c2 + 29.25], fade2: [c2 + 29.95, c2 + 30.4], p4: [c2 + 29.4, c2 + 30.7], read2d: [c2 + 30.8, c2 + 31.3],
+    // ch3: asking
+    sel3: [c3 + 0.75, c3 + 1.35], bar3: c3 + 1.45, find3: c3 + 1.75, sew3: [c3 + 2.05, c3 + 2.85], carry3: c3 + 2.85, open3: c3 + 3.55, fold3: c3 + 6.35,
+    sel4: [c3 + 6.65, c3 + 7.15], bar4: c3 + 7.35, askClick4: c3 + 7.85, type4: [c3 + 8.15, c3 + 9.35], send4: c3 + 9.45, sew4: [c3 + 9.55, c3 + 10.15], carry4: c3 + 10.15, stream4: [c3 + 10.85, c3 + 13.35], fold4: c3 + 13.55,
+    sel5: [c3 + 13.75, c3 + 14.25], bar5: c3 + 14.45, askClick5: c3 + 14.9, chip5a: c3 + 15.25, chip5b: c3 + 15.65, type5: [c3 + 15.95, c3 + 17.25], send5: c3 + 17.35,
+    sew5: [c3 + 17.45, c3 + 18.05], carry5: c3 + 18.05, open5: c3 + 18.75, stream5: { inkling: [c3 + 18.85, c3 + 20.75], skeptic: [c3 + 19.05, c3 + 21.65], tutor: [c3 + 19.25, c3 + 22.15] },
+    hov5b: c3 + 20.45, hov5c: c3 + 22.05, fold5: c3 + 23.75,
+    caret6: c3 + 23.95, p5: [c3 + 24.35, c3 + 26.15], read6: [c3 + 26.45, c3 + 27.05], sew6: [c3 + 27.05, c3 + 27.65], carry6: c3 + 27.65, stream6: [c3 + 28.35, c3 + 30.55],
+    wipe7: [c3 + 30.95, c3 + 31.75], sel7: c3 + 32.15, bar7: c3 + 32.45, sketch7: c3 + 32.95, sew7: [c3 + 33.05, c3 + 33.55], carry7: c3 + 33.55, think7: [c3 + 34.05, c3 + 34.75],
+    idea7: c3 + 34.75, steps7: [c3 + 35.05, c3 + 36.4, c3 + 37.75], larger7: c3 + 39.15, big7: [c3 + 39.25, c3 + 41.35], wipe8: [c3 + 41.35, c3 + 42.15],
+    tell8: c3 + 42.45, brief8: [c3 + 42.75, c3 + 44.15], save8: c3 + 44.35, chatKey8: c3 + 44.75, chatIn8: [c3 + 44.85, c3 + 45.25], pills8: c3 + 45.35, chatType8: [c3 + 45.95, c3 + 47.15],
+    chatSend8: c3 + 47.25, chatStream8: [c3 + 47.65, c3 + 50.15], clear8: c3 + 50.05,
+    // ch4: threads
+    chatOut9: [c4 + 0.05, c4 + 0.45], hov9: [c4 + 3.3, c4 + 4.1, c4 + 4.2, c4 + 5.0, c4 + 5.1, c4 + 5.8], jump9: [c4 + 6.0, c4 + 7.0],
+    drag9: [c4 + 8.2, c4 + 9.2], dragOpen9: c4 + 9.55, replyFocus9: c4 + 10.1, reply9: [c4 + 10.25, c4 + 12.15], send9: c4 + 12.25, answer9: [c4 + 12.85, c4 + 14.55],
+    resolveHov9: c4 + 15.05, breath9: c4 + 15.6, tie9: c4 + 16.25, knot9: c4 + 16.875, fly9: [c4 + 16.95, c4 + 17.75], fade9: [c4 + 18.55, c4 + 19.0],
+    open10: c4 + 19.15, dis10: c4 + 19.75, snip10: c4 + 19.875, undo10: c4 + 21.25,
+    reopen11: c4 + 23.0, hide12: c4 + 25.6, show12: c4 + 27.0, right13: c4 + 27.9, marks13: c4 + 28.9, both13: c4 + 29.9, snip14: c5 - 0.12,
+    // ch5: minds
+    chips15: c5 + 0.7, blank15: c5 + 2.3, name15: [c5 + 2.5, c5 + 2.95], desc15: [c5 + 3.05, c5 + 4.05], how15: [c5 + 4.15, c5 + 5.75], voice15: c5 + 5.95, often15: c5 + 6.35, create15: c5 + 6.85,
+    pan16: [c5 + 7.1, c5 + 8.1], menu16: c5 + 8.3, pick16: c5 + 9.1, p6: [c5 + 10.15, c5 + 11.75], read16: [c5 + 11.95, c5 + 12.55], sew16: [c5 + 12.55, c5 + 13.05], carry16: c5 + 13.05, open16: c5 + 13.55,
+    wipe17: [c6 - 0.5, c6 + 0.55],
   };
+  // the ending: the Coach's thread is tied off, the border grows into the mark (Darn · Border)
+  const ED = { act: cEnd + 0.3, hov: cEnd + 0.8, breath: cEnd + 0.95, tie: cEnd + 1.25, knot: cEnd + 1.875, fly: [cEnd + 1.95, cEnd + 2.75], weave: [cEnd + 2.9, cEnd + 5.3],
+    morph: [cEnd + 5.3, cEnd + 6.6], word: [cEnd + 6.5, cEnd + 7.8], dot: [cEnd + 8.125, cEnd + 8.4375], line: [cEnd + 8.6, cEnd + 9.4] };
+  // montage beats (start times, on the grid)
+  const M6 = { dark: c6 + 0.625, ink: c6 + 3.125, letter: c6 + 5.625, size: c6 + 6.875, mode: c6 + 8.125, pace: c6 + 9.375, drop: c6 + 10.625, speak: c6 + 13.125, learn: c6 + 15.625, keys: c6 + 17.5, end: c7 };
+  const M7 = { side: c7 + 0.625, find: c7 + 3.125, copy: c7 + 5.0, exp: c7 + 6.25, obs: c7 + 8.75, help: c7 + 11.25, model: c7 + 12.5, claude: c7 + 15.0, blocks: c7 + 16.25, end: cEnd };
 
-  // ======================================================================== theme
-  const TOK = {
-    light: { bg: "#EFE8DB", surface: "#FBF8F2", shelf: "#F3EDE2", raised: "#FFFDF8", fg: "#26232B", fg2: "#57505C", fg3: "#6F6862", line: "#E3DACB", line2: "#D3C7B3",
-      madder: "#A63F32", indigo: "#2E3F7A", ochre: "#A8741A", sage: "#4F7350", plum: "#6B3E62", tack: "#8C8276", steel: "#A7AEB7",
-      sel: [46, 63, 122, 0.16], chip: [38, 35, 43, 0.06], shadow: [40, 26, 12] },
-    dark: { bg: "#18161A", surface: "#1F1D22", shelf: "#1A181D", raised: "#26232A", fg: "#EDE6DA", fg2: "#BDB4A8", fg3: "#A39A8F", line: "#332F36", line2: "#47414D",
-      madder: "#D9705E", indigo: "#8C9BE0", ochre: "#D9A548", sage: "#8DB88E", plum: "#C08AB4", tack: "#948A80", steel: "#8C939C",
-      sel: [140, 155, 224, 0.24], chip: [237, 230, 218, 0.08], shadow: [0, 0, 0] },
-  };
-  const hexRGB = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
-  function applyTheme(k) {
-    const st = $("#stage").style, L = TOK.light, D = TOK.dark;
-    for (const key in L) {
-      const a = L[key], b = D[key];
-      if (typeof a === "string") {
-        const A = hexRGB(a), B = hexRGB(b);
-        st.setProperty("--" + key, `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], k))).join(",")})`);
-      } else if (a.length === 4) {
-        st.setProperty("--" + key, `rgba(${[0, 1, 2].map((i) => Math.round(lerp(a[i], b[i], k))).join(",")},${fx(lerp(a[3], b[3], k))})`);
-      } else {
-        st.setProperty("--" + key, [0, 1, 2].map((i) => Math.round(lerp(a[i], b[i], k))).join(","));
-      }
-    }
-    $("#desk-dark").style.opacity = String(fx(k));
-    $("#desk-in-dark").style.opacity = String(fx(k));
-  }
-  function themeAt(t) {
-    return easeIO(prog(t, T.lamp[0], T.lamp[1]));
-  }
-
-  // ======================================================================== stitches (from the board)
-  function lens(x0, y0, x1, y1, w) {
-    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
-    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, h = w / 2, he = w * 0.2, k = 1.5;
-    return `M${fx(x0 + nx * he)} ${fx(y0 + ny * he)}Q${fx(mx + nx * h * k)} ${fx(my + ny * h * k)} ${fx(x1 + nx * he)} ${fx(y1 + ny * he)}` +
-      `L${fx(x1 - nx * he)} ${fx(y1 - ny * he)}Q${fx(mx - nx * h * k)} ${fx(my - ny * h * k)} ${fx(x0 - nx * he)} ${fx(y0 - ny * he)}Z`;
-  }
-  /** One stitch, `k` of the way sewn (0..1): it grows from its first hole. */
-  function stitchSVG(s, k, opacity) {
-    if (k == null) k = 1;
-    if (k <= 0) return "";
-    const g = clamp(k / 0.85), x1 = s.x0 + (s.x1 - s.x0) * g, y1 = s.y0 + (s.y1 - s.y0) * g;
-    const dx = x1 - s.x0, dy = y1 - s.y0, L = Math.hypot(dx, dy);
-    if (L < 0.3) return "";
-    let nx = -dy / L, ny = dx / L;
-    if (ny > 0 || (ny === 0 && nx > 0)) { nx = -nx; ny = -ny; }
-    const o = s.w * 0.2;
-    const ax = s.x0 + dx * 0.26 + nx * o, ay = s.y0 + dy * 0.26 + ny * o, bx = s.x0 + dx * 0.68 + nx * o, by = s.y0 + dy * 0.68 + ny * o;
-    const op = Math.min(1, k / 0.35) * (opacity == null ? 1 : opacity);
-    const c = s.c.startsWith("#") || s.c.startsWith("rgb") ? s.c : `var(--${s.c})`;
-    return `<g${op < 0.999 ? ` opacity="${fx(op)}"` : ""}><path d="${lens(s.x0, s.y0, x1, y1, s.w)}" style="fill:${c}"/>` +
-      `<path d="M${fx(ax)} ${fx(ay)}L${fx(bx)} ${fx(by)}" style="fill:none;stroke:color-mix(in srgb,${c} 46%,#fff);stroke-width:${fx(s.w * 0.24)};stroke-linecap:round;opacity:.72"/></g>`;
-  }
-  function crossSVG(cx, cy, s, w, c, k1, k2, op) {
-    return stitchSVG({ x0: cx - s, y0: cy + s, x1: cx + s, y1: cy - s, w, c }, k1, op) + stitchSVG({ x0: cx - s, y0: cy - s, x1: cx + s, y1: cy + s, w, c }, k2, op);
-  }
-  function ribbon(pts, wf) {
-    const n = pts.length, L = [], R = [];
-    for (let i = 0; i < n; i++) {
-      const a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, n - 1)];
-      const dx = b[0] - a[0], dy = b[1] - a[1], ln = Math.hypot(dx, dy) || 1, nx = -dy / ln, ny = dx / ln;
-      const w = wf(i / (n - 1)) / 2;
-      L.push([pts[i][0] + nx * w, pts[i][1] + ny * w]);
-      R.push([pts[i][0] - nx * w, pts[i][1] - ny * w]);
-    }
-    return "M" + L.concat(R.reverse()).map((p) => fx(p[0]) + " " + fx(p[1])).join("L") + "Z";
-  }
-  /** French knot: a bead of thread with one coil showing, lit from the top left. */
-  function knotSVG(cx, cy, r, c, scale) {
-    if (scale == null) scale = 1;
-    if (scale <= 0.01) return "";
-    const pts = [];
-    for (let i = 0; i <= 48; i++) {
-      const t = i / 48, a = -2.09 + t * 1.3 * 2 * Math.PI, rad = r * (0.16 + 0.66 * t);
-      pts.push([cx + rad * Math.cos(a), cy + rad * Math.sin(a) * 0.92]);
-    }
-    const hi = ribbon(pts, (t) => r * (0.12 + 0.09 * t) * Math.min(1, t * 5 + 0.2, (1 - t) * 4 + 0.35));
-    const col = c.startsWith("#") ? c : `var(--${c})`;
-    return `<g transform="translate(${fx(cx)} ${fx(cy)}) scale(${fx(scale)}) translate(${fx(-cx)} ${fx(-cy)})">` +
-      `<circle cx="${fx(cx)}" cy="${fx(cy)}" r="${fx(r)}" style="fill:${col}"/>` +
-      `<path d="M${fx(cx + r)} ${fx(cy)}A${fx(r)} ${fx(r)} 0 0 1 ${fx(cx - r * 0.5)} ${fx(cy + r * 0.87)}A${fx(r * 0.9)} ${fx(r * 0.9)} 0 0 0 ${fx(cx + r)} ${fx(cy)}Z" style="fill:color-mix(in srgb,${col} 68%,#000);opacity:.7"/>` +
-      `<path d="${hi}" style="fill:color-mix(in srgb,${col} 46%,#fff)"/></g>`;
-  }
-  /** The knot pops in: a small overshoot, then rest (knot_scale in src/note_page.rs). */
-  function knotScale(s) {
-    if (s <= 0) return 0;
-    const k = Math.min(s / 0.2, 1);
-    return k < 0.6 ? (k / 0.6) * 1.3 : 1.3 - ((k - 0.6) / 0.4) * 0.3;
-  }
-  /** Stitches along a polyline. */
-  function runAlong(pts, c, w, len, gap, seed) {
-    const rand = rng(seed || 5), out = [];
-    let on = true, acc = 0, seg = [pts[0]], target = len;
-    for (let k = 1; k < pts.length; k++) {
-      const a = pts[k - 1], b = pts[k], d = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      let used = 0;
-      while (used < d - 1e-9) {
-        const take = Math.min(d - used, target - acc);
-        used += take; acc += take;
-        const t = used / d, p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        seg.push(p);
-        if (acc >= target - 0.01) {
-          if (on) { const s0 = seg[0], s1 = seg[seg.length - 1]; out.push({ x0: s0[0], y0: s0[1], x1: s1[0], y1: s1[1], w, c }); }
-          on = !on; acc = 0; seg = [p];
-          target = (on ? len : gap) * (0.88 + rand() * 0.24);
-        }
-      }
-    }
-    if (on && seg.length > 1) { const s0 = seg[0], s1 = seg[seg.length - 1]; if (Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) > len * 0.4) out.push({ x0: s0[0], y0: s0[1], x1: s1[0], y1: s1[1], w, c }); }
-    return out;
-  }
-  /** The running stitch under a run of words, line by line (threadSVG on the board). */
-  function stitchesUnder(lines, seed, colors, opts) {
-    const rand = rng(seed || 11);
-    const w = 2.3, len = opts && opts.len || 7.4, gap = opts && opts.gap || 4.2, out = [];
-    lines.forEach((r, li) => {
-      let x = r.x + 0.5 + (li === 0 && opts && opts.lead ? opts.lead : 0);
-      const x1 = r.r - 0.5, y = r.b + 0.6;
-      while (x < x1 - 1.5) {
-        const l = Math.min(len * (0.88 + rand() * 0.24), x1 - x);
-        if (l < len * 0.45) break;
-        out.push({ x0: x, y0: y + (rand() - 0.5) * 0.9, x1: x + l, y1: y + (rand() - 0.5) * 0.9, w, c: colors[out.length % colors.length] });
-        x += l + gap * (0.85 + rand() * 0.3);
-      }
-    });
-    return out;
-  }
-  const NEEDLE = ASSETS.EL.needle.replace("<svg ", '<svg width="20" height="20" ');
-  function needleAt(x, y, t, size) {
-    const ph = (t % 0.9) / 0.9, b = Math.sin(ph * Math.PI * 2);
-    const s = (size || 20) / 20;
-    return `<g transform="translate(${fx(x - 2 * s + b * -1)} ${fx(y - 17 * s + (b + 1) * 1.5)}) scale(${fx(s)})">${NEEDLE}</g>`;
-  }
-
-  // ======================================================================== the rope (from the board)
-  const ROPE = { POINTS: 26, SLACK: 1.09, SLACK_TIED: 0.995, GRAVITY: 900, GRAVITY_TIED: 20, DAMPING: 0.95, ITERATIONS: 24,
-    BEND: 0.3, BEND_REACH: 0.94, STEP_MS: 1000 / 120, SETTLE_STEPS: 360, SWAY: 2, SWAY_MS: 600, TIE_MS: 320 };
-  class Rope {
-    constructor(a, b, slack, noSettle) {
-      this.n = ROPE.POINTS; this.slack = slack == null ? ROPE.SLACK : slack; this.pinB = true;
-      this.a = [a[0], a[1]]; this.b = [b[0], b[1]];
-      this.len = this.straight() * this.slack;
-      this.damping = ROPE.DAMPING;
-      this.gravity = this.slack < 1.001 ? ROPE.GRAVITY_TIED : ROPE.GRAVITY;
-      this.p = []; this.q = [];
-      this.drape();
-      if (!noSettle) this.settle(ROPE.SETTLE_STEPS);
-    }
-    straight() { return Math.hypot(this.b[0] - this.a[0], this.b[1] - this.a[1]); }
-    drape() {
-      const sag = this.straight() * Math.sqrt(Math.max(0, (3 * (this.slack - 1)) / 8));
-      for (let i = 0; i < this.n; i++) {
-        const t = i / (this.n - 1);
-        const x = this.a[0] + (this.b[0] - this.a[0]) * t, y = this.a[1] + (this.b[1] - this.a[1]) * t + sag * 4 * t * (1 - t);
-        this.p[i] = [x, y]; this.q[i] = [x, y];
-      }
-    }
-    setB(b) { this.b = [b[0], b[1]]; this.len = this.straight() * this.slack; }
-    setSlack(s) { this.slack = s; this.len = this.straight() * s; }
-    free(i) { return i !== 0 && !(i === this.n - 1 && this.pinB); }
-    keep(i, j, rest, stiffness, pushOnly) {
-      const p = this.p, dx = p[j][0] - p[i][0], dy = p[j][1] - p[i][1], d = Math.hypot(dx, dy) || 1e-6;
-      if (pushOnly && d >= rest) return;
-      const f = ((d - rest) / d) * stiffness, fi = this.free(i), fj = this.free(j);
-      const wi = fi && fj ? 0.5 : fi ? 1 : 0, wj = fi && fj ? 0.5 : fj ? 1 : 0;
-      p[i][0] += dx * f * wi; p[i][1] += dy * f * wi; p[j][0] -= dx * f * wj; p[j][1] -= dy * f * wj;
-    }
-    step() {
-      const n = this.n, p = this.p, q = this.q, dt = ROPE.STEP_MS / 1000, g = this.gravity * dt * dt;
-      for (let i = 0; i < n; i++) {
-        if (!this.free(i)) continue;
-        const vx = (p[i][0] - q[i][0]) * this.damping, vy = (p[i][1] - q[i][1]) * this.damping;
-        q[i][0] = p[i][0]; q[i][1] = p[i][1]; p[i][0] += vx; p[i][1] += vy + g;
-      }
-      const seg = this.len / (n - 1);
-      for (let k = 0; k < ROPE.ITERATIONS; k++) {
-        p[0][0] = this.a[0]; p[0][1] = this.a[1];
-        if (this.pinB) { p[n - 1][0] = this.b[0]; p[n - 1][1] = this.b[1]; }
-        for (let i = 0; i < n - 1; i++) this.keep(i, i + 1, seg, 1, false);
-        for (let i = 0; i < n - 2; i++) this.keep(i, i + 2, 2 * seg * ROPE.BEND_REACH, ROPE.BEND, true);
-      }
-      p[0][0] = this.a[0]; p[0][1] = this.a[1];
-      if (this.pinB) { p[n - 1][0] = this.b[0]; p[n - 1][1] = this.b[1]; }
-    }
-    settle(steps) { for (let i = 0; i < steps; i++) this.step(); }
-    nudge(dir) {
-      for (let i = 1; i < this.n - 1; i++) {
-        const w = Math.sin((Math.PI * i) / (this.n - 1));
-        this.q[i][0] -= dir[0] * ROPE.SWAY * w; this.q[i][1] -= dir[1] * ROPE.SWAY * w;
-      }
-    }
-    path() {
-      const P = this.p, n = P.length;
-      let d = `M${fx(P[0][0])} ${fx(P[0][1])}`;
-      for (let i = 0; i < n - 1; i++) {
-        const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(n - 1, i + 2)];
-        const d1 = Math.sqrt(Math.hypot(p1[0] - p0[0], p1[1] - p0[1])), d2 = Math.sqrt(Math.hypot(p2[0] - p1[0], p2[1] - p1[1])), d3 = Math.sqrt(Math.hypot(p3[0] - p2[0], p3[1] - p2[1]));
-        const c1 = [0, 0], c2 = [0, 0];
-        for (let k = 0; k < 2; k++) {
-          c1[k] = d1 > 1e-6 ? (d1 * d1 * p2[k] - d2 * d2 * p0[k] + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1[k]) / (3 * d1 * (d1 + d2)) : p1[k] + (p2[k] - p1[k]) / 3;
-          c2[k] = d3 > 1e-6 ? (d3 * d3 * p1[k] - d2 * d2 * p3[k] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[k]) / (3 * d3 * (d3 + d2)) : p2[k] - (p2[k] - p1[k]) / 3;
-        }
-        d += `C${fx(c1[0])} ${fx(c1[1])} ${fx(c2[0])} ${fx(c2[1])} ${fx(p2[0])} ${fx(p2[1])}`;
-      }
-      return d;
-    }
-  }
-  const ropeMemo = new Map();
-  const r2 = (v) => Math.round(v * 20) / 20;
-  /** A thread hanging at rest between two pins (memoised: a rope at rest is a pure function of its pins). */
-  function restingRope(a, b, slack) {
-    const key = [r2(a[0]), r2(a[1]), r2(b[0]), r2(b[1]), slack].join(",");
-    let r = ropeMemo.get(key);
-    if (!r) { r = new Rope([r2(a[0]), r2(a[1])], [r2(b[0]), r2(b[1])], slack); ropeMemo.set(key, r); if (ropeMemo.size > 4000) ropeMemo.clear(); }
-    return r;
-  }
-  /** A thread in motion: simulated at the fixed step from the start of its phase.
-   *  phase: carry (the needle takes the thread from the hole to the tag), tie (it pulls
-   *  taut), sway (a touch on the tag). Pins are rounded so neighbouring frames agree. */
-  const simCache = new Map();
-  function movingRope(key, a, b, phase, since, slack) {
-    a = [r2(a[0]), r2(a[1])]; b = [r2(b[0]), r2(b[1])];
-    const steps = Math.max(0, Math.floor((since * 1000) / ROPE.STEP_MS));
-    const ck = `${key}|${phase}|${a}|${b}`;
-    let st = simCache.get(ck);
-    if (!st || st.k > steps) {
-      let r;
-      if (phase === "carry") { r = new Rope(a, [a[0] + 0.5, a[1] + 0.5], slack || ROPE.SLACK, true); r.drape(); }
-      else r = new Rope(a, b, slack || ROPE.SLACK);
-      if (phase === "sway") r.nudge([1, -0.45]);
-      st = { r, k: 0 }; simCache.set(ck, st);
-    }
-    const r = st.r, CARRY = 0.5 * 120, TIE = (ROPE.TIE_MS / ROPE.STEP_MS) | 0;
-    for (; st.k < steps; st.k++) {
-      const k = st.k + 1;
-      if (phase === "carry") {
-        const e = easeOut(Math.min(1, k / CARRY));
-        r.setB([lerp(a[0] + 0.5, b[0], e), lerp(a[1] + 0.5, b[1], e)]);
-      } else if (phase === "tie") {
-        const e = easeOut(Math.min(1, k / TIE));
-        r.setSlack(ROPE.SLACK + (ROPE.SLACK_TIED - ROPE.SLACK) * e);
-        r.gravity = ROPE.GRAVITY + (ROPE.GRAVITY_TIED - ROPE.GRAVITY) * e;
-      }
-      r.step();
-    }
-    return r;
-  }
-  function ropeSVG(r, c, opacity, hole) {
-    const d = r.path(), col = `var(--${c})`;
-    let s = "";
-    if (hole) s += `<circle cx="${fx(hole[0])}" cy="${fx(hole[1])}" r="1.5" style="fill:rgba(var(--shadow),.55)" opacity="${fx(Math.min(1, opacity * 2.5))}"/>`;
-    s += `<g opacity="${fx(opacity)}"><path d="${d}" style="fill:none;stroke:rgba(var(--shadow),.17);stroke-width:2.3;stroke-linecap:round" transform="translate(.8 1.2)"/>` +
-      `<path d="${d}" style="fill:none;stroke:${col};stroke-width:1.7;stroke-linecap:round"/>` +
-      `<path d="${d}" style="fill:none;stroke:color-mix(in srgb,${col} 42%,#fff);stroke-width:.7;stroke-dasharray:2.4 2.1;opacity:.7;stroke-linecap:round" transform="translate(-.15 -.35)"/></g>`;
-    return s;
-  }
-
-  // ======================================================================== the border band
-  const MOTIFS = [[[1, 0], [0, 1], [2, 1], [1, 2]], [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], [[1, 0], [0, 1], [2, 1], [1, 2]]];
-  function motifSVG(cx, cy, k, c, sewK) {
-    const cell = 5.4, s = 1.85, w = 1.4, cells = MOTIFS[k % 3];
-    let out = "", i = 0;
-    const n = cells.length * 2 + (k % 3 === 2 ? 1 : 0);
-    const at = (j) => clamp(sewK * n - j);
-    for (const [a, b] of cells) { out += crossSVG(cx + (a - 1) * cell, cy + (b - 1) * cell, s, w, c, at(i), at(i + 1)); i += 2; }
-    if (k % 3 === 2) out += knotSVG(cx, cy, 2.2, "ochre", knotScale(at(i) * 0.2));
-    return out;
-  }
-
-  // ======================================================================== typing
-  /** When each character lands: a person's rhythm (a beat after a word, a breath after
-   *  punctuation, the odd hesitation), fitted to the window [t0, t1]. */
+  // ======================================================================= typing
   function sched(text, t0, t1, seed) {
     const r = rng(seed), w = [];
     for (let i = 0; i < text.length; i++) {
       const c = text[i], prev = i ? text[i - 1] : "";
       let d = 0.72 + r() * 0.56;
       if (prev === " ") d *= 1.25;
-      if (/[.,?!:;]/.test(prev)) d *= 2.4;
+      if (/[.,?!:;]/.test(prev)) d *= 2.3;
       if (/[A-Z0-9’]/.test(c)) d *= 1.15;
-      if (r() < 0.05) d *= 2.0;
+      if (r() < 0.05) d *= 1.9;
       w.push(d);
     }
     const tot = w.reduce((a, b) => a + b, 0);
@@ -372,1085 +103,1612 @@
     return w.map((d) => { acc += d; return t0 + (acc / tot) * (t1 - t0); });
   }
   const count = (times, t) => { let n = 0; while (n < times.length && times[n] <= t) n++; return n; };
-  const S = {
-    title: sched(TXT.title, ...T.title, 11), p1: sched(TXT.p1, ...T.p1, 12), p2: sched(TXT.p2, ...T.p2, 13),
-    p3: sched(TXT.p3, ...T.p3, 14), p4: sched(TXT.p4, ...T.p4, 15), e1: sched(EDIT1.to, ...T.e1Type, 16), e2: sched(EDIT2.to, ...T.e2Type, 17),
-    reply: sched(TXT.reply, ...T.t2Type, 18), roomQ: sched(TXT.roomQ, ...T.roomType, 19), brief: sched(TXT.brief, ...T.briefType, 20),
-    chatQ: sched(TXT.chatQ, ...T.chatType, 21), p5: sched(TXT.p5, ...T.p5, 22),
-  };
   const lastKey = (times, t) => { const n = count(times, t); return n ? times[n - 1] : -9; };
-
-  /** Paragraph 2 over time: typed, then two edits (5:30 → 4:55 in the race sentence, then
-   *  the training sentence). Returns the text and any selection. */
-  function p2At(t) {
-    let text = TXT.p2.slice(0, count(S.p2, t)), sel = null, caret = text.length;
-    if (t < T.e1Sel) return { text, sel, caret };
-    const i1 = TXT.p2.indexOf(EDIT1.from, TXT.p2.indexOf("If I hold"));
-    if (t < T.e1Type[0]) return { text, sel: [i1, i1 + 4], caret: null };
-    const n1 = count(S.e1, t);
-    text = TXT.p2.slice(0, i1) + EDIT1.to.slice(0, n1) + TXT.p2.slice(i1 + 4);
-    caret = i1 + n1;
-    if (t < T.e2Drag[0]) return { text, sel, caret };
-    const i2 = text.indexOf(EDIT2.from);
-    if (t < T.e2Type[0]) {
-      const k = sine(prog(t, T.e2Drag[0], T.e2Drag[1]));
-      const end = Math.round(i2 + EDIT2.from.length * k);
-      return { text, sel: end > i2 ? [i2, end] : null, caret: end > i2 ? null : i2, drag: true };
-    }
-    const n2 = count(S.e2, t);
-    text = text.slice(0, i2) + EDIT2.to.slice(0, n2) + text.slice(i2 + EDIT2.from.length);
-    return { text, sel, caret: i2 + n2 };
+  const EDIT1 = { from: "5:30", to: "4:55" }, EDIT2 = { from: " and hold 5:30 per km on every run", to: ", two of them at 4:55 per km" };
+  const S = {
+    first: sched(FIRST, ...T.type1, 3), title: sched("Sub-50 10k by March", ...T.title2, 11), p1: sched(P1, ...T.p1, 12), p2: sched(P2, ...T.p2, 13), p3: sched(P3, ...T.p3, 14),
+    e1: sched(EDIT1.to, ...T.e1type, 15), e2: sched(EDIT2.to, ...T.e2type, 16), p4: sched(P4, ...T.p4, 17), q4: sched(TXT.askQ, ...T.type4, 18), q5: sched(TXT.roomQ, ...T.type5, 19),
+    p5: sched(P5, ...T.p5, 20), brief: sched(TXT.brief, ...T.brief8, 21), chat: sched(TXT.chatQ, ...T.chatType8, 22), reply: sched(TXT.reply, ...T.reply9, 23),
+    name: sched("Coach", ...T.name15, 24), desc: sched(COACH.description, ...T.desc15, 25), how: sched(COACH.howItThinks, ...T.how15, 26), p6: sched(P6, ...T.p6, 27),
+  };
+  const ALLKEYS = [S.first, S.title, S.p1, S.p2, S.p3, S.e1, S.e2, S.p4, S.p5, S.p6];
+  const typingAt = (t) => ALLKEYS.some((k) => t - lastKey(k, t) < 0.55 && t >= k[0] - 0.05);
+  /** Streamed words: the brain's own chunks when it sent them, else word by word. */
+  function streamed(text, t0, t1, t) {
+    if (t <= t0) return "";
+    if (t >= t1) return text;
+    const words = text.split(" "), n = Math.ceil(prog(t, t0, t1) * words.length);
+    return words.slice(0, n).join(" ");
   }
 
-  // ======================================================================== the drawing, stitched
-  // The model's SVG (named colours, steps with captions) becomes running stitches, knots for
-  // dots, washes for fills and Figtree for labels, precomputed once.
-  let SKETCH = null;
-  function buildSketch() {
-    const doc = new DOMParser().parseFromString(TXT.svg, "image/svg+xml");
+  // ======================================================================= tags over time
+  /** How far a tag is unfolded at t, from a list of [time, target] (springs, as the app). */
+  function unfoldAt(t, keys) {
+    let from = 0, to = 0, at = null;
+    const seg = (x) => lerp(from, to, to >= from ? spring(x - at, 420, 41) : spring(x - at, 520, 45.6));
+    for (const [tk, target] of keys) {
+      if (tk > t) break;
+      const vk = at == null ? 0 : seg(tk);
+      from = vk; to = target; at = tk;
+    }
+    return at == null ? 0 : seg(t);
+  }
+  const stateAt = (t, keys, d) => { let s = d; for (const [tk, v] of keys) if (tk <= t) s = v; return s; };
+
+  // ======================================================================= measurements
+  // Laid out once at load (scale 1) so the camera knows where the words will be.
+  const MEAS = {};
+  function measureNote(name, page) {
+    const host = $("#measure .page");
+    const geo = A.renderPage(host, page, 0, 1);
+    const out = { blocks: {}, anchors: {} };
+    for (const b of page.blocks) { const bb = geo.blockBox(b.id); if (bb) out.blocks[b.id] = bb; }
+    for (const th of page.threads || []) { const L = geo.lineRects(th.block, th.id); if (L.length) out.anchors[th.id] = L; }
+    MEAS[name] = out;
+  }
+
+  // ======================================================================= the main note
+  const MAIN_MINDS = { inkling: "madder", skeptic: "indigo", tutor: "ochre" };
+  /** Paragraph 2 over time: typed, then fixed (5:30 → 4:55 twice). */
+  function p2At(t) {
+    let text = P2.slice(0, count(S.p2, t)), sel = null, caret = text.length;
+    if (t < T.e1sel) return { text, sel, caret };
+    const i1 = P2.indexOf(EDIT1.from, P2.indexOf("If I hold"));
+    if (t < T.e1type[0]) return { text, sel: [i1, i1 + 4], caret: null };
+    const n1 = count(S.e1, t);
+    text = P2.slice(0, i1) + EDIT1.to.slice(0, n1) + P2.slice(i1 + 4);
+    caret = i1 + n1;
+    if (t < T.e2drag[0]) return { text, sel, caret };
+    const i2 = text.indexOf(EDIT2.from);
+    if (t < T.e2type[0]) {
+      const k = E.sine(prog(t, T.e2drag[0], T.e2drag[1]));
+      const end = Math.round(i2 + EDIT2.from.length * k);
+      return { text, sel: end > i2 ? [i2, end] : null, caret: end > i2 ? null : i2 };
+    }
+    const n2 = count(S.e2, t);
+    return { text: text.slice(0, i2) + EDIT2.to.slice(0, n2) + text.slice(i2 + EDIT2.from.length), sel: null, caret: i2 + n2 };
+  }
+  /** Settings that change during the film (Ch4 placement, Ch5 the note's mind, Ch6 your look). */
+  function looks(t) {
+    let ink = "madder";
+    if (within(t, M6.ink, M6.letter)) { const seq = ["madder", "indigo", "sage", "rose", "plum", "walnut", "ochre", "madder"]; ink = seq[clamp(Math.floor((t - M6.ink) / (BEAT / 2)), 0, 7)]; }
+    const dark = t < M6.dark + 0.85 ? 0 : t > cEnd + 1.5 ? 1 : E.io(prog(t, M6.dark + 0.85, M6.dark + 1.6));
+    let note = 17;
+    if (within(t, M6.size, M6.mode)) note = t < M6.size + 0.45 ? 15 : t < M6.size + 0.95 ? 19 : 17;
+    const lettering = within(t, M6.letter + 0.35, M6.size) ? "notes" : "own";
+    return { ink, dark, note, lettering };
+  }
+  const mindOf = (t) => (t >= T.pick16 + 0.1 ? "Coach" : "Inkling");
+  /** A mind's thread colour at t (note_page.rs `mind_thread`). */
+  const colourOf = (mind, t) => A.mindThread(mind, mindOf(t), looks(t).ink);
+
+  function mainNote(t) {
+    const L = looks(t);
+    const blocks = [];
+    const hidden = within(t, T.hide12 + 0.05, T.show12 + 0.05);
+    const hideK = E.out(prog(t, T.hide12, T.hide12 + 0.4)) * (1 - E.out(prog(t, T.show12, T.show12 + 0.4)));
+    // ---- text
+    const caretIn = (() => {
+      if (t < T.p1[0]) return "title";
+      if (t < T.p2[0]) return "p1";
+      if (t < T.p3[0]) return "p2";
+      if (t < T.e1sel) return "p3";
+      if (t < T.e1type[0]) return null;
+      if (t < T.reread[0]) return "p2";
+      if (t < T.p4[0]) return null;
+      if (t < T.sel3[0]) return "p4";
+      if (within(t, T.caret6, T.wipe7[0])) return "p5";
+      if (within(t, T.p6[0] - 0.3, T.open16)) return "p6";
+      if (within(t, M6.speak, M6.learn)) return "p7";
+      return null;
+    })();
+    const sel = {}; // selections, by block
+    const selPhrase = (bid, text, phrase, t0, t1, until) => {
+      if (!within(t, t0, until)) return;
+      const i = text.indexOf(phrase);
+      if (i < 0) return;
+      sel[bid] = [i, Math.round(i + phrase.length * E.sine(prog(t, t0, t1)))];
+    };
+    const p1 = P1.slice(0, count(S.p1, t)), p2 = p2At(t), p3 = P3.slice(0, count(S.p3, t)), p4 = P4.slice(0, count(S.p4, t));
+    selPhrase("p3", p3, "I’ll add a kilometre every week until I reach 16.", ...T.sel3, T.sew3[0]);
+    selPhrase("p1", p1, TXT.askTarget, ...T.sel4, T.send4);
+    selPhrase("p2", p2.text, "four days a week", ...T.sel5, T.send5);
+    if (p2.sel) sel.p2 = p2.sel;
+    const gut = {};
+    const add = (id, kind, text, caret) => blocks.push({ id, kind, text, caret: caretIn === id ? caret : null, sel: sel[id], ranges: [], gutter: gut[id] });
+    // gutter marks: the needle while reading, a tacking stitch once read and quiet
+    const needle = (a, b) => within(t, a, b);
+    gut.p1 = needle(...T.read2a) ? { type: "needle" } : t >= T.read2a[1] ? { type: "tack" } : null;
+    gut.p2 = needle(...T.read2b) || needle(...T.reread) ? { type: "needle" } : t >= T.read2b[1] ? { type: "tack" } : null;
+    gut.p3 = t >= T.p3[1] + 0.9 ? { type: "tack" } : t >= T.p3[1] ? { type: "needle" } : null;
+    gut.p4 = needle(...T.read2d) ? { type: "needle" } : t >= T.read2d[1] ? { type: "tack" } : null;
+    gut.p5 = needle(...T.read6) ? { type: "needle" } : null;
+    gut.p6 = needle(...T.read16) ? { type: "needle" } : null;
+    if (t >= T.p1[0]) add("p1", "p", p1, p1.length);
+    if (t >= T.p2[0]) add("p2", "p", p2.text, p2.caret);
+    if (t >= T.p3[0]) add("p3", "p", p3, p3.length);
+    if (t >= T.p4[0]) add("p4", "p", p4, p4.length);
+    if (t >= T.p5[0]) { const s = P5.slice(0, count(S.p5, t)); add("p5", "p", s, s.length); }
+    if (t >= T.p6[0]) { const s = P6.slice(0, count(S.p6, t)); add("p6", "p", s, s.length); }
+    const spoken = within(t, M6.speak + 1.95, cEnd + 5);
+    if (spoken) add("p7", "p", P7, P7.length);
+    // the empty paragraph you write into
+    if (t >= T.p1[0] && t < T.p6[0] && !(t >= T.p4[0] && t < T.caret6)) { /* typing in place */ }
+    if (t < T.p1[0] && t >= c2) blocks.push({ id: "p0", kind: "p", text: "", ph: "Just start writing.", caret: null });
+
+    // ---- threads
+    const threads = [];
+    const placement = t >= T.right13 && t < T.marks13 ? "right" : t >= T.marks13 && t < T.both13 ? "marks" : "both";
+    const sideOf = (s) => (placement === "right" ? "right" : s);
+    const thread = (o) => { threads.push(o); return o; };
+    // t1: the correction on the race sentence (read along), fixed and tied off
+    if (t >= T.t1arrive) {
+      const i = p2.text.indexOf("If I hold");
+      if (i >= 0) {
+        const b = blocks.find((x) => x.id === "p2");
+        b.ranges.push({ a: i, b: p2.text.length, id: "t1", cls: "anc" });
+        const tied = t >= T.knot2;
+        const u = unfoldAt(t, [[T.t1hover, 1], [T.t1fold, 0], [T.settleOpen, 1], [T.fade2[0] + 0.3, 0]]);
+        let body = A.B.msg(TXT.correction);
+        if (t >= T.reread[0] && t < T.settle[0]) body += A.B.think("Reading your change", t);
+        if (t >= T.settle[0]) body += A.B.msg(streamed(TXT.settle, T.settle[0], T.settle[1], t));
+        const gone = t >= T.fade2[1];
+        thread({ id: "t1", block: "p2", kind: "correction", c: colourOf("Inkling", t), side: sideOf("right"), sew: 1, tied, tag: !gone, rope: !gone,
+          stitchOp: tied ? 0.42 : 1, ropeOp: tied ? 0.8 * (1 - prog(t, ...T.fade2)) : u > 0.05 ? lerp(0.26, 1, u) : 0.26,
+          ropeTrack: t >= T.tie2 ? { t0: T.tie2, tieAt: T.tie2, speed: 0.5 } : null, knotAt: t >= T.knot2 ? T.knot2 : null,
+          tagOp: 1 - prog(t, ...T.fade2), wash: u > 0.4 && !tied,
+          tagState: { unfold: u, mind: "Inkling", kindLabel: tied ? "tied off" : "correction", body } });
+      }
+    }
+    // t2: Find a loose thread on the long run; answered and resolved in ch4; reopened after
+    const t2on = t >= T.sew3[0];
+    if (t2on) {
+      const i = p3.indexOf("I’ll add");
+      const b = blocks.find((x) => x.id === "p3");
+      if (b && i >= 0) {
+        b.ranges.push({ a: i, b: p3.length, id: "t2", cls: "anc" });
+        const tied = t >= T.knot9;
+        const dragK = E.out(prog(t, ...T.drag9));
+        const off = [lerp(0, 92, dragK), lerp(0, 132, dragK)];
+        const u = unfoldAt(t, [[T.open3, 1], [T.fold3, 0], [T.jump9[1], 0], [T.dragOpen9, 1], [T.fade9[0] - 0.1, 0], [T.reopen11, 1], [T.hide12 - 0.2, 0]]);
+        let body = A.B.msg(TXT.probe);
+        if (t >= T.send9) body += A.B.you(TXT.reply);
+        if (t >= T.send9 && t < T.answer9[0]) body += A.B.think("", t);
+        if (t >= T.answer9[0]) body += A.B.msg(streamed(TXT.answer, ...T.answer9, t));
+        const active = t >= T.dragOpen9 && t < T.fade9[0];
+        if (active && t < T.send9) body += A.B.reply(TXT.reply.slice(0, count(S.reply, t)), t >= T.replyFocus9, t - lastKey(S.reply, t) < 0.5 || Math.floor(t / 0.53) % 2 === 0);
+        if (active || within(t, T.reopen11, T.hide12)) {
+          const hov = within(t, T.resolveHov9, T.tie9) ? "resolve" : within(t, T.reopen11 + 0.5, T.reopen11 + 0.95) ? "resolve" : within(t, T.reopen11 + 0.95, T.reopen11 + 1.4) ? "copy" : within(t, T.reopen11 + 1.4, T.reopen11 + 2.2) ? "note" : null;
+          body += A.B.acts(tied, hov);
+        }
+        const reopened = t >= T.reopen11;
+        thread({ id: "t2", block: "p3", kind: "question", c: colourOf("Inkling", t), side: sideOf("right"), offset: off,
+          sew: prog(t, ...T.sew3), needle: t < T.sew3[1], tied: tied,
+          stitchOp: tied ? 0.42 : 1, ropeOp: t < T.carry3 ? 0 : tied && !reopened ? 0.8 * (1 - prog(t, ...T.fade9)) : u > 0.05 ? lerp(0.26, 1, u) : 0.26,
+          ropeTrack: t < T.carry3 + 1.4 ? { t0: T.carry3, carry: 0.5 } : within(t, T.drag9[0], T.tie9) ? { t0: T.drag9[0], offsetFn: (x) => { const k = E.out(prog(x, ...T.drag9)); return [lerp(0, 92, k), lerp(0, 132, k)]; } } : within(t, T.tie9, T.fade9[1]) ? { t0: T.tie9, tieAt: T.tie9, speed: 0.5 } : null,
+          knotAt: within(t, T.knot9, T.fade9[1]) ? T.knot9 : null, rope: !(tied && t >= T.fade9[1] && !within(t, T.reopen11, T.hide12)),
+          tag: t >= T.carry3 + 0.45 && (!tied || t < T.fade9[1] || within(t, T.reopen11, T.hide12)), tagOp: tied && t < T.reopen11 ? 1 - prog(t, ...T.fade9) : 1, wash: u > 0.4,
+          tagState: { unfold: u, mind: "Inkling", kindLabel: tied ? "tied off" : "question", body, openRight: t >= T.drag9[0] ? false : undefined } });
+      }
+    }
+    // t3: Ask Inkling, your own question (left margin); snipped and brought back in ch4
+    if (t >= T.sew4[0]) {
+      const i = p1.indexOf(TXT.askTarget);
+      const b = blocks.find((x) => x.id === "p1");
+      if (b && i >= 0) {
+        b.ranges.push({ a: i, b: i + TXT.askTarget.length, id: "t3", cls: "anc" });
+        const snipped = within(t, T.snip10, T.undo10 + 0.1);
+        const u = unfoldAt(t, [[T.carry4 + 0.6, 1], [T.fold4, 0], [T.jump9[0] + 0.1, 1], [T.jump9[1], 0], [T.open10, 1], [T.snip10, 0]]);
+        let body = A.B.you(TXT.askQ) + A.B.msg(streamed(TXT.ask, ...T.stream4, t));
+        if (t < T.stream4[0]) body = A.B.you(TXT.askQ) + A.B.think("", t);
+        const back = prog(t, T.undo10, T.undo10 + 0.45);
+        thread({ id: "t3", block: "p1", kind: "ask", c: colourOf("Inkling", t), side: sideOf("left"),
+          sew: snipped ? 1 : t < T.undo10 ? prog(t, ...T.sew4) : back, needle: t < T.sew4[1], unpick: snipped ? prog(t, T.snip10 + 0.15, T.snip10 + 0.95) : 0,
+          ropeOp: t < T.carry4 ? 0 : snipped ? 0.7 * (1 - prog(t, T.snip10 + 0.5, T.snip10 + 0.95)) : u > 0.05 ? lerp(0.26, 1, u) : 0.26,
+          ropeTrack: t < T.carry4 + 1.4 ? { t0: T.carry4, carry: 0.5 } : snipped ? { t0: T.snip10, cutAt: T.snip10 } : within(t, T.undo10, T.undo10 + 1.2) ? { t0: T.undo10, carry: 0.45 } : null,
+          tag: t >= T.carry4 + 0.45, tagOp: snipped ? 1 - prog(t, T.snip10, T.snip10 + 0.4) : t >= T.undo10 ? prog(t, T.undo10 + 0.3, T.undo10 + 0.6) : 1, wash: u > 0.4,
+          tagState: { unfold: u, mind: "Inkling", kindLabel: "you asked", body: body + (within(t, T.open10, T.snip10) ? A.B.reply("", false) + A.B.acts(false, within(t, T.dis10 - 0.3, T.snip10) ? "dismiss" : null) : "") } });
+      }
+    }
+    // t4-t6: the room on "four days a week"
+    if (t >= T.sew5[0]) {
+      const i = p2.text.indexOf("four days a week");
+      const b = blocks.find((x) => x.id === "p2");
+      if (b && i >= 0) {
+        b.ranges.push({ a: i, b: i + 16, id: "t4 t5 t6", cls: "anc" });
+        [["t4", "Inkling", "inkling", [[T.open5, 1], [T.hov5b - 0.15, 0], [T.hov9[0], 1], [T.hov9[1], 0], [T.jump9[1] + 0.1, 1], [T.jump9[1] + 0.9, 0]]],
+          ["t5", "Skeptic", "skeptic", [[T.hov5b, 1], [T.hov5c - 0.15, 0], [T.hov9[2], 1], [T.hov9[3], 0]]],
+          ["t6", "Socratic tutor", "tutor", [[T.hov5c, 1], [T.fold5, 0], [T.hov9[4], 1], [T.hov9[5], 0]]]].forEach(([id, mind, key, keys], k) => {
+          const u = unfoldAt(t, keys);
+          const st = T.stream5[key];
+          let body = A.B.you(TXT.roomQ) + (t < st[0] ? A.B.think("", t) : A.B.msg(streamed(TXT.room[key], st[0], st[1], t)));
+          thread({ id, block: "p2", kind: "ask", c: colourOf(mind, t), side: sideOf("right"), sew: prog(t, T.sew5[0] + k * 0.06, T.sew5[1] + k * 0.06), needle: k === 0 && t < T.sew5[1],
+            ropeOp: t < T.carry5 ? 0 : u > 0.05 ? lerp(0.26, 1, u) : 0.26, ropeTrack: t < T.carry5 + 1.4 ? { t0: T.carry5 + k * 0.08, carry: 0.5 } : null,
+            tag: t >= T.carry5 + 0.45 + k * 0.08, wash: u > 0.4, tagState: { unfold: u, mind, kindLabel: "you asked", body, z: u > 0.01 ? 10 + k : null } });
+        });
+      }
+    }
+    // t7: Skeptic, called by name (left margin)
+    if (t >= T.sew6[0]) {
+      const b = blocks.find((x) => x.id === "p5");
+      if (b) {
+        b.ranges.push({ a: 0, b: P5.length, id: "t7", cls: "anc" });
+        const u = unfoldAt(t, [[T.carry6 + 0.6, 1], [T.wipe7[0], 0]]);
+        thread({ id: "t7", block: "p5", kind: "answer", c: colourOf("Skeptic", t), side: sideOf("left"), sew: prog(t, ...T.sew6), needle: t < T.sew6[1],
+          ropeOp: t < T.carry6 ? 0 : u > 0.05 ? lerp(0.26, 1, u) : 0.26, ropeTrack: t < T.carry6 + 1.4 ? { t0: T.carry6, carry: 0.5 } : null,
+          tag: t >= T.carry6 + 0.45, wash: u > 0.4,
+          tagState: { unfold: u, mind: "Skeptic", kindLabel: "answer", body: t < T.stream6[0] ? A.B.think("", t) : A.B.msg(streamed(TXT.call, ...T.stream6, t)) } });
+      }
+    }
+    // t8: the Coach, the note's own mind now, reading the new paragraph
+    if (t >= T.sew16[0]) {
+      const b = blocks.find((x) => x.id === "p6");
+      if (b) {
+        const i = P6.indexOf(C.v2_mind.output.quote) >= 0 ? P6.indexOf(C.v2_mind.output.quote) : 0;
+        b.ranges.push({ a: i, b: P6.length, id: "t8", cls: "anc" });
+        const tied = t >= ED.knot;
+        const u = unfoldAt(t, [[T.open16, 1], [ED.knot + 1.0, 0]]);
+        let body = A.B.msg(TXT.coach);
+        if (within(t, ED.act, ED.knot + 1.0)) body += A.B.reply("", false) + A.B.acts(tied, within(t, ED.hov, ED.tie + 0.2) ? "resolve" : null);
+        thread({ id: "t8", block: "p6", kind: "question", c: colourOf("Coach", t), side: sideOf("right"), sew: prog(t, ...T.sew16), needle: t < T.sew16[1], tied, stitchOp: tied ? 0.42 : 1,
+          ropeOp: t < T.carry16 ? 0 : tied ? 0.85 * (1 - prog(t, ED.knot + 1.0, ED.knot + 1.4)) : u > 0.05 ? lerp(0.26, 1, u) : 0.26,
+          ropeTrack: t < T.carry16 + 1.4 ? { t0: T.carry16, carry: 0.5 } : t >= ED.tie ? { t0: ED.tie, tieAt: ED.tie, speed: 0.5 } : null, knotAt: t >= ED.knot ? ED.knot : null,
+          tag: t >= T.carry16 + 0.45, tagOp: tied ? 1 - prog(t, ED.knot + 1.0, ED.knot + 1.4) : 1, wash: u > 0.4 && !tied,
+          tagState: { unfold: u, mind: "Coach", kindLabel: tied ? "tied off" : "question", body, nolift: true } });
+      }
+    }
+    // open questions are numbered in reading order, and knotted in the gutter
+    const order = ["p1", "p2", "p3", "p4", "p5", "p6"];
+    const open = threads.filter((th) => !th.tied && th.tag !== false && !(th.id === "t3" && within(t, T.snip10, T.undo10)));
+    open.sort((a, b) => order.indexOf(a.block) - order.indexOf(b.block) || a.id.localeCompare(b.id));
+    open.forEach((th, i) => (th.num = i + 1));
+    for (const id of order) {
+      const first = open.find((th) => th.block === id);
+      const bl = blocks.find((x) => x.id === id);
+      if (first && bl && !(bl.gutter && bl.gutter.type === "needle")) bl.gutter = { type: "knot", n: first.num, c: first.c, k: knotScale(t - (first.arrived || 0) + 1) };
+    }
+    // marks only: no tags, a small mark after the passage
+    const marksK = placement === "marks" ? prog(t, T.marks13, T.marks13 + 0.4) : 0;
+    // the border: one motif per thread tied off in this note
+    const motifs = [];
+    if (t >= T.fly2[1]) motifs.push({ c: colourOf("Inkling", t), k: prog(t, T.fly2[1], T.fly2[1] + 0.4) });
+    if (t >= T.fly9[1]) motifs.push({ c: colourOf("Inkling", t), k: prog(t, T.fly9[1], T.fly9[1] + 0.4) });
+    if (t >= ED.fly[1]) motifs.push({ c: colourOf("Coach", t), k: prog(t, ED.fly[1], ED.fly[1] + 0.4) });
+    const loose = open.length;
+    // header and chrome fade while you type (app.rs chrome_layer: out slowly, back quickly)
+    const calm = calmAt(t);
+    const header = { op: 1 - calm, mind: mindOf(t), mindC: `var(--voice)`, mode: within(t, M6.mode + 0.35, M6.pace) ? "Waits to be asked" : "Reads along", loose,
+      hov: within(t, T.tell8 - 0.3, T.tell8 + 0.15) ? "tell" : within(t, T.menu16 - 0.25, T.pick16) ? "mind" : within(t, T.hide12 - 0.3, T.hide12 + 0.1) || within(t, T.show12 - 0.3, T.show12 + 0.1) ? "hide" : null };
+    const page = { scroll: 0, header, blocks, threads, hidden, hideK, marksOnly: placement === "marks" && marksK > 0.5,
+      border: { motifs }, title: { text: "Sub-50 10k by March".slice(0, count(S.title, t)), caret: caretIn === "title" ? count(S.title, t) : null },
+      chatOpen: within(t, T.chatIn8[0] + 0.1, T.chatOut9[1]), caretOn: caretOn(t) };
+    if (t >= T.save8) page.brief = TXT.brief;
+    if (within(t, T.tell8 + 0.1, T.save8)) page.briefIn = { text: TXT.brief.slice(0, count(S.brief, t)), caret: caretOn(t) };
+    // menus anchored to the words
+    page.menus = [];
+    const bar = (block, anchor, t0, t1, hov) => { if (within(t, t0, t1)) page.menus.push({ type: "toolbar", block, anchor, op: spring(t - t0, 400, 32), hov }); };
+    bar("p3", "t2", T.bar3, T.sew3[0] - 0.05, t >= T.find3 - 0.25 ? "find" : null);
+    bar("p1", "t3", T.bar4, T.askClick4, t >= T.askClick4 - 0.35 ? "ask" : null);
+    bar("p2", "t4", T.bar5, T.askClick5, t >= T.askClick5 - 0.35 ? "ask" : null);
+    if (within(t, T.askClick4, T.send4)) page.menus.push({ type: "ask", block: "p1", anchor: "t3", op: spring(t - T.askClick4, 400, 32), text: TXT.askQ.slice(0, count(S.q4, t)), caret: caretOn(t), chips: chipsAt(t, []) });
+    if (within(t, T.askClick5, T.send5)) page.menus.push({ type: "ask", block: "p2", anchor: "t4", op: spring(t - T.askClick5, 400, 32), text: TXT.roomQ.slice(0, count(S.q5, t)), caret: caretOn(t), chips: chipsAt(t, [t >= T.chip5a ? "Skeptic" : null, t >= T.chip5b ? "Socratic tutor" : null]) });
+    if (within(t, T.menu16, T.pick16 + 0.15)) page.menus.push({ type: "mind", op: spring(t - T.menu16, 400, 32), hov: t >= T.menu16 + 0.5 ? 1 : null, minds: [{ name: "Inkling", d: "Thinks alongside you, and speaks up when something is worth a second look.", on: true }, { name: "Coach", d: COACH.description }] });
+    if (within(t, M6.mode, M6.mode + 0.95)) page.menus.push({ type: "mode", op: spring(t - M6.mode, 400, 32), cur: t >= M6.mode + 0.35 ? "ask" : "read", hov: t >= M6.mode + 0.2 ? "ask" : null });
+    // the block-kind beat in ch7
+    if (within(t, M7.blocks, M7.end)) {
+      const kinds = ["p", "h1", "h2", "h3", "q", "li", "ol", "p"];
+      const k = clamp(Math.floor((t - M7.blocks - 0.3) / (BEAT / 2)), 0, 7);
+      const b = blocks.find((x) => x.id === "p4");
+      if (b) { b.kind = t < M7.blocks + 0.3 ? "p" : kinds[k]; b.sel = [0, P4.length]; page.menus.push({ type: "toolbar", block: "p4", anchor: "blk", op: 1, kind: [0, 1, 2, 3, 4, 5, 6, 0][k] }); b.ranges.push({ a: 0, b: P4.length, id: "blk", cls: "" }); }
+    }
+    return { page, L };
+  }
+  function chipsAt(t, extra) {
+    const on = new Set(["Inkling", ...extra.filter(Boolean)]);
+    return [["Inkling", "madder"], ["Staff engineer", "plum"], ["Editor", "sage"], ["Skeptic", "indigo"], ["Socratic tutor", "ochre"], ["Investor", "walnut"]].map(([name, c]) => ({ name, c, on: on.has(name) }));
+  }
+  const caretOn = (t) => typingAt(t) || Math.floor(t / 0.53) % 2 === 0;
+  /** The chrome steps back while you type and comes back when the pointer moves. */
+  function calmAt(t) {
+    // typing windows in which the pointer does not move
+    const spans = [[T.title2[0], T.p3[1] + 0.2], [T.p5[0], T.p5[1] + 0.2], [T.p6[0], T.p6[1] + 0.2], [T.type1[0], T.type1[1] + 0.2]];
+    let v = 0;
+    for (const [a, b] of spans) {
+      if (t < a) continue;
+      const out = 1 - Math.exp(-5 * Math.max(0, Math.min(t, b) - a));
+      v = t <= b ? out : out * Math.exp(-14 * (t - b));
+      if (t <= b + 0.5) break;
+    }
+    return clamp(v);
+  }
+
+  // ======================================================================= the Start here guide
+  function startPage(t) {
+    const blocks = START.blocks.slice(1).map((b, i) => ({ id: "s" + (i + 1), kind: { paragraph: "p", h2: "h2", bullet: "li" }[b.kind] || "p", text: b.text, ranges: [] }));
+    const last = blocks[blocks.length - 1];
+    const n = count(S.first, t);
+    last.text = FIRST.slice(0, n);
+    last.ph = "One sentence about something you’re working on, or something you believe.";
+    last.caret = t >= T.glide1 - 0.4 ? n : null;
+    blocks.forEach((b, i) => { if (i && blocks[i - 1].kind === "li" && b.kind === "li") b.gap = 4; });
+    const threads = [];
+    const side = { right: "right", left: "left" };
+    START.threads.forEach((th, k) => {
+      const bi = blocks.findIndex((b) => b.text.includes(th.quote));
+      if (bi < 0) return;
+      const b = blocks[bi], i = b.text.indexOf(th.quote), id = "g" + k;
+      b.ranges.push({ a: i, b: i + th.quote.length, id, cls: "anc" });
+      const mind = th.mind_name || "Inkling";
+      const body = th.messages.map((m) => (m.role === "you" ? A.B.you(m.text) : A.B.msg(m.text))).join("");
+      let unfold = 0, extra = "";
+      if (th.drawing && MEAS.moonAt) {
+        unfold = unfoldAt(t, [[MEAS.moonAt - 0.5, 1], [MEAS.moonAt + 1.6, 0]]);
+        extra = moonSketch(t, MEAS.moonAt - 0.3);
+      }
+      threads.push({ id, block: b.id, kind: th.kind === "ask" ? "ask" : th.kind, c: A.mindThread(mind, "Inkling", "madder"), side: side[th.side] || "right", ropeOp: unfold > 0.05 ? lerp(0.26, 1, unfold) : 0.26,
+        tagState: { unfold, mind, kindLabel: th.kind === "ask" ? "you asked" : th.kind, body: body + extra, nolift: true } });
+    });
+    // your first sentence: read with a question (first_run), pulled to the margin
+    if (t >= T.sew1a) {
+      last.ranges.push({ a: 0, b: FIRST.length, id: "f6", cls: "anc" });
+      const u = unfoldAt(t, [[T.hover1, 1]]);
+      threads.push({ id: "f6", block: last.id, kind: "question", c: "madder", side: "right", sew: prog(t, T.sew1a, T.sew1b), needle: t < T.sew1b,
+        ropeOp: t < T.carry1 ? 0 : u > 0.05 ? lerp(0.26, 1, u) : 0.45, ropeTrack: t < T.carry1 + 1.6 ? { t0: T.carry1, carry: 0.55 } : null,
+        tag: t >= T.carry1 + 0.5, wash: u > 0.4, tagState: { unfold: u, mind: "Inkling", kindLabel: "question", body: A.B.msg(TXT.first), nolift: true } });
+    }
+    const order = blocks.map((b) => b.id);
+    const open = threads.slice().sort((a, b) => order.indexOf(a.block) - order.indexOf(b.block) || a.id.localeCompare(b.id));
+    open.forEach((th, i) => (th.num = i + 1));
+    for (const b of blocks) { const f = open.find((th) => th.block === b.id); if (f) b.gutter = { type: "knot", n: f.num, c: f.c }; }
+    if (within(t, ...T.read1)) last.gutter = { type: "needle" };
+    blocks[0].first = true;
+    const calm = within(t, T.type1[0], T.read1[1]) ? clamp((t - T.type1[0]) * 2) * (1 - clamp((t - T.read1[1]) * 6)) : 0;
+    return { blocks, threads, header: { op: 1 - calm, loose: open.length }, title: { text: START.title }, border: {}, scroll: startScroll(t), caretOn: caretOn(t) };
+  }
+  /** The guide's Moon sketch (welcome.rs), drawn on as its tag unfolds. */
+  let MOON = null;
+  function moonSketch(t, t0) {
+    if (!MOON) { const keep = SK; buildSketch(START.threads.find((x) => x.drawing).drawing); MOON = SK; SK = keep; }
+    const keep = SK; SK = MOON;
+    const sk = sketchSVG(t, [t0, t0 + 0.35, t0 + 0.7], 0.62);
+    SK = keep;
+    return `<div class="sk">${sk.svg}</div><div class="capt"><span class="gr">${esc(sk.caption)}</span><span class="ctl">${sk.step}/${sk.of}</span></div>`;
+  }
+  function startScroll(t) {
+    const end = MEAS.startEnd || 1400;
+    return end * E.io(prog(t, T.glide0, T.glide1));
+  }
+
+  // ======================================================================= the bread note (Sketch it)
+  let SK = null;
+  function buildSketch(svgText) {
+    const doc = new DOMParser().parseFromString(svgText || TXT.svg, "image/svg+xml");
     const root = doc.documentElement;
     const vb = (root.getAttribute("viewBox") || "0 0 320 300").split(/[\s,]+/).map(Number);
     const meas = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     meas.setAttribute("style", "position:absolute;left:-9999px;top:0;width:10px;height:10px");
     document.body.appendChild(meas);
-    const STROKE = { ink: "madder", graphite: "tack", faint: "line2", rule: "line2" };
     const steps = [];
-    $$(":scope > g[data-step]", root).forEach((g, si) => {
+    root.querySelectorAll(":scope > g[data-step]").forEach((g) => {
       const items = [];
-      let seed = 100 + si * 17;
-      const els = Array.from(g.querySelectorAll("path,line,polyline,polygon,rect,circle,ellipse,text"));
-      for (const el of els) {
-        const tag = el.tagName.toLowerCase();
-        const at = (k, d) => (el.getAttribute(k) ?? g.getAttribute(k) ?? d);
-        if (tag === "text") {
-          items.push({ kind: "text", x: +at("x", 0), y: +at("y", 0), text: el.textContent.trim(), size: +at("font-size", 13), cls: at("class", "sans"), anchor: at("text-anchor", "start"), fill: at("fill", "ink") });
-          continue;
-        }
-        const fill = at("fill", "none"), stroke = at("stroke", "ink");
-        if (tag === "circle" && +el.getAttribute("r") <= 5 && fill === "ink") {
-          items.push({ kind: "knot", cx: +el.getAttribute("cx"), cy: +el.getAttribute("cy"), r: Math.max(2.6, +el.getAttribute("r") * 0.95) });
-          continue;
-        }
+      g.querySelectorAll("path,line,polyline,polygon,rect,circle,ellipse,text").forEach((el) => {
+        const tag = el.tagName.toLowerCase(), at = (k, d) => el.getAttribute(k) ?? g.getAttribute(k) ?? d;
+        if (tag === "text") { items.push({ kind: "text", x: +at("x", 0), y: +at("y", 0), text: el.textContent.trim(), size: +at("font-size", 12), cls: at("class", "sans"), anchor: at("text-anchor", "start"), fill: at("fill", "ink") }); return; }
         const clone = document.createElementNS("http://www.w3.org/2000/svg", tag);
         for (const a of el.attributes) clone.setAttribute(a.name, a.value);
         meas.appendChild(clone);
         const L = clone.getTotalLength ? clone.getTotalLength() : 0;
-        const pts = [];
-        const N = Math.max(2, Math.ceil(L / 1.5));
-        for (let i = 0; i <= N; i++) { const p = clone.getPointAtLength((L * i) / N); pts.push([p.x, p.y]); }
-        if (fill === "wash" || fill === "paper") items.push({ kind: "fill", d: pathOf(tag, el), fill });
-        if (stroke !== "none") {
-          const st = runAlong(pts, STROKE[stroke] || "madder", 2.1, L < 26 ? 4.2 : 6.6, L < 26 ? 2.6 : 3.6, seed++);
-          st.forEach((s) => items.push({ kind: "stitch", s }));
-        }
-      }
+        items.push({ kind: "shape", tag, attrs: Array.from(el.attributes).map((a) => [a.name, a.value]), L, fill: at("fill", "none"), stroke: at("stroke", "none"), sw: +at("stroke-width", 1) });
+      });
       steps.push({ caption: g.getAttribute("data-caption") || "", items });
     });
     meas.remove();
-    SKETCH = { vb, steps };
+    SK = { vb, steps };
   }
-  function pathOf(tag, el) {
-    const n = (k) => +el.getAttribute(k) || 0;
-    if (tag === "rect") { const x = n("x"), y = n("y"), w = n("width"), h = n("height"), r = Math.min(n("rx"), w / 2, h / 2); return `M${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${y + h - r}Q${x + w} ${y + h} ${x + w - r} ${y + h}H${x + r}Q${x} ${y + h} ${x} ${y + h - r}V${y + r}Q${x} ${y} ${x + r} ${y}Z`; }
-    if (tag === "circle") { const cx = n("cx"), cy = n("cy"), r = n("r"); return `M${cx - r} ${cy}A${r} ${r} 0 1 0 ${cx + r} ${cy}A${r} ${r} 0 1 0 ${cx - r} ${cy}Z`; }
-    if (tag === "ellipse") { const cx = n("cx"), cy = n("cy"), rx = n("rx"), ry = n("ry"); return `M${cx - rx} ${cy}A${rx} ${ry} 0 1 0 ${cx + rx} ${cy}A${rx} ${ry} 0 1 0 ${cx - rx} ${cy}Z`; }
-    return el.getAttribute("d") || "";
-  }
-  /** The drawing as it stands at time t: earlier steps whole, the current one being sewn. */
-  function sketchAt(t) {
-    const { vb, steps } = SKETCH;
+  const TONE = { ink: "var(--voice)", graphite: "var(--graphite)", faint: "var(--faint)", rule: "var(--rule)", wash: "color-mix(in srgb,var(--voice) 9%,transparent)", paper: "var(--paper)", none: "none" };
+  /** The drawing as it stands: each step drawn on over STEP_DRAW, one every STEP_EVERY (drawing.rs). */
+  function sketchSVG(t, starts, scale) {
     let out = "", cur = 0;
-    steps.forEach((st, i) => {
-      const [a, b] = T.skSteps[i] || [999, 999];
-      if (t < a) return;
+    SK.steps.forEach((st, i) => {
+      const a = starts[i];
+      if (a == null || t < a) return;
       cur = i;
-      const k = prog(t, a, b), n = st.items.length;
+      const k = prog(t, a, a + 0.75);
+      const n = st.items.length;
       st.items.forEach((it, j) => {
-        const due = (j / n) * 0.86, kk = clamp((k - due) / 0.14);
+        const kk = clamp((k * 1.25 - (j / n) * 0.25) / 1);
         if (kk <= 0) return;
-        if (it.kind === "stitch") out += stitchSVG(it.s, kk);
-        else if (it.kind === "knot") out += knotSVG(it.cx, it.cy, it.r, "madder", knotScale(kk * 0.2));
-        else if (it.kind === "fill") out += `<path d="${it.d}" style="fill:${it.fill === "wash" ? "color-mix(in srgb,var(--madder) 9%,transparent)" : "var(--surface)"}" opacity="${fx(kk)}"/>`;
-        else if (it.kind === "text") {
-          const col = it.fill === "graphite" ? "var(--fg2)" : it.fill === "faint" ? "var(--fg3)" : "var(--fg)";
-          out += `<text x="${it.x}" y="${it.y}" text-anchor="${it.anchor}" style="font-size:${it.size}px;font-weight:${it.cls === "voice" ? 500 : 400};fill:${col}" opacity="${fx(kk)}">${esc(it.text)}</text>`;
+        if (it.kind === "text") {
+          const col = it.cls === "voice" ? "var(--voice)" : TONE[it.fill] || "var(--graphite)";
+          out += `<text x="${it.x}" y="${it.y}" text-anchor="${it.anchor}" style="font-family:Figtree;font-size:${it.size}px;font-weight:${it.cls === "voice" ? 500 : 400};fill:${col}" opacity="${fx(clamp(kk * 2))}">${esc(it.text)}</text>`;
+          return;
+        }
+        const attrs = it.attrs.filter(([n]) => !["stroke", "fill", "stroke-width", "class"].includes(n)).map(([n, v]) => `${n}="${esc(v)}"`).join(" ");
+        const stroke = TONE[it.stroke] || "none", fill = TONE[it.fill] || "none";
+        // the mind's own lines are stitched; thin guides stay drawn (drawing.rs)
+        const stitched = it.stroke === "ink" && it.sw >= 1.2;
+        const L = Math.max(1, it.L);
+        const dash = stitched ? `stroke-dasharray:${fx(it.sw * 3.4)} ${fx(it.sw * 2.1)};` : "";
+        const reveal = stitched ? `mask="url(#rv${cur}_${j})"` : "";
+        if (fill !== "none") out += `<${it.tag} ${attrs} style="fill:${fill};stroke:none" opacity="${fx(kk)}"/>`;
+        if (stroke !== "none") {
+          if (stitched) out += `<mask id="rv${cur}_${j}"><${it.tag} ${attrs} style="fill:none;stroke:#fff;stroke-width:${it.sw + 3};stroke-dasharray:${fx(L)} ${fx(L)};stroke-dashoffset:${fx(L * (1 - kk))}"/></mask>`;
+          out += `<${it.tag} ${attrs} ${reveal} style="fill:none;stroke:${stroke};stroke-width:${it.sw * (scale || 1)};stroke-linecap:round;${stitched ? dash : `stroke-dasharray:${fx(L)} ${fx(L)};stroke-dashoffset:${fx(L * (1 - kk))};`}"/>`;
         }
       });
     });
-    const last = steps.findIndex((_, i) => t < (T.skSteps[i] || [999])[0]);
-    const shown = last === -1 ? steps.length : last;
-    return { svg: `<svg viewBox="${vb.join(" ")}">${out}</svg>`, step: cur + 1, of: steps.length, caption: steps[cur] ? steps[cur].caption : "", shown };
+    return { svg: `<svg viewBox="${SK.vb.join(" ")}" width="${fx(SK.vb[2] * (scale || 0.68))}" height="${fx(SK.vb[3] * (scale || 0.68))}" style="overflow:visible">${out}</svg>`, step: cur + 1, of: SK.steps.length, caption: SK.steps[cur] ? SK.steps[cur].caption : "" };
   }
-
-  // ======================================================================== the wordmark, stitched
-  let WMS = null;
-  function buildWordmark() {
-    const doc = new DOMParser().parseFromString(ASSETS.WM, "image/svg+xml");
-    const root = doc.documentElement;
-    const vb = root.getAttribute("viewBox");
-    const meas = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    meas.setAttribute("style", "position:absolute;left:-9999px;top:0;width:10px;height:10px");
-    document.body.appendChild(meas);
-    const glyphs = [];
-    $$("path.wm-ink", root).forEach((p, gi) => {
-      const subs = p.getAttribute("d").split(/(?=M)/).filter((s) => s.trim());
-      const stitches = [];
-      subs.forEach((d, si) => {
-        const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        el.setAttribute("d", d); meas.appendChild(el);
-        const L = el.getTotalLength(), N = Math.max(4, Math.ceil(L / 0.5)), pts = [];
-        for (let i = 0; i <= N; i++) { const q = el.getPointAtLength((L * i) / N); pts.push([q.x, q.y]); }
-        // each contour is sewn from its own start; its stitches carry where along it they sit
-        runAlong(pts, "fg", 1.15, 2.9, 1.7, 40 + gi * 7 + si).forEach((s, i, all) => stitches.push({ s, k: i / all.length }));
-      });
-      glyphs.push({ d: p.getAttribute("d"), stitches });
-    });
-    meas.remove();
-    const knot = Array.from(root.children).filter((e) => /wm-k/.test(e.getAttribute("class") || "")).map((e) => e.outerHTML).join("");
-    const kc = root.querySelector("circle.wm-k");
-    WMS = { vb, glyphs, knot, kx: +kc.getAttribute("cx"), ky: +kc.getAttribute("cy") };
-  }
-  /** The wordmark at time t of its own making: `k` per glyph is how far it is sewn. */
-  function wordmarkSVG(t, opts) {
-    const { vb, glyphs, knot, kx, ky } = WMS;
-    let fills = "", st = "", needle = "";
-    const fillK = opts.fillK, sewn = opts.sewn;
-    glyphs.forEach((g, gi) => {
-      const k = sewn ? 1 : prog(t, T.sew0 + gi * T.glyphGap, T.sew0 + gi * T.glyphGap + T.glyphDur);
-      fills += `<path class="wm-ink" d="${g.d}" opacity="${fx(fillK)}"/>`;
-      if (opts.stitchOpacity <= 0.01) return;
-      for (const { s, k: at } of g.stitches) {
-        const kk = clamp((k - at * 0.9) / 0.1);
-        if (kk > 0) st += stitchSVG({ ...s, c: "fg" }, kk);
+  function breadPage(t) {
+    const b1 = TXT.bread.paras[0], b2 = TXT.bread.paras[1];
+    const blocks = [{ id: "b1", kind: "p", text: b1, ranges: [], gutter: { type: "tack" }, first: true }, { id: "b2", kind: "p", text: b2, ranges: [], gutter: { type: "tack" } }];
+    const i = b2.indexOf(TXT.bread.target);
+    if (t >= T.wipe7[1] - 0.2 && t < T.sew7[0]) blocks[1].sel = [i, i + TXT.bread.target.length];
+    const threads = [];
+    blocks[1].ranges.push({ a: i, b: i + TXT.bread.target.length, id: "k1", cls: "anc" });
+    if (t >= T.sew7[0]) {
+      const u = unfoldAt(t, [[T.carry7 + 0.35, 1]]);
+      let body = "";
+      if (t < T.idea7) body = `<div class="think"><span>Stitching a sketch…</span><span class="dot" style="width:5px;height:5px;opacity:${fx(0.3 + 0.6 * (0.5 + 0.5 * Math.sin(t / 1.1 * Math.PI * 2)))}"></span></div>`;
+      else {
+        body = A.B.msg(TXT.idea);
+        if (t >= T.steps7[0]) {
+          const sk = sketchSVG(t, T.steps7, 0.68);
+          body += `<div class="sk">${sk.svg}</div><div class="capt"><span class="gr">${esc(sk.caption)}</span><span class="ctl">${A.icon("left", 11, "var(--faint)")}${sk.step}/${sk.of}${A.icon("right", 11, "var(--faint)")}${A.icon("replay", 10, "var(--faint)")}</span></div><div class="larger" style="${t >= T.larger7 - 0.3 && t < T.larger7 + 0.1 ? "color:var(--ink)" : ""}">See it larger</div>`;
+        }
       }
-      if (!sewn && k > 0 && k < 1 && !needle) {
-        const head = g.stitches.filter((x) => x.k * 0.9 <= k).pop();
-        if (head) needle = needleAt(head.s.x1 + 2, head.s.y1 + 2, t, 16);
-      }
-    });
-    const ks = opts.knotScale;
-    const knotG = ks > 0.01 ? `<g transform="translate(${kx} ${ky}) scale(${fx(ks)}) translate(${-kx} ${-ky})">${knot}</g>` : "";
-    return `<svg class="wmsvg" viewBox="${vb}">${fills}<g opacity="${fx(opts.stitchOpacity)}">${st}</g>${knotG}${needle}</svg>`;
-  }
-  const WM_STATIC = () => ASSETS.WM.replace("<svg ", '<svg class="wmsvg" ');
-
-  // ======================================================================== threads
-  // Each thread: its anchor, colour, mind, and when things happen to it. States are read
-  // off the clock: closed (waiting for a pause), sewn, open, thinking, tied, faded.
-  // A thread keeps its number for life, in the order the note's threads were made: the
-  // brain numbers them the same way (the chat's "threads 3 to 5" are the room's three).
-  const THREAD_NO = { t1: 1, t2: 2, r0: 3, r1: 4, r2: 5, call: 6 };
-  const NUM = (t) => {
-    // the threads still open
-    const open = [];
-    if (t >= T.t1Arrive && t < T.t1Knot) open.push("t1");
-    if (t >= T.t2Think[0] && t < T.t2Knot) open.push("t2");
-    if (t >= T.roomSend) open.push("r0", "r1", "r2");
-    if (t >= T.callArrive) open.push("call");
-    return open;
-  };
-  const ROOM = [
-    { id: "r0", mind: "Inkling", c: "madder", key: "inkling" },
-    { id: "r1", mind: "Skeptic", c: "indigo", key: "skeptic" },
-    { id: "r2", mind: "Tutor", c: "ochre", key: "tutor" },
-  ];
-  /** Words revealed by `t` for a streamed answer: the brain's own chunks at their own pace,
-   *  fitted into [t0, t1]. Structured answers (no chunks) arrive word by word. */
-  function streamed(text, deltas, t0, t1, t) {
-    if (t <= t0) return "";
-    if (t >= t1) return text;
-    if (deltas && deltas.length > 1) {
-      const a = deltas[0].ms, b = deltas[deltas.length - 1].ms, k = prog(t, t0, t1) * (b - a) + a;
-      let s = "";
-      for (const d of deltas) { if (d.ms <= k) s += d.text; else break; }
-      return s.replace(/^\s+/, "");
+      threads.push({ id: "k1", block: "b2", kind: "question", c: "madder", side: "right", sew: prog(t, ...T.sew7), needle: t < T.sew7[1],
+        ropeOp: t < T.carry7 ? 0 : u > 0.05 ? lerp(0.26, 1, u) : 0.26, ropeTrack: t < T.carry7 + 1.4 ? { t0: T.carry7, carry: 0.45 } : null, tag: t >= T.carry7 + 0.4, wash: u > 0.4,
+        tagState: { unfold: u, mind: "Inkling", kindLabel: "sketch", body, nolift: false } });
+      threads[0].num = 1; blocks[1].gutter = { type: "knot", n: 1, c: "var(--voice)" };
     }
-    const words = text.split(" "), n = Math.ceil(prog(t, t0, t1) * words.length);
-    return words.slice(0, n).join(" ");
+    const page = { blocks, threads, header: { op: 1, loose: threads.length }, title: { text: TXT.bread.title }, border: {}, scroll: 0, caretOn: false, menus: [] };
+    if (within(t, T.bar7, T.sketch7 + 0.1)) page.menus.push({ type: "toolbar", block: "b2", anchor: "k1", op: spring(t - T.bar7, 400, 32), hov: t >= T.sketch7 - 0.3 ? "sketch" : null });
+    return page;
   }
-  const paras = (s) => s.split(/\n\n+/).map((p) => `<p>${esc(p)}</p>`).join("");
 
-  // ======================================================================== camera
-  // x: the window x at the centre of the frame; s: scale; the window's top edge sits at
-  // TOP on screen, so captions above it never cover the app. scroll: the note's own scroll.
-  const TOP = 130;
-  const CAM0 = { x: 620, s: 1.18, scroll: 0 };
-  const MOVES = [
-    { t: [9.0, 21.8], to: { x: 660, s: 1.32 }, e: sine },
-    { t: [22.5, 23.7], to: { x: 790, s: 1.5 } },
-    { t: [29.2, 30.4], to: { x: 980, s: 1.72, scroll: 285 } },
-    { t: [36.3, 37.4], to: { x: 720, s: 1.5, scroll: 0 } },
-    { t: [46.7, 47.4], to: { x: 760, s: 1.4, scroll: 0 } },
-    { t: [56.7, 57.6], to: { x: 790, s: 1.27, scroll: 0 } },
-    { t: [60.6, 61.4], to: { x: 760, s: 1.42, scroll: 0 } },
-    { t: [66.0, 67.6], to: { x: 800, s: 1.13, scroll: 0 } },
-    { t: [67.6, 71.6], to: { x: 830, s: 1.22, scroll: 140 }, e: sine },
-    { t: [71.8, 72.5], to: { x: 560, s: 1.42, scroll: 0 } },
-    { t: [74.75, 75.45], to: { x: 990, s: 1.21, scroll: 0 } },
-    { t: [76.6, 77.5], to: { x: 1010, s: 1.5, scroll: 0 } },
-    { t: [80.3, 81.0], to: { x: 760, s: 1.42, scroll: 210 } },
-    { t: [86.9, 87.75], to: { x: 620, s: 1.18, scroll: 0 } },
-  ];
-  function cam(t) {
-    const c = { ...CAM0 };
-    for (const m of MOVES) {
+  // ======================================================================= the camera
+  // (x, y): the world point at the centre of the frame; z: screen px per point. Moves ease
+  // like cloth: a little overshoot, then they settle (a spring at damping 0.72).
+  const CLOTH = (() => { const z = 0.72, w = 9, wd = w * Math.sqrt(1 - z * z); const f = (k) => 1 - Math.exp(-z * w * k) * (Math.cos(wd * k) + ((z * w) / wd) * Math.sin(wd * k)); const f1 = f(1); return (k) => (k <= 0 ? 0 : k >= 1 ? 1 : f(k) / f1); })();
+  const GLIDE = E.io;
+  let CAM = [];
+  function camAt(t) {
+    let c = { x: 660, y: -330, z: 1.5 };
+    for (const m of CAM) {
       if (t <= m.t[0]) break;
-      const k = (m.e || easeIO)(prog(t, m.t[0], m.t[1]));
-      for (const key in m.to) c[key] = lerp(c[key], m.to[key], k);
+      const k = (m.e || CLOTH)(prog(t, m.t[0], m.t[1]));
+      const to = typeof m.to === "function" ? m.to() : m.to;
+      c = { x: lerp(c.x, to.x ?? c.x, k), y: lerp(c.y, to.y ?? c.y, k), z: lerp(c.z, to.z ?? c.z, k) };
     }
-    return c;
+    // a breath of drift, so no shot is ever quite still
+    const d = 1 + 0.004 * Math.sin(t * 0.41);
+    return { x: c.x + 3.2 * Math.sin(t * 0.31 + 1.3), y: c.y + 2.4 * Math.sin(t * 0.27), z: c.z * d };
   }
-  const toScreen = (c, x, y) => [960 + (x - c.x) * c.s, TOP + y * c.s];
-
-  // ======================================================================== captions
-  const CAPS = [
-    { t: [9.0, 14.2], text: "You write.", u: "write" },
-    { t: [14.6, 19.15], text: "Inkling reads along, and mostly stays quiet.", u: "reads along" },
-    { t: [19.45, 22.95], text: "When it has a question, it waits for you to pause.", u: "waits" },
-    { t: [23.3, 28.7], text: "When the numbers don’t add up, it pulls a thread.", u: "pulls a thread" },
-    { t: [29.0, 36.35], text: "Ask for a sketch, and it stitches one out, step by step.", u: "stitches one out" },
-    { t: [37.3, 41.7], text: "Fix the words yourself.", u: "Fix the words" },
-    { t: [41.9, 44.75], text: "It reads them again.", u: "again" },
-    { t: [45.0, 47.2], text: "Nobody pressed Resolve.", u: "Resolve" },
-    { t: [47.45, 53.9], text: "Unsure of a line? Ask it to find a loose thread.", u: "find a loose thread" },
-    { t: [54.2, 61.3], text: "Answer in the tag, and the thread ties itself off.", u: "ties itself off" },
-    { t: [61.55, 65.9], text: "Ask the room: up to three minds at once.", u: "three minds" },
-    { t: [66.15, 71.85], text: "Each mind answers on its own thread.", u: "its own thread" },
-    { t: [72.2, 74.85], text: "Tell Inkling what the note is for.", u: "what the note is for" },
-    { t: [75.05, 80.45], text: "Chat about the whole note.", u: "whole note" },
-    { t: [80.75, 87.0], text: "Call any mind by name, mid-note.", u: "by name" },
-    { t: [87.3, 89.9], text: "Hide threads. Only your words stay.", u: "Hide threads" },
-    { t: [90.2, 92.4], text: "Lamplight, for late pages.", u: "Lamplight" },
-  ];
-
-  // ======================================================================== the pointer
-  // Moves are eased with a slight arc, like a hand; presses dip it for a moment. Targets
-  // are measured from the page at the time they are reached (resolveTargets, at load).
-  const PTR = [
-    { show: [26.95, 30.4] }, { show: [37.35, 40.2] }, { show: [46.95, 49.9] }, { show: [53.75, 54.55] },
-    { show: [60.95, 63.95] }, { show: [71.75, 72.75] }, { show: [87.15, 90.6] },
-  ];
-  const MOVE = [
-    // the correction tag, then Sketch it
-    { t: [26.95, 27.55], from: "@t1tag:.55,.62+[60,70]", to: "@t1tag:.55,.62" },
-    { t: [28.2, 28.85], to: "@sketchbtn" },
-    { t: [29.3, 30.4], to: "@sketchbtn+[30,46]" },
-    // fix the words
-    { t: [37.35, 38.0], from: "@e1sel+[120,90]", to: "@e1sel", ibeam: true },
-    { t: [38.95, 39.45], to: "@e2start", ibeam: true },
-    { t: [39.5, 40.05], live: "selEnd", ibeam: true },
-    // find a loose thread
-    { t: [46.95, 47.3], from: "@t2start+[-60,80]", to: "@t2start", ibeam: true },
-    { t: [47.35, 48.1], live: "selEnd", ibeam: true },
-    { t: [48.35, 49.0], to: "@findbtn" },
-    { t: [49.3, 49.9], to: "@findbtn+[40,60]" },
-    // reply in the tag
-    { t: [53.75, 54.25], from: "@t2reply+[90,80]", to: "@t2reply", ibeam: true },
-    // ask the room
-    { t: [60.95, 61.28], from: "@roomstart+[-40,70]", to: "@roomstart", ibeam: true },
-    { t: [61.3, 61.9], live: "selEnd", ibeam: true },
-    { t: [62.1, 62.7], to: "@askbtn" },
-    { t: [62.9, 63.25], to: "@chip1" },
-    { t: [63.35, 63.65], to: "@chip2" },
-    { t: [63.72, 63.95], to: "@chip2+[30,30]" },
-    // tell Inkling
-    { t: [71.75, 72.45], from: "@tell+[60,120]", to: "@tell" },
-    // hide threads, show threads
-    { t: [87.15, 87.85], from: "@hide+[-160,160]", to: "@hide" },
-    { t: [90.0, 90.6], to: "@hide+[-70,130]" },
-  ];
-  const PRESS = [28.9, 38.1, 38.2, 39.5, 47.35, 49.15, 54.3, 61.3, 62.75, 63.3, 63.7, 72.5, 87.9, 89.7];
-  const RELEASE = { 39.5: 40.05, 47.35: 48.1, 61.3: 61.9 };
-  const TARGETS = {}; // name -> [x, y] in window coordinates, filled at load
-
-  // ======================================================================== DOM building
-  const stage = () => $("#stage");
-  let winRect0 = null;
-  function sideHTML(title, open) {
-    const knot = (c) => `<svg viewBox="0 0 12 12" width="10" height="10">${knotSVG(6, 6, 4.6, c)}</svg>`;
-    return `<div class="find"><span>Find or start a note</span><kbd>⌘K</kbd></div>` +
-      `<div class="fold">Running</div><div class="nt cur"><span>${esc(title || "Untitled")}</span>${open ? `<span class="st-n">${knot("madder")}${open}</span>` : ""}</div>` +
-      `<div class="nt"><span>Shoes: what wore out where</span></div>` +
-      `<div class="fold">Home</div><div class="nt"><span>Why the bread didn’t rise</span><span class="st-n">${knot("tack")}</span></div><div class="nt"><span>Kitchen shelf measurements</span></div>` +
-      `<div class="fold">Notes</div><div class="nt"><span>Reading list for winter</span></div><div class="nt"><span>Questions for the landlord</span></div>`;
+  const toScreen = (cam, x, y) => [960 + (x - cam.x) * cam.z, 540 + (y - cam.y) * cam.z];
+  const SET = { x: 1460, y: 40 }; // where the Settings window sits on the desk
+  const SCROLL = {}; // per beat, how far the Settings sheet is scrolled
+  /** The camera on a part of a Settings pane (measured at load), scrolled by `sc`. */
+  function setFocus(pane, key, sc, z, dy) {
+    const m = (MEAS.set && MEAS.set[pane] && MEAS.set[pane][key]) || { x: 300, y: 300, w: 400, h: 100 };
+    return { x: SET.x + m.x + m.w / 2, y: SET.y + m.y - (sc || 0) + m.h / 2 + (dy || 0), z };
   }
-  const PENCIL = `<svg viewBox="0 0 12 12"><path d="M2 10l.6-2.4L8.4 1.8l1.8 1.8-5.8 5.8z" style="fill:none;stroke:var(--fg3);stroke-width:1.1;stroke-linejoin:round"/></svg>`;
-  const CHEV = `<svg viewBox="0 0 12 12"><path d="M3 4.5l3 3 3-3" style="fill:none;stroke:var(--fg3);stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round"/></svg>`;
-  const SEND = `<svg viewBox="0 0 14 14"><path d="M2 7h9M7.5 3.5L11 7l-3.5 3.5" style="fill:none;stroke:var(--fg2);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round"/></svg>`;
 
-  /** Builds text with spans for anchors, the selection and a caret marker. */
-  function markup(text, ranges, caret) {
-    const cuts = new Set([0, text.length]);
-    ranges.forEach((r) => { cuts.add(clamp(r.a, 0, text.length)); cuts.add(clamp(r.b, 0, text.length)); });
-    if (caret != null) cuts.add(caret);
-    const pts = [...cuts].sort((a, b) => a - b);
+  function buildCamera() {
+    const M = MEAS.main, an = (id) => M.anchors[id] || [{ x: 351, y: 300, r: 900, b: 328 }], blk = (id) => M.blocks[id] || { y: 300, h: 28 };
+    const brief = 28;
+    const a1 = an("t1")[0], a2 = an("t2")[0], a3 = an("t3")[0], a4 = an("t4")[0], b5 = blk("p5"), b6 = blk("p6");
+    const st = MEAS.start || {};
+    CAM = [
+      // cold open: in close on the sheet's border, then back to the whole window
+      { t: [0, T.pull0], to: { x: 660, y: -318, z: 1.56 }, e: GLIDE },
+      { t: [T.pull0, T.pull1], to: { x: 660, y: 410, z: 1.2 }, e: CLOTH },
+      // ch1: glide down the guide (the page scrolls), then in on your sentence
+      { t: [T.glide0, T.glide1], to: { x: 650, y: 430, z: 1.32 }, e: GLIDE },
+      { t: [T.type1[0] - 0.2, T.type1[1]], to: { x: 610, y: (st.lastY || 760) + 6, z: 1.75 }, e: GLIDE },
+      { t: [T.read1[0], T.sew1b], to: { x: 560, y: (st.lastY || 760) + 8, z: 2.35 }, e: CLOTH },
+      { t: [T.carry1 - 0.1, T.hover1 + 0.2], to: { x: 900, y: (st.lastY || 760) + 40, z: 2.05 }, e: CLOTH },
+      { t: [T.hover1 + 0.4, T.wipe1[0]], to: { x: 940, y: (st.lastY || 760) + 60, z: 2.25 }, e: GLIDE },
+      // ch2: a new note, written
+      { t: [c2 - 0.05, c2], to: { x: 650, y: 300, z: 1.36 }, e: (k) => k },
+      { t: [c2 + 0.15, T.p1[0]], to: { x: 610, y: 250, z: 1.62 }, e: GLIDE },
+      { t: [T.p1[0], T.p2[1]], to: { x: 640, y: 290, z: 1.55 }, e: GLIDE },
+      { t: [T.pause2 - 0.2, T.pause2 + 1.1], to: { x: (a1.x + a1.r) / 2 + 60, y: a1.y + 30, z: 2.35 }, e: CLOTH },
+      { t: [T.pause2 + 1.4, T.t1hover + 0.4], to: { x: 1000, y: a1.y + 100, z: 1.95 }, e: CLOTH },
+      { t: [T.t1fold - 0.2, T.e1sel + 0.1], to: { x: 760, y: a1.y - 6, z: 2.15 }, e: CLOTH },
+      { t: [T.reread[0], T.settleOpen + 0.3], to: { x: 930, y: a1.y + 130, z: 1.85 }, e: CLOTH },
+      { t: [T.breath2, T.tie2 + 0.1], to: { x: 972, y: a1.y + 50, z: 4.0 }, e: GLIDE },
+      { t: [T.fly2[0] - 0.1, T.fly2[1] + 0.3], to: { x: 800, y: 210, z: 1.35 }, e: CLOTH },
+      { t: [T.fly2[1] + 0.5, T.p4[1] + 0.6], to: { x: 650, y: 330, z: 1.4 }, e: CLOTH },
+      // ch3: asking
+      { t: [c3 + 0.3, T.sel3[1]], to: { x: (a2.x + a2.r) / 2 + 120, y: a2.y + 10, z: 1.9 }, e: CLOTH },
+      { t: [T.sew3[0], T.sew3[1]], to: { x: (a2.x + a2.r) / 2 + 60, y: a2.y + 18, z: 2.3 }, e: GLIDE },
+      { t: [T.carry3 - 0.1, T.open3 + 0.3], to: { x: 1040, y: a2.y + 70, z: 1.95 }, e: CLOTH },
+      { t: [T.fold3, T.sel4[1]], to: { x: (a3.x + a3.r) / 2, y: a3.y + 30, z: 1.75 }, e: CLOTH },
+      { t: [T.send4, T.carry4 + 0.6], to: { x: 330, y: a3.y + 150, z: 1.7 }, e: CLOTH },
+      { t: [T.fold4 - 0.2, T.sel5[1]], to: { x: (a4.x + a4.r) / 2 + 160, y: a4.y + 40, z: 1.7 }, e: CLOTH },
+      { t: [T.send5, T.carry5 + 0.3], to: { x: 780, y: a4.y + 50, z: 1.6 }, e: CLOTH },
+      { t: [T.open5 - 0.2, T.hov5b], to: { x: 1040, y: a4.y + 140, z: 1.8 }, e: CLOTH },
+      { t: [T.hov5b - 0.1, T.hov5c], to: { x: 1040, y: a4.y + 190, z: 1.8 }, e: CLOTH },
+      { t: [T.hov5c - 0.1, T.fold5], to: { x: 1040, y: a4.y + 240, z: 1.8 }, e: CLOTH },
+      { t: [T.fold5, T.p5[1]], to: { x: 640, y: b5.y + 10, z: 1.75 }, e: CLOTH },
+      { t: [T.carry6 - 0.2, T.carry6 + 0.6], to: { x: 360, y: b5.y + 40, z: 1.7 }, e: CLOTH },
+      { t: [T.wipe7[0], T.wipe7[1]], to: { x: 760, y: 300, z: 1.75 }, e: CLOTH },
+      { t: [T.sew7[0], T.carry7 + 0.4], to: { x: 900, y: 320, z: 1.7 }, e: CLOTH },
+      { t: [T.idea7, T.steps7[0]], to: { x: 1060, y: 470, z: 1.4 }, e: CLOTH },
+      { t: [T.steps7[0], T.larger7], to: { x: 1070, y: 560, z: 1.32 }, e: GLIDE },
+      { t: [T.big7[0], T.big7[0] + 0.6], to: { x: 660, y: 430, z: 1.25 }, e: CLOTH },
+      { t: [T.wipe8[0], T.wipe8[1]], to: { x: 640, y: 200, z: 1.6 }, e: CLOTH },
+      { t: [T.save8, T.chatIn8[1]], to: { x: 860, y: 330, z: 1.35 }, e: CLOTH },
+      { t: [T.chatType8[0], T.chatStream8[0]], to: { x: 1110, y: 300, z: 1.75 }, e: CLOTH },
+      { t: [T.chatStream8[0], T.chatStream8[1]], to: { x: 1130, y: 360, z: 1.75 }, e: GLIDE },
+      // ch4: threads
+      { t: [c4, c4 + 1.0], to: { x: 660, y: 300 + brief, z: 1.3 }, e: CLOTH },
+      { t: [c4 + 1.2, c4 + 3.0], to: { x: 520, y: 330 + brief, z: 1.75 }, e: GLIDE },
+      { t: [T.hov9[0] - 0.3, T.hov9[5]], to: { x: 1000, y: a4.y + 90 + brief, z: 1.75 }, e: CLOTH },
+      { t: [T.jump9[0], T.jump9[0] + 0.45], to: { x: 300, y: a3.y + 80 + brief, z: 1.85 }, e: CLOTH },
+      { t: [T.jump9[1], T.jump9[1] + 0.45], to: { x: 1040, y: a4.y + 80 + brief, z: 1.85 }, e: CLOTH },
+      { t: [T.drag9[0] - 0.6, T.drag9[1]], to: { x: 1000, y: a2.y + 120 + brief, z: 1.55 }, e: CLOTH },
+      { t: [T.replyFocus9, T.answer9[1]], to: { x: 1010, y: a2.y + 300 + brief, z: 1.6 }, e: GLIDE },
+      { t: [T.breath9, T.tie9 + 0.1], to: { x: 1040, y: a2.y + 28 + 100, z: 2.7 }, e: GLIDE },
+      { t: [T.fly9[0] - 0.1, T.fly9[1] + 0.3], to: { x: 820, y: 240, z: 1.3 }, e: CLOTH },
+      { t: [T.open10 - 0.6, T.open10], to: { x: 330, y: a3.y + 130 + brief, z: 1.75 }, e: CLOTH },
+      { t: [T.snip10 - 0.001, T.snip10], to: { x: 560, y: 560, z: 1.22 }, e: (k) => k },
+      { t: [T.undo10 + 0.6, T.reopen11], to: { x: 900, y: a2.y + 150 + brief, z: 1.6 }, e: CLOTH },
+      { t: [T.hide12 - 0.4, T.hide12 + 0.2], to: { x: 660, y: 300 + brief, z: 1.32 }, e: CLOTH },
+      { t: [T.right13 - 0.2, T.both13 + 0.4], to: { x: 700, y: 320 + brief, z: 1.28 }, e: GLIDE },
+      // ch5: Settings, then back to the note
+      { t: [c5 - 0.01, c5], to: setFocus("NewMind", "chips", 0, 1.75, 30), e: (k) => k },
+      { t: [T.blank15, T.desc15[1]], to: setFocus("NewMind", "mind", 0, 1.6, 0), e: CLOTH },
+      { t: [T.how15[0], T.voice15], to: setFocus("NewMind", "speak", 300, 1.6, -40), e: GLIDE },
+      { t: [T.pan16[0], T.pan16[1]], to: { x: 640, y: 260 + brief, z: 1.6 }, e: CLOTH },
+      { t: [T.p6[0], T.p6[1]], to: { x: 640, y: b6.y + brief, z: 1.75 }, e: GLIDE },
+      { t: [T.carry16 - 0.2, T.open16 + 0.4], to: { x: 960, y: b6.y + 110 + brief, z: 1.75 }, e: CLOTH },
+      { t: [T.open16 + 1.6, T.wipe17[0]], to: { x: 800, y: 350 + brief, z: 1.35 }, e: GLIDE },
+    ];
+    // ch6 and ch7: the montages cut on the beat; each beat sets its own framing (cuts, not moves)
+    const cut = (t0, to, drift) => { CAM.push({ t: [t0 - 0.001, t0], to, e: (k) => k }); if (drift) CAM.push({ t: [t0 + 0.02, t0 + drift.d], to: drift.to, e: GLIDE }); };
+    const sx = (x) => SET.x + x, sy = (y) => SET.y + y;
+    const F = (pane, key, sc, z, dz, dy) => { const a = setFocus(pane, key, sc, z, dy); return [a, { ...a, z: a.z * (1 + (dz || 0.05)) }]; };
+    let f;
+    f = F("Appearance", "look", 0, 1.75, 0.05, 40); cut(c6, f[0], { d: 2.5, to: f[1] });
+    f = F("Appearance", "dots", SCROLL.ink, 2.3, 0.06); cut(M6.ink, f[0], { d: 2.5, to: f[1] });
+    f = F("Appearance", "letter", SCROLL.letter, 2.0); cut(M6.letter, f[0], { d: 1.2, to: f[1] });
+    f = F("Appearance", "size", SCROLL.size, 2.0); cut(M6.size, f[0], { d: 1.2, to: f[1] });
+    cut(M6.mode, { x: 560, y: 150, z: 2.1 }, { d: 1.2, to: { x: 560, y: 160, z: 2.2 } });
+    f = F("Reading", "pace", 0, 2.1); cut(M6.pace, f[0], { d: 1.2, to: f[1] });
+    f = F("Appearance", "inkdrop", SCROLL.drop, 2.3); cut(M6.drop, f[0], null);
+    cut(M6.drop + 0.6, { x: 900, y: 470, z: 2.0 }, { d: 1.9, to: { x: 905, y: 475, z: 2.1 } });
+    cut(M6.speak, { x: 980, y: 600 + brief, z: 1.6 }, { d: 2.4, to: { x: 1000, y: 610 + brief, z: 1.72 } });
+    f = F("About you", "learn", 0, 1.75, 0.05, 90); cut(M6.learn, f[0], { d: 1.8, to: f[1] });
+    f = F("Shortcuts", "hide", SCROLL.keys, 2.1, 0.05, -40); cut(M6.keys, f[0], { d: 1.8, to: f[1] });
+    cut(c7, { x: 380, y: 330 + brief, z: 1.45 }, null);
+    cut(M7.side, { x: 380, y: 330, z: 1.45 }, { d: 2.4, to: { x: 400, y: 330, z: 1.55 } });
+    cut(M7.find, { x: 660, y: 330, z: 1.5 }, { d: 1.8, to: { x: 660, y: 330, z: 1.58 } });
+    cut(M7.copy, { x: 660, y: 640, z: 1.4 }, { d: 1.2, to: { x: 660, y: 660, z: 1.48 } });
+    cut(M7.exp, { x: 660, y: 430, z: 1.75 }, { d: 2.4, to: { x: 660, y: 430, z: 1.86 } });
+    cut(M7.obs, { x: 390, y: 200, z: 1.55 }, { d: 2.4, to: { x: 400, y: 215, z: 1.62 } });
+    cut(M7.help, { x: 470, y: 130, z: 1.55 }, { d: 1.2, to: { x: 520, y: 200, z: 1.4 } });
+    f = F("Model", "models", SCROLL.model, 1.65, 0.05, 40); cut(M7.model, f[0], { d: 2.4, to: f[1] });
+    f = F("Model", "claude", 0, 2.0); cut(M7.claude, f[0], { d: 1.2, to: f[1] });
+    cut(M7.blocks, { x: 760, y: blk("p4").y + brief + 40, z: 1.75 }, { d: 1.6, to: { x: 760, y: blk("p4").y + brief + 40, z: 1.85 } });
+    // the end: to the Coach's tag, up with its knot to the border, and in on the border
+    CAM.push({ t: [cEnd, cEnd + 0.7], to: { x: 990, y: b6.y + 150 + brief, z: 1.7 }, e: CLOTH });
+    CAM.push({ t: [ED.breath, ED.tie + 0.1], to: { x: 974, y: b6.y + brief + 52, z: 3.8 }, e: GLIDE });
+    CAM.push({ t: [ED.fly[0] - 0.05, ED.fly[1] + 0.25], to: { x: 660, y: 92, z: 2.2 }, e: CLOTH });
+    CAM.push({ t: [ED.fly[1] + 0.25, ED.weave[1]], to: { x: 660, y: 90, z: 2.5 }, e: GLIDE });
+  }
+
+  // ======================================================================= captions
+  // Stitched in behind a needle, tied off when their beat ends. `kind`: title (Fraunces
+  // Display) or label (Figtree). Each sits on a patch of the page, sewn on.
+  const CAPS = [];
+  const cap = (t0, t1, text, o = {}) => CAPS.push({ t0, t1, text, kind: o.kind || "title", keys: o.keys, at: o.at || "bl", size: o.size });
+  cap(c1 + 0.6, c1 + 2.95, "A new notebook opens on a guide. Everything on it works.", { kind: "label" });
+  cap(c1 + 3.05, c1 + 5.45, "Mostly it stays quiet. Sometimes it answers with a sketch.", { kind: "label" });
+  cap(T.hover1 + 0.6, T.wipe1[0] - 0.1, "Your first sentence always gets a question.");
+  cap(T.title2[0] + 0.3, T.p1[0] + 2.4, "No bar. The controls fade while you write.", { kind: "label" });
+  cap(T.read2a[0] - 0.1, T.p2[1] - 0.3, "It reads each paragraph when you pause.");
+  cap(T.t1arrive + 0.1, T.pause2 + 1.5, "A question that comes mid-sentence waits, folded.", { kind: "label" });
+  cap(T.t1hover + 0.2, T.t1fold, "When a line doesn’t add up, it pulls a thread.");
+  cap(T.e1sel, T.settle[0], "Fix the words. It reads them again.");
+  cap(T.breath2, T.fade2[0] + 0.3, "The problem is gone, so the thread ties itself off.");
+  cap(T.sel3[0] + 0.3, T.fold3, "Select words. ⌘↵ finds the loose thread in them.", { kind: "label", keys: { at: T.find3, k: ["⌘", "↵"] } });
+  cap(T.bar4, T.fold4 - 0.1, "Ask your own question.");
+  cap(T.bar5, T.send5 + 0.2, "Ask the room: up to three minds at once.");
+  cap(T.open5 + 0.2, T.fold5, "Each answers on its own thread, in its own colour.");
+  cap(T.p5[0] + 0.2, T.wipe7[0] - 0.1, "Or start a sentence with a mind’s name.");
+  cap(T.sel7 + 0.2, T.larger7 - 0.2, "Sketch it: a drawing, stitched out step by step.");
+  cap(T.larger7, T.wipe8[0], "Click a sketch to see it larger.", { kind: "label" });
+  cap(T.tell8, T.chatKey8 - 0.15, "Tell Inkling what the note is for.");
+  cap(T.chatKey8, T.chatStream8[1] + 0.2, "A chat about the whole note. It has read every thread.", { kind: "label", keys: { at: T.chatKey8, k: ["⌘", "J"] } });
+  cap(c4 + 1.1, T.hov9[0] - 0.2, "Open questions are numbered, with a knot in the gutter.", { kind: "label" });
+  cap(T.hov9[0], T.jump9[0] - 0.1, "Tags fold away. Point at one to read it.");
+  cap(T.jump9[0], T.drag9[0] - 0.2, "Jump to the next loose thread.", { kind: "label", keys: { at: T.jump9[0], k: ["⌥", "⌘", "↓"], again: T.jump9[1] } });
+  cap(T.drag9[0], T.replyFocus9, "Drag a tag anywhere. It opens toward the room.", { kind: "label" });
+  cap(T.replyFocus9 + 0.2, T.resolveHov9 - 0.1, "Write back. The mind answers in the same thread.");
+  cap(T.resolveHov9, T.fade9[1], "Resolve ties it off. The knot joins the border.");
+  cap(T.open10 + 0.1, T.undo10 + 1.5, "Dismiss snips it. ⌥⌘Z brings it back.", { kind: "label", keys: { at: T.dis10, k: ["⇧", "⌘", "⌫"], again: T.undo10, k2: ["⌥", "⌘", "Z"] } });
+  cap(T.reopen11 + 0.1, T.hide12 - 0.3, "Reopen it, copy it, or make it a note of its own.", { kind: "label" });
+  cap(T.hide12, T.show12 + 0.6, "Hide every thread. Just your words.", { kind: "label", keys: { at: T.hide12, k: ["⇧", "⌘", "."], again: T.show12 } });
+  cap(T.right13, T.snip14 - 0.3, "Both margins, the right margin, or marks only.", { kind: "label" });
+  cap(T.chips15 - 0.2, T.blank15 + 0.6, "Built in: Inkling, Staff engineer, Editor, Skeptic, Socratic tutor and Investor.", { kind: "label" });
+  cap(T.blank15 + 0.8, T.pan16[0], "Make your own: what it is for, how it thinks, how it speaks.");
+  cap(T.menu16, T.p6[0] + 0.3, "Pick the note’s mind, above the title.");
+  cap(T.open16 + 0.2, T.wipe17[0], "Each mind keeps its own thread colour.");
+  const lab = (t0, t1, text, keys) => cap(t0 + 0.06, t1 - 0.04, text, { kind: "label", keys });
+  lab(M6.dark, M6.ink, "Linen, Lamplight, or follow the system.");
+  lab(M6.ink, M6.letter, "Your thread colour.");
+  lab(M6.letter, M6.size, "Inkling’s lettering: its own, or like your notes.");
+  lab(M6.size, M6.mode, "Text size.");
+  lab(M6.mode, M6.pace, "Reads along, or waits to be asked. Per note.");
+  lab(M6.pace, M6.drop, "Reading pace: regular, or slow.");
+  lab(M6.drop, M6.speak, "Ink from the pointer.");
+  lab(M6.speak, M6.learn, "Hold ⌥ to speak. The words appear as you talk.", { at: M6.speak + 0.15, k: ["⌥"], hold: 1.8 });
+  lab(M6.learn, M6.keys, "Inkling can learn about you from your replies.");
+  lab(M6.keys, M6.end, "Every shortcut can be changed.");
+  lab(M7.side, M7.find, "Your notes and folders. A dot marks open threads.", { at: M7.side + 0.1, k: ["⌘", "\\"] });
+  lab(M7.find, M7.copy, "Find a note, or start one.", { at: M7.find + 0.1, k: ["⌘", "K"] });
+  lab(M7.copy, M7.exp, "Copy a note as Markdown.", { at: M7.copy + 0.1, k: ["⇧", "⌘", "C"] });
+  lab(M7.exp, M7.obs, "Export to Markdown, Word or HTML, with the threads or without.", { at: M7.exp + 0.1, k: ["⇧", "⌘", "E"] });
+  lab(M7.obs, M7.help, "File › Import from Obsidian: a vault comes in, folders and all.");
+  lab(M7.help, M7.model, "Help › Welcome Guide.");
+  lab(M7.model, M7.claude, "Pick the model, and how much effort it spends.");
+  lab(M7.claude, M7.blocks, "It runs on the Claude login already on this Mac.");
+  lab(M7.blocks, M7.end, "Title, three heading sizes, lists and quotes.");
+
+  // chapters: woven labels that hang in on a thread, then tie off; the knot flies to the border
+  const CH = [
+    { n: 1, name: "Start here", t: c1 - 0.6, c: "madder", x: 1430 }, { n: 2, name: "Reading along", t: c2 + 0.35, c: "madder", x: 1420 }, { n: 3, name: "Asking", t: c3 + 0.0, c: "indigo", x: 470 },
+    { n: 4, name: "Threads", t: c4 + 0.6, c: "ochre", x: 1450 }, { n: 5, name: "Minds", t: c5 + 0.1, c: "sage", x: 1460 }, { n: 6, name: "Make it yours", t: c6 + 0.0, c: "plum", x: 1420 }, { n: 7, name: "Your notebook", t: c7 + 0.0, c: "walnut", x: 1430 },
+  ];
+  const CH_HOLD = 2.6;
+
+  // ======================================================================= the end: Darn · Border
+  // Every thread you tie off adds a darn to the note's border, each in its own weave. The
+  // border's motifs give way to the darns, woven warp first and then weft, block by block;
+  // the woven band moves into the icon, and the wordmark is sewn on, dotted with a cross.
+  let LG = null;
+  function buildLogo() {
+    const P = new DOMParser();
+    const host = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    host.setAttribute("style", "position:absolute;left:-99999px;top:0;width:1024px;height:1024px");
+    document.body.appendChild(host);
+    const parse = (src) => { const d = P.parseFromString(src, "image/svg+xml").documentElement; d.querySelectorAll("style").forEach((n) => n.remove()); return d; };
+    // the icon (dark: the film ends in Lamplight); its parts by colour
+    const ic = parse(LOGO.iconDark);
+    const items = [];
+    ic.querySelectorAll("path,rect").forEach((el) => {
+      if (el.closest("clipPath")) return;
+      const fill = (el.getAttribute("fill") || "").toUpperCase();
+      const clone = el.cloneNode(true);
+      host.appendChild(clone);
+      const b = clone.getBBox();
+      clone.remove();
+      const role = fill === "#D9705E" ? "warp" : fill === "#EDE6DA" ? "weft" : el.tagName === "rect" ? "line" : "tile";
+      items.push({ role, html: el.outerHTML.replace(/fill="#[0-9A-Fa-f]+"/, ""), b: { x: b.x, y: b.y, w: b.width, h: b.height } });
+    });
+    const band = items.filter((i) => i.role === "warp" || i.role === "weft");
+    const bx0 = Math.min(...band.map((i) => i.b.x)), bx1 = Math.max(...band.map((i) => i.b.x + i.b.w)), by0 = Math.min(...band.map((i) => i.b.y)), by1 = Math.max(...band.map((i) => i.b.y + i.b.h));
+    // the darn blocks: warp stitches grouped where there is a gap along the band
+    const warp = band.filter((i) => i.role === "warp").sort((a, b) => a.b.x - b.b.x);
+    const blocks = [];
+    warp.forEach((w) => { const last = blocks[blocks.length - 1]; if (!last || w.b.x - last.x1 > 14) blocks.push({ x0: w.b.x, x1: w.b.x + w.b.w }); else last.x1 = Math.max(last.x1, w.b.x + w.b.w); });
+    band.forEach((i) => { const cx = i.b.x + i.b.w / 2; i.block = Math.max(0, blocks.findIndex((bl) => cx >= bl.x0 - 8 && cx <= bl.x1 + 8)); });
+    // the wordmark: letters in ink, the cross in madder
+    const wm = parse(LOGO.wordmark);
+    const vb = wm.getAttribute("viewBox").split(/\s+/).map(Number);
+    const letters = [], cross = [];
+    wm.querySelectorAll("path").forEach((el) => { (el.getAttribute("class") === "mad" ? cross : letters).push(el.getAttribute("d")); });
+    host.remove();
+    LG = { items, band: { x0: bx0, x1: bx1, y0: by0, y1: by1 }, blocks, letters, cross, vb };
+  }
+  function endHTML(t, cam) {
+    if (t < ED.fly[1] - 0.05 || !LG) return "";
+    const B0 = LG.band, bw = B0.x1 - B0.x0, bh = B0.y1 - B0.y0;
+    // where the band is: first over the page's border, then in the icon
+    const at = toScreen(cam, 660, 68);
+    const sWeave = 820 / bw;
+    const icon = { x: 470, y: 330, size: 400 };
+    const sIcon = icon.size / 1024;
+    const m = CLOTH(prog(t, ...ED.morph));
+    const s0 = sWeave, s1 = sIcon;
+    const sc = lerp(s0, s1, m);
+    const cx = lerp(at[0], icon.x + ((B0.x0 + B0.x1) / 2) * sIcon, m), cy = lerp(at[1] + 4, icon.y + ((B0.y0 + B0.y1) / 2) * sIcon, m);
+    const tx = cx - ((B0.x0 + B0.x1) / 2) * sc, ty = cy - ((B0.y0 + B0.y1) / 2) * sc;
+    const W = prog(t, ...ED.weave), nb = LG.blocks.length;
+    let band = "", rest = "";
+    for (const it of LG.items) {
+      if (it.role === "warp" || it.role === "weft") {
+        // each block: its warp drops in, then its weft is woven across
+        const b0 = it.block / nb, b1 = (it.block + 1) / nb;
+        const k = prog(W, b0, b1);
+        const bl = LG.blocks[it.block];
+        const rel = it.role === "warp" ? (it.b.x - bl.x0) / Math.max(1, bl.x1 - bl.x0) : (it.b.y - B0.y0) / Math.max(1, bh);
+        const g = it.role === "warp" ? clamp((k / 0.55 - rel * 0.5) * 2) : clamp(((k - 0.5) / 0.5 - rel * 0.55) * 2.2);
+        if (g <= 0) continue;
+        const e = E.out(g);
+        const tr = it.role === "warp" ? `translate(0 ${fx(it.b.y)}) scale(1 ${fx(e)}) translate(0 ${fx(-it.b.y)})` : `translate(${fx(it.b.x)} 0) scale(${fx(e)} 1) translate(${fx(-it.b.x)} 0)`;
+        band += `<g transform="${tr}" style="fill:${it.role === "warp" ? "var(--madder)" : "var(--ink)"}">${it.html}</g>`;
+      } else {
+        const k = it.role === "tile" ? E.out(prog(t, ED.morph[0] + 0.25, ED.morph[1])) : clamp((prog(t, ED.morph[0] + 0.5, ED.morph[1] + 0.3) * 1.4 - (it.b.y - 400) / 700 * 0.4 - (it.b.x - 100) / 800 * 0.3) * 1.6);
+        if (k <= 0) continue;
+        rest += it.role === "tile" ? `<g style="fill:var(--paper)" opacity="${fx(k)}">${it.html}</g>` : `<g transform="translate(${fx(it.b.x)} 0) scale(${fx(E.out(k))} 1) translate(${fx(-it.b.x)} 0)" style="fill:color-mix(in srgb,var(--rule) 70%,var(--faint))" opacity="${fx(k)}">${it.html}</g>`;
+      }
+    }
     let html = "";
-    for (let k = 0; k < pts.length; k++) {
-      const p = pts[k];
-      if (caret === p) html += '<span class="cm"></span>';
-      if (k === pts.length - 1) break;
-      const q = pts[k + 1], seg = text.slice(p, q);
-      if (!seg) continue;
-      const on = ranges.filter((r) => r.a <= p && r.b >= q);
-      if (!on.length) { html += esc(seg); continue; }
-      const ids = on.filter((r) => r.id).map((r) => r.id).join(" ");
-      html += `<span class="${on.map((r) => r.cls).join(" ")}"${ids ? ` data-a="${ids}"` : ""}>${esc(seg)}</span>`;
+    const plate = prog(t, ED.morph[0], ED.morph[0] + 0.8);
+    if (plate > 0) html += `<div style="position:absolute;inset:0;background-color:var(--cloth);background-image:var(--weave);background-size:48px 48px;opacity:${fx(plate)}"></div>`;
+    html += `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">`;
+    if (rest) html += `<g transform="translate(${fx(icon.x)} ${fx(icon.y)}) scale(${fx(sIcon)})">${rest}</g>`;
+    html += `<g transform="translate(${fx(tx)} ${fx(ty)}) scale(${fx(sc)})">${band}</g>`;
+    // the wordmark, sewn on beside the icon, and its cross-stitch dot
+    const vb = LG.vb, ws = 590 / vb[2], wx = 960, wy = 400;
+    const rk = prog(t, ...ED.word);
+    if (rk > 0) {
+      const reveal = vb[0] + E.io(rk) * (vb[2] + 10);
+      html += `<defs><clipPath id="wmclip"><rect x="${fx(vb[0] - 5)}" y="${fx(vb[1] - 5)}" width="${fx(Math.max(0, reveal - vb[0] + 5))}" height="${fx(vb[3] + 10)}"/></clipPath></defs>`;
+      html += `<g transform="translate(${fx(wx - vb[0] * ws)} ${fx(wy - vb[1] * ws)}) scale(${fx(ws)})"><g clip-path="url(#wmclip)" style="fill:var(--ink)">${LG.letters.map((d) => `<path d="${d}"/>`).join("")}</g>`;
+      LG.cross.forEach((d, i) => {
+        const k = knotScale(t - (i ? ED.dot[1] : ED.dot[0]));
+        if (k <= 0) return;
+        html += `<g transform="translate(0 0)"><path d="${d}" style="fill:var(--madder)" opacity="${fx(clamp(k))}" transform="scale(1)"/></g>`;
+      });
+      html += `</g>`;
+      if (rk < 1) { const nx = wx + (reveal - vb[0]) * ws; html += `<g transform="translate(${fx(nx)} ${fx(wy + 230)}) scale(2.4)">${A.NEEDLE(0, -7, (t * 2.4) % 1, "var(--graphite)")}</g>`; }
+    }
+    html += `</svg>`;
+    // one line under the mark
+    const lk = prog(t, ...ED.line);
+    if (lk > 0) {
+      const line = "Every thread you tie off adds a darn to the border.";
+      const reveal = E.io(lk) * 1300;
+      html += `<div style="position:absolute;left:0;right:0;top:${fx(790 + (1 - E.out(lk)) * 8)}px;text-align:center;font:400 34px/1.3 Figtree;color:var(--graphite);-webkit-mask-image:linear-gradient(90deg,#000 ${fx(310 + reveal - 40)}px,transparent ${fx(310 + reveal)}px)">${line}</div>`;
     }
     return html;
   }
 
-  // ======================================================================== renderAt
-  let lastT = -1;
-  const st = { rects: {}, stitchCounts: {} };
+  // ======================================================================= the pointer
+  // Moves ease like a hand, on a slight arc; a press dips it. Targets: world points, or
+  // functions of the frame's measured geometry.
+  const PTR = [];
+  const ptr = (t0, t1, to, o = {}) => PTR.push({ t0, t1, to, ibeam: o.ibeam, from: o.from, show: o.show });
 
+  // ======================================================================= frames
+  function worldState(t) {
+    // which note the main window shows, and what else is on the desk
+    const L = looks(t);
+    let main = null, settings = null, extra = "";
+    if (t < c2) {
+      const page = startPage(t);
+      main = { page, chromeOp: page.header.op };
+    } else if (within(t, M7.help + 0.7, M7.model)) {
+      const page = startPage(T.glide0); page.scroll = 0; page.header.op = 1;
+      main = { page, chromeOp: 1 };
+    } else if (within(t, T.wipe7[0], T.wipe8[0])) {
+      main = { page: breadPage(t), chromeOp: 1 };
+    } else {
+      const { page } = mainNote(t);
+      main = { page, chromeOp: page.header.op };
+    }
+    return { main, L };
+  }
+
+  /** Renders one shot of the desk into a scene layer. */
+  function renderShot(layer, t, cam, state, o = {}) {
+    const L = state.L;
+    A.applyTheme(layer, L.dark, L.ink, { note: L.note, lettering: L.lettering });
+    const world = layer.querySelector(".world");
+    world.style.transform = `translate(${fx(960 - cam.x * cam.z)}px, ${fx(540 - cam.y * cam.z)}px) scale(${fx(cam.z * 1000) / 1000})`;
+    let html = `<div class="desk"></div><div class="win" id="${layer.id}-win"></div>`;
+    if (o.settings) html += `<div class="setwin" style="position:absolute;left:${SET.x}px;top:${SET.y}px;opacity:${fx(o.settings.op == null ? 1 : o.settings.op)};transform:translateY(${fx((1 - (o.settings.op == null ? 1 : o.settings.op)) * 24)}px)"></div>`;
+    if (o.worldHTML) html += o.worldHTML;
+    world.innerHTML = html;
+    const win = world.querySelector(".win");
+    const W = Object.assign({ voice: L.ink }, state.main, o.win || {});
+    const geo = A.renderWindow(win, W, t, cam.z);
+    if (o.settings) window.SETTINGS.render(world.querySelector(".setwin"), o.settings, t);
+    return geo;
+  }
+
+  // ======================================================================= renderAt
+  let lastGeo = null;
   function renderAt(t) {
-    lastT = t;
-    const c = cam(t);
-    applyTheme(themeAt(t));
-    $("#world").style.transform = `translate(${fx(960 - c.x * c.s)}px, ${fx(TOP)}px) scale(${c.s})`;
-
-    // ---- the window: rises onto the linen, sinks at the end
-    const win = $("#win");
-    const wk = easeOut(prog(t, T.win0, T.win1)), wo = easeIO(prog(t, T.winOut[0], T.winOut[1]));
-    win.style.opacity = String(fx(wk * (1 - wo)));
-    win.style.transform = `translateY(${fx((1 - wk) * 18 + wo * 26)}px) scale(${fx(0.985 + 0.015 * wk)})`;
-    win.style.visibility = wk * (1 - wo) > 0.001 ? "visible" : "hidden";
-    $("#tb-wm").style.opacity = t >= T.fly1 ? "1" : "0";
-
-    renderNote(t, c);
-    renderOpen(t, c);
-    renderClose(t);
-    renderCaption(t);
-    renderPointer(t, c);
-    renderKeys(t);
-    $("#fade").style.opacity = String(fx(easeIn(prog(t, T.fadeOut[0], T.fadeOut[1]))));
+    let cam = camAt(t);
+    const A_ = $("#sceneA"), B_ = $("#sceneB");
+    B_.style.display = "none";
+    B_.style.clipPath = "";
+    const st = worldState(t);
+    // transitions show two moments at once; they render both layers themselves
+    const tr = transitionAt(t);
+    let fxHTML = "", geo;
+    if (tr) { const r = tr(t, A_, B_); fxHTML = r.html; geo = r.geo; cam = r.cam; }
+    else geo = renderShot(A_, t, cam, st, shotExtras(t));
+    lastGeo = geo;
+    A.applyTheme($("#stage"), st.L.dark, st.L.ink, {});
+    $("#fx").innerHTML = fxHTML + coldOpenFX(t, cam);
+    const endK = prog(t, ED.morph[0], ED.morph[0] + 0.8);
+    A_.style.opacity = String(fx(1 - endK));
+    $("#film").innerHTML = captionsHTML(t) + chaptersHTML(t) + borderHTML(t) + keysHTML(t) + flyHTML(t, cam, geo) + endHTML(t, cam);
+    renderPointer(t, cam, geo);
+    $("#fade").style.opacity = String(fx(Math.max(1 - prog(t, 0, 0.8), prog(t, DUR - 1.2, DUR))));
   }
 
-  // ---------------------------------------------------------------- the note page
-  function renderNote(t, c) {
-    const open = NUM(t), nOpen = open.length;
-    const hideK = easeOut(prog(t, T.hide[0], T.hide[1])) * (1 - easeOut(prog(t, T.show[0], T.show[1])));
-    const hidden = t >= T.hideClick && t < T.showClick;
-    const markOp = 1 - hideK;
-
-    // header row (the app's `header`): mind, Tell Inkling, mode, then what is loose and Hide threads
-    const briefSet = t >= T.briefSet;
-    const hov = (a, b) => within(t, a, b) ? " hov" : "";
-    $("#nh").innerHTML =
-      `<span class="mind" style="opacity:${fx(markOp)}"><span class="dot" style="width:7px;height:7px"></span>Inkling${CHEV}</span>` +
-      (briefSet ? "" : `<span class="it${hov(72.2, 72.6)}" style="opacity:${fx(markOp)}">${PENCIL}Tell Inkling</span>`) +
-      `<span class="it" style="opacity:${fx(markOp)}">Reads along${CHEV}</span><span class="grow"></span>` +
-      (nOpen ? `<span class="it" style="opacity:${fx(markOp)}"><span class="dot" style="width:7px;height:7px"></span>${nOpen} loose thread${nOpen === 1 ? "" : "s"}</span>` : "") +
-      `<span class="it${hov(87.6, 87.95) || hov(89.45, 89.75)}">${hidden ? "Show threads" : "Hide threads"}</span>`;
-
-    // the brief line: an input while you type it, then the brief itself
-    const bh = easeOut(prog(t, T.briefOpen[0], T.briefOpen[1])) * 40;
-    const bl = $("#briefline");
-    bl.style.height = fx(bh) + "px";
-    if (t >= T.briefOpen[0] && t < T.briefSet) {
-      const n = count(S.brief, t);
-      const typing = t - lastKey(S.brief, t) < 0.5;
-      bl.innerHTML = `<div class="bin">${PENCIL}<span style="position:relative">${n ? esc(TXT.brief.slice(0, n)) : '<span style="color:var(--fg3)">What is this note for?</span>'}${caretSpan(t, typing)}</span></div>`;
-    } else if (briefSet) {
-      bl.innerHTML = `<div class="bset">${PENCIL}<b>For this note:</b><span>${esc(TXT.brief)}</span></div>`;
-    } else bl.innerHTML = "";
-    const vpTop = 52 + bh;
-    $("#vp").style.top = fx(vpTop) + "px";
-    $("#content").style.transform = `translateY(${fx(-c.scroll)}px)`;
-
-    // sidebar
-    const titleN = count(S.title, t);
-    $("#side").innerHTML = sideHTML(TXT.title.slice(0, titleN), nOpen);
-
-    // ---- the words
-    const title = $("#n-title");
-    const focusTitle = t >= T.win0 && t < T.enter.p1;
-    if (titleN === 0) { title.className = "n-title ph"; title.innerHTML = (focusTitle ? '<span class="cm"></span>' : "") + "Untitled"; }
-    else { title.className = "n-title"; title.innerHTML = markup(TXT.title.slice(0, titleN), [], focusTitle ? titleN : null); }
-
-    const blocks = blocksAt(t);
-    const rows = $("#rows");
-    let html = "";
-    for (const b of blocks) html += `<div class="gut" data-p="${b.id}">${gutterHTML(b.id, t)}</div><p class="para" data-p="${b.id}">${markup(b.text, b.ranges, b.caret)}</p>`;
-    rows.innerHTML = html;
-    $$(".gut", rows).forEach((g) => (g.style.opacity = String(fx(markOp))));
-
-    // the caret: wherever the writer's focus is
-    placeCaret(t, c.s);
-
-    // ---- measure what the threads hang from
-    const content = $("#content"), cr = content.getBoundingClientRect(), s = c.s;
-    const rel = (r) => ({ x: (r.left - cr.left) / s, y: (r.top - cr.top) / s, r: (r.right - cr.left) / s, b: (r.bottom - cr.top) / s });
-    const lineRects = (id) => {
-      const rs = [];
-      $$(`[data-a~="${id}"]`, rows).forEach((sp) => Array.from(sp.getClientRects()).forEach((r) => { if (r.width > 1) rs.push(rel(r)); }));
-      // one rect per line
-      const lines = [];
-      rs.sort((a, b) => a.y - b.y || a.x - b.x).forEach((r) => {
-        const L = lines.find((l) => Math.abs(l.y - r.y) < 4);
-        if (L) { L.x = Math.min(L.x, r.x); L.r = Math.max(L.r, r.r); L.b = Math.max(L.b, r.b); }
-        else lines.push({ ...r });
-      });
-      return lines;
-    };
-    st.rel = rel; st.lineRects = lineRects; st.scale = s;
-
-    // ---- the band: one motif per tied thread
-    renderBand(t, markOp);
-
-    // ---- tags, ropes, stitches
-    renderThreads(t, c, open, markOp);
-    renderCards(t);
-    renderChat(t);
-  }
-
-  function caretSpan(t, typing) {
-    const on = typing || Math.floor(t / 0.53) % 2 === 0;
-    return on ? '<span class="icaret"></span>' : '<span class="icaret" style="opacity:0"></span>';
-  }
-
-  /** The note's paragraphs at time t, each with its anchors, selection and caret. */
-  function blocksAt(t) {
-    const out = [];
-    const caretIn = focusAt(t);
-    const add = (id, text, ranges, sel, caret) => {
-      const rs = ranges.slice();
-      if (sel && sel[1] > sel[0]) rs.push({ a: sel[0], b: sel[1], cls: "sel" });
-      out.push({ id, text, ranges: rs, caret: caretIn === id ? caret : null });
-    };
-    if (t >= T.enter.p1) add("p1", TXT.p1.slice(0, count(S.p1, t)), [], null, count(S.p1, t));
-    if (t >= T.enter.p2) {
-      const p = p2At(t), rs = [];
-      const i1 = p.text.indexOf("If I hold");
-      if (t >= T.t1Arrive && i1 >= 0 && p.text.length === p.text.length) rs.push({ a: i1, b: p.text.length, cls: "anc" + (t >= T.t1Open && t < T.t1Knot ? " on" : ""), id: "t1" });
-      const ir = p.text.indexOf(TXT.roomTarget);
-      if (t >= T.roomSend && ir >= 0) rs.push({ a: ir, b: ir + TXT.roomTarget.length, cls: "anc", id: "room" });
-      let sel = p.sel;
-      if (t >= T.roomDrag[0] && t < T.roomSend && ir >= 0) {
-        const k = sine(prog(t, T.roomDrag[0], T.roomDrag[1]));
-        sel = [ir, Math.round(ir + TXT.roomTarget.length * k)];
+  /** Per-moment additions to the desk: the Settings window, overlays inside the app window. */
+  function shotExtras(t) {
+    const o = { win: {} };
+    // Settings: ch5 New mind, ch6 most beats, ch7 Model
+    const setPane = (() => {
+      if (within(t, c5, T.pan16[0] + 0.4)) return "NewMind";
+      if (within(t, c6, M6.mode) || within(t, M6.drop, M6.drop + 0.6)) return "Appearance";
+      if (within(t, M6.pace, M6.drop)) return "Reading";
+      if (within(t, M6.learn, M6.keys)) return "About you";
+      if (within(t, M6.keys, c7 + 0.6)) return "Shortcuts";
+      if (within(t, M7.model, M7.blocks)) return "Model";
+      return null;
+    })();
+    if (setPane) {
+      const S = { pane: setPane, op: within(t, T.pan16[0], T.pan16[0] + 0.4) ? 1 - prog(t, T.pan16[0], T.pan16[0] + 0.4) : 1 };
+      const L = looks(t);
+      if (setPane === "NewMind") {
+        S.tmpl = t >= T.blank15 ? "Blank" : null;
+        const chipsHov = ["Staff engineer", "Editor", "Skeptic", "Socratic tutor", "Investor"];
+        if (within(t, T.chips15, T.blank15)) S.hovChip = chipsHov[clamp(Math.floor((t - T.chips15) / 0.3), 0, 4)];
+        if (within(t, T.blank15 - 0.3, T.blank15)) S.hovChip = "Blank";
+        S.name = "Coach".slice(0, count(S_name, t)); S.desc = COACH.description.slice(0, count(S_desc, t)); S.how = COACH.howItThinks.slice(0, count(S_how, t));
+        S.focus = within(t, T.name15[0], T.desc15[0]) ? "name" : within(t, T.desc15[0], T.how15[0]) ? "desc" : within(t, T.how15[0], T.voice15) ? "how" : null;
+        S.voice = t >= T.voice15 ? "Blunt" : "Plain"; S.often = t >= T.often15 ? "Often" : "When it matters";
+        S.hovCreate = within(t, T.create15 - 0.3, T.create15 + 0.2);
+        S.scroll = 300 * E.io(prog(t, T.how15[0] - 0.2, T.voice15));
       }
-      let caret = p.caret;
-      if (t >= T.roomSend && t < T.enter.p5) caret = ir + TXT.roomTarget.length;
-      add("p2", p.text, rs, sel, caret == null ? -1 : caret);
-    }
-    if (t >= T.enter.p3) {
-      const text = TXT.p3.slice(0, count(S.p3, t)), rs = [];
-      const i2 = text.indexOf(TXT.p3.slice(TXT.p3.indexOf("I’ll")));
-      if (t >= T.t2Think[0] && i2 >= 0) rs.push({ a: i2, b: text.length, cls: "anc" + (t >= T.t2Text && t < T.t2Knot ? " on" : ""), id: "t2" });
-      let sel = null;
-      const s0 = TXT.p3.indexOf("I’ll");
-      if (t >= T.t2Drag[0] && t < T.t2Click) sel = [s0, Math.round(s0 + (TXT.p3.length - s0) * sine(prog(t, T.t2Drag[0], T.t2Drag[1])))];
-      add("p3", text, rs, sel, text.length);
-    }
-    if (t >= T.enter.p4) add("p4", TXT.p4.slice(0, count(S.p4, t)), [], null, count(S.p4, t));
-    if (t >= T.enter.p5) {
-      const text = TXT.p5.slice(0, count(S.p5, t)), rs = [];
-      if (t >= T.callArrive) rs.push({ a: 0, b: text.length, cls: "anc", id: "call" });
-      add("p5", text, rs, null, text.length);
-    }
-    return out;
-  }
-  /** Which paragraph holds the caret (or null when the focus is elsewhere). */
-  function focusAt(t) {
-    if (t < T.enter.p1) return null;
-    if (t < T.enter.p2) return "p1";
-    if (t < T.enter.p3) return "p2";
-    if (t < T.enter.p4) return "p3";
-    if (t < T.e1Sel) return "p4";
-    if (t < T.t2Drag[0]) return t >= T.e1Sel && t < T.e1Type[0] ? null : "p2";
-    if (t < T.t2Click) return null;
-    if (t < T.t2ReplyClick) return "p3";
-    if (t < T.t2Send) return null;
-    if (t < T.roomDrag[0]) return "p3";
-    if (t < T.roomSend) return null;
-    if (t < T.briefClick) return "p2";
-    if (t < T.briefSet) return null;
-    if (t < T.chatIn[0]) return "p2";
-    if (t < T.chatOut[0]) return null;
-    if (t < T.enter.p5) return "p4";
-    return "p5";
-  }
-  function placeCaret(t, s) {
-    const el = $("#caret"), m = $("#content .cm");
-    if (!m || t >= T.winOut[0]) { el.style.display = "none"; return; }
-    const cr = $("#content").getBoundingClientRect(), r = m.getBoundingClientRect();
-    // solid while typing, blinking when idle
-    const keys = [S.title, S.p1, S.p2, S.p3, S.p4, S.e1, S.e2, S.p5].map((x) => lastKey(x, t));
-    const typing = t - Math.max(...keys) < 0.5;
-    const on = typing || Math.floor(t / 0.53) % 2 === 0;
-    el.style.display = on ? "block" : "none";
-    el.style.left = fx((r.left - cr.left) / s - 0.8) + "px";
-    el.style.top = fx((r.top - cr.top) / s - 1) + "px";
-    el.style.height = fx(r.height / s + 2) + "px";
-  }
-
-  // ---------------------------------------------------------------- the gutter
-  function gutterHTML(id, t) {
-    const reading = (a, b) => t >= a && t < b;
-    const needle = `<svg width="20" height="20" viewBox="0 0 64 64" style="left:18px;top:${fx(4 + 1.5 * (1 + Math.sin((t % 0.9) / 0.9 * Math.PI * 2)))}px">${NEEDLE.replace(/<svg[^>]*>/, "").replace("</svg>", "")}</svg>`;
-    const held = `<svg width="18" height="14" viewBox="0 0 18 14" style="left:19px;top:7px">${stitchSVG({ x0: 2, y0: 7.4, x1: 16, y1: 6.6, w: 2.4, c: "tack" }, 1)}</svg>`;
-    const knot = (n, c, k) => `<svg width="14" height="14" viewBox="0 0 14 14" style="left:21px;top:4px">${knotSVG(7, 7, 5.2, c, k)}</svg><span class="num">${n}</span>`;
-    const R = T.read;
-    if (id === "p1") return reading(...R.p1) ? needle : t >= R.p1[1] ? held : "";
-    if (id === "p2") {
-      if (reading(...R.p2) || reading(...T.t1Reread)) return needle;
-      if (t >= T.t1Arrive && t < T.t1Knot) return knot(THREAD_NO.t1, "madder", knotScale(t - T.t1Arrive));
-      if (t >= T.roomSend) return knot(THREAD_NO.r0, "madder", knotScale(t - T.roomSend));
-      return t >= R.p2[1] ? held : "";
-    }
-    if (id === "p3") {
-      if (reading(...R.p3)) return needle;
-      if (t >= T.t2Think[0] && t < T.t2Knot) return knot(THREAD_NO.t2, "madder", knotScale(t - T.t2Think[0]));
-      return t >= R.p3[1] ? held : "";
-    }
-    if (id === "p4") return reading(...R.p4) ? needle : t >= R.p4[1] ? held : "";
-    if (id === "p5") {
-      if (reading(T.p5[1] + 0.1, T.callArrive)) return needle;
-      if (t >= T.callArrive) return knot(THREAD_NO.call, "indigo", knotScale(t - T.callArrive));
-    }
-    return "";
-  }
-
-  // ---------------------------------------------------------------- the band
-  function renderBand(t, markOp) {
-    const items = [];
-    if (t >= T.t1Motif) items.push({ c: "madder", k: prog(t, T.t1Motif, T.t1Motif + 0.4) });
-    if (t >= T.t2Motif) items.push({ c: "madder", k: prog(t, T.t2Motif, T.t2Motif + 0.4) });
-    const Wd = 880 - 74, H = 20, n = 24, step = Wd / n;
-    let out = "";
-    for (let k = items.length; k < n; k++) {
-      const x = k * step + step / 2;
-      out += `<path d="M${fx(x - 3)} ${H / 2}L${fx(x + 3)} ${H / 2}" style="stroke:var(--tack);stroke-width:1.1;stroke-linecap:round;opacity:.55"/>`;
-    }
-    items.forEach((it, k) => { out += motifSVG(k * step + step / 2, H / 2, k, it.c, it.k); });
-    const svg = $("#band-svg");
-    svg.setAttribute("viewBox", `0 0 ${fx(Wd)} ${H}`);
-    svg.innerHTML = out;
-    svg.style.opacity = String(fx(markOp));
-    const lab = $("#band-count");
-    lab.textContent = items.length ? `${items.length} tied off` : "";
-    lab.style.opacity = String(fx(markOp));
-  }
-
-  // ---------------------------------------------------------------- tags
-  /** What a thread's tag shows at time t, or null when it has none yet. */
-  function tagModel(id, t) {
-    const head = (mind, kind, n) => `<div class="hd"><span class="who"><b>${esc(mind)}</b><span class="k">· ${esc(kind)}</span></span>${n ? `<span class="n">${n}</span>` : ""}</div>`;
-    const think = (label) => `<div class="think">${label ? `<span>${esc(label)}</span>` : ""}<span class="dot" style="opacity:${fx(0.3 + 0.6 * (0.5 + 0.5 * Math.sin((t / 1.1) * Math.PI * 2)))}"></span></div>`;
-    const num = THREAD_NO[id];
-    const acts = (extra, hovers) => `<div class="acts">${extra || ""}<span class="${hovers && hovers.resolve ? "hov" : ""}">Resolve</span><span>Dismiss</span><span class="grow"></span><span>Make a note</span></div>`;
-    const reply = (text, focus, caret) => `<div class="reply${focus ? " focus" : ""}"><span class="tx">${text ? esc(text) : '<span class="ph">Reply…</span>'}${focus ? caret : ""}</span>${SEND}</div>`;
-    if (id === "t1") {
-      if (t < T.t1Arrive) return null;
-      const folded = t >= T.t1Fold;
-      const op = 1 - prog(t, T.t1Fade[0], T.t1Fade[1]);
-      if (op <= 0) return null;
-      if (folded) return { c: "madder", op, html: head("Inkling", "tied off") + `<div class="short">${esc(TXT.correction.slice(0, 64))}…</div>`, anchor: "t1", folded: true };
-      if (t < T.t1Open) return { c: "madder", op: easeOut(prog(t, T.t1Arrive, T.t1Arrive + 0.3)), html: head("Inkling", "correction", num) + `<div class="wait">Opens when you pause</div>`, anchor: "t1" };
-      let body = `<div class="m">${paras(TXT.correction)}</div>`;
-      if (t >= T.t1Reread[0] && t < T.t1Settle[0]) body += think("Reading your change");
-      if (t >= T.t1Settle[0]) body += `<div class="m">${paras(streamed(TXT.settle, null, ...T.t1Settle, t))}</div>`;
-      let reserve = null;
-      if (t >= T.skThink[0] && t < T.skThink[1]) body += think("Stitching a sketch…");
-      if (t >= T.skSteps[0][0]) {
-        const sk = sketchAt(t);
-        body += `<div class="sk">${sk.svg}</div><div class="capt"><span class="sn">${sk.step} / ${sk.of}</span><span class="gr">${esc(sk.caption)}</span><i>‹</i><i>›</i><i>↺</i></div>`;
+      if (setPane === "Appearance") {
+        S.look = t >= M6.dark + 0.85 ? "dark" : "light"; S.size = "default"; S.lettering = "own"; S.ink = L.ink; S.inkDrop = t >= M6.drop + 0.3;
+        if (within(t, M6.ink, M6.letter)) S.scroll = SCROLL.ink;
+        if (within(t, M6.letter, M6.size)) { S.scroll = SCROLL.letter; S.lettering = t >= M6.letter + 0.35 ? "notes" : "own"; }
+        if (within(t, M6.size, M6.mode)) { S.scroll = SCROLL.size; S.size = t < M6.size + 0.45 ? "small" : t < M6.size + 0.95 ? "large" : "default"; }
+        if (within(t, M6.drop, M6.drop + 0.6)) S.scroll = SCROLL.drop;
       }
-      const busy = t >= T.e1Sel; // while the writer edits, the tag waits without its buttons
-      if (!busy) body += reply("", false, "") + acts(`<span class="pri${within(t, 28.5, 29.05) ? " hov" : ""}">Sketch it</span>`);
-      return { c: "madder", op: 1, html: head("Inkling", "correction", num) + body, anchor: "t1", active: t < T.t1Knot, tying: t >= T.t1Tie };
+      if (setPane === "Reading") { S.pace = t >= M6.pace + 0.35 ? "slow" : "regular"; S.placement = "both"; }
+      if (setPane === "About you") { S.learnK = E.out(prog(t, M6.learn + 0.25, M6.learn + 0.45)); S.learn = S.learnK > 0.5; S.about = t >= M6.learn + 0.95 ? streamed(TXT.learned, M6.learn + 0.95, M6.learn + 1.7, t) : ""; }
+      if (setPane === "Shortcuts") { S.scroll = SCROLL.keys; S.rec = { recording: within(t, M6.keys + 0.45, M6.keys + 1.3), hide: t >= M6.keys + 1.3 ? "⌥⌘H" : within(t, M6.keys + 0.45, M6.keys + 1.3) ? "Press keys" : "⇧⌘.", hov: within(t, M6.keys + 0.2, M6.keys + 0.5) }; }
+      if (setPane === "Model") { S.model = 0; S.hovModel = within(t, M7.model + 0.4, M7.model + 1.0) ? 1 : null; S.effRead = t >= M7.model + 1.5 ? "medium" : "low"; S.effAsk = "medium"; S.scroll = t >= M7.claude ? 0 : SCROLL.model; }
+      o.settings = S;
     }
-    if (id === "t2") {
-      if (t < T.t2Think[0]) return null;
-      const op = 1 - prog(t, T.t2Fade[0], T.t2Fade[1]);
-      if (op <= 0) return null;
-      if (t >= T.t2Fold) return { c: "madder", op, html: head("Inkling", "tied off") + `<div class="short">${esc(TXT.question.slice(0, 64))}…</div>`, anchor: "t2", folded: true };
-      if (t < T.t2Text) return { c: "madder", op: easeOut(prog(t, T.t2Think[0], T.t2Think[0] + 0.25)), html: head("Inkling", "question", num) + think(""), anchor: "t2", active: true };
-      const k = easeOut(prog(t, T.t2Text, T.t2Text + 0.3));
-      let body = `<div class="m" style="opacity:${fx(k)}">${paras(TXT.question)}</div>`;
-      if (t >= T.t2Send) body += `<div class="you"><span>You</span><span>${esc(TXT.reply)}</span></div>`;
-      if (t >= T.t2Read[0] && t < T.t2Answer[0]) body += think("");
-      if (t >= T.t2Answer[0]) body += `<div class="m">${paras(streamed(TXT.answer, null, ...T.t2Answer, t))}</div>`;
-      if (t < T.t2Send) {
-        const typing = t - lastKey(S.reply, t) < 0.5;
-        const focus = t >= T.t2ReplyClick;
-        body += reply(TXT.reply.slice(0, count(S.reply, t)), focus, caretSpan(t, typing)) + acts("");
-      }
-      return { c: "madder", op: 1, html: head("Inkling", "question", num) + body, anchor: "t2", active: t < T.t2Knot, tying: t >= T.t2Tie,
-        reserve: t >= T.t2Send && t < T.t2Answer[1] ? head("Inkling", "question", num) + `<div class="m">${paras(TXT.question)}</div><div class="you"><span>You</span><span>${esc(TXT.reply)}</span></div><div class="m">${paras(TXT.answer)}</div>` : null };
+    const W = o.win;
+    // chat (ch3 ends in it)
+    if (within(t, T.chatIn8[0], T.chatOut9[1])) {
+      const k = t < T.chatOut9[0] ? E.out(prog(t, ...T.chatIn8)) : 1 - E.out(prog(t, ...T.chatOut9));
+      const ans = t >= T.chatStream8[0] ? streamed(TXT.chat, ...T.chatStream8, t) : "";
+      W.chat = { k, title: "Sub-50 10k by March", threads: "7 threads (6 open)", empty: t < T.chatSend8, hovPill: within(t, T.pills8, T.pills8 + 0.5) ? 0 : within(t, T.pills8 + 0.5, T.chatType8[0]) ? 2 : null,
+        me: t >= T.chatSend8 ? TXT.chatQ : null, think: within(t, T.chatSend8 + 0.1, T.chatStream8[0]), ans, ansShift: Math.max(0, (ans.length - 520) * 0.12), input: t < T.chatSend8 ? TXT.chatQ.slice(0, count(S.chat, t)) : "", caret: t < T.chatSend8 && t >= T.chatType8[0] && caretOn(t), hovClear: t >= T.clear8 };
     }
-    const room = ROOM.find((r) => r.id === id);
-    if (room) {
-      const i = ROOM.indexOf(room);
-      if (t < T.roomCarry[i][0]) return null;
-      const call = C["room_" + room.key];
-      const [a, b] = T.roomStream[room.key];
-      const full = call.output.text;
-      const kind = `on “${TXT.roomTarget}”`;
-      if (t >= T.roomFold) return { c: room.c, op: 1, html: head(room.mind, kind, num) + `<div class="short">${esc(full.replace(/\s+/g, " ").slice(0, 60))}…</div>`, anchor: "room", folded: true, rope: i };
-      const text = streamed(full, call.deltas, a, b, t);
-      const body = text ? `<div class="m">${paras(text)}</div>` : think("");
-      return { c: room.c, op: easeOut(prog(t, T.roomCarry[i][0], T.roomCarry[i][0] + 0.25)), html: head(room.mind, kind, num) + body, anchor: "room", active: true, rope: i,
-        reserve: head(room.mind, kind, num) + `<div class="m">${paras(full)}</div>` };
+    // the sidebar (ch7), the palette, export, menus of the menu bar
+    if (within(t, M7.side, M7.find) || within(t, M7.obs, M7.help)) {
+      const obs = within(t, M7.obs, M7.help);
+      const k = obs ? prog(t, M7.obs + 0.7, M7.obs + 0.95) : E.out(prog(t, M7.side + 0.15, M7.side + 0.45)) * (1 - prog(t, M7.find - 0.25, M7.find));
+      W.sideK = k;
+      const vault = obs ? [["Training log", ["Week 1", "Week 2", "Shoes"]], ["Recipes", ["Sourdough", "Porridge"]]].map(([f, ns], i) => ({ name: f, open: true, notes: ns.slice(0, clamp(Math.floor((t - M7.obs - 1.1 - i * 0.35) / 0.18), 0, ns.length)).map((n) => ({ title: n })), show: t >= M7.obs + 1.0 + i * 0.35 })).filter((f) => f.show) : [];
+      W.side = { who: "you@example.com", folders: [
+        { name: "Running", open: true, notes: [{ title: "Shoes: what wore out where" }, { title: "Sub-50 10k by March", on: true, dot: true }] },
+        { name: "Home", open: true, notes: [{ title: "Kitchen shelf measurements" }, { title: "Why the bread didn’t rise", dot: true, hov: within(t, M7.side + 1.6, M7.side + 2.2) }] },
+        { name: "Reading", open: !obs && t >= M7.side + 1.2, hov: within(t, M7.side + 0.9, M7.side + 1.25), notes: [{ title: "Reading list for winter" }] }, ...vault],
+        loose: [{ title: "Questions for the landlord" }, { title: "Start here" }], hovNew: within(t, M7.side + 2.2, M7.find) };
     }
-    if (id === "call") {
-      if (t < T.callThink[0]) return null;
-      const text = streamed(TXT.call, C.call_by_name.deltas, ...T.callStream, t);
-      const body = text ? `<div class="m">${paras(text)}</div>` : think("");
-      return { c: "indigo", op: easeOut(prog(t, T.callThink[0], T.callThink[0] + 0.25)), html: head("Skeptic", "answer", num) + body + (t >= T.callStream[1] ? acts("") : ""), anchor: "call", active: true,
-        reserve: head("Skeptic", "answer", num) + `<div class="m">${paras(TXT.call)}</div>` + acts("") };
-    }
-    return null;
+    if (within(t, M7.find, M7.copy)) W.overlay = paletteHTML(t);
+    if (within(t, M7.copy, M7.exp)) W.toast = { text: "Copied as Markdown", op: prog(t, M7.copy + 0.2, M7.copy + 0.35) * (1 - prog(t, M7.exp - 0.2, M7.exp)) };
+    if (within(t, M7.exp, M7.obs)) W.overlay = exportHTML(t);
+    if (within(t, M7.obs, M7.obs + 0.9)) W.overlay = macMenuHTML("File", ["New Note  ⌘N", "Find or Start a Note…  ⌘K", "—", "Copy This Note  ⇧⌘C", "Export This Note…  ⇧⌘E", "—", "Import from Obsidian…"], t >= M7.obs + 0.5 ? 6 : -1, t >= M7.obs + 0.2);
+    if (within(t, M7.help, M7.help + 0.7)) W.overlay = macMenuHTML("Help", ["Welcome Guide"], t >= M7.help + 0.35 ? 0 : -1, t >= M7.help + 0.12);
+    // undo chip after the snip
+    if (within(t, T.snip10, T.undo10 + 0.3)) W.undo = { op: prog(t, T.snip10 + 0.3, T.snip10 + 0.55) * (1 - prog(t, T.undo10, T.undo10 + 0.25)) };
+    // the listening badge and ink drops (ch6)
+    if (within(t, M6.speak + 0.15, M6.speak + 2.1)) W.listen = { op: prog(t, M6.speak + 0.15, M6.speak + 0.3) * (1 - prog(t, M6.speak + 1.95, M6.speak + 2.1)), text: t < M6.speak + 0.6 ? "Listening…" : P7.slice(0, Math.round(P7.length * prog(t, M6.speak + 0.6, M6.speak + 1.7))) };
+    if (within(t, M6.drop, M6.speak)) W.blots = blotsSVG(t);
+    if (within(t, T.big7[0], T.wipe8[0] + 0.3)) W.overlay = enlargedHTML(t);
+    // the Start here guide: nothing yet but the border in the cold open
+    return o;
   }
+  const S_name = S.name, S_desc = S.desc, S_how = S.how;
 
-  /** A tag folding down (tied off, or a room answer set aside) shrinks over a moment
-   *  instead of jumping: the open tag's content, clipped to a height easing to the chip's. */
-  const FOLDS = () => ({ t1: [T.t1Fold, 0.35], t2: [T.t2Fold, 0.35], r0: [T.roomFold, 0.4], r1: [T.roomFold, 0.4], r2: [T.roomFold, 0.4] });
-  function tagModelAt(id, t) {
-    const f = FOLDS()[id];
-    if (f && t >= f[0] && t < f[0] + f[1]) {
-      const open = tagModel(id, f[0] - 1e-4), shut = tagModel(id, t);
-      if (open && shut) return { ...shut, html: open.html, reserve: null, fold: { k: easeIO(prog(t, f[0], f[0] + f[1])), html: shut.html } };
-    }
-    return tagModel(id, t);
+  function paletteHTML(t) {
+    const q = "bread".slice(0, clamp(Math.floor((t - M7.find - 0.5) / 0.09), 0, 5));
+    const all = [["Home", "Kitchen shelf measurements"], ["Reading", "Reading list for winter"], ["Running", "Shoes: what wore out where"], ["", "Questions for the landlord"], ["Running", "Sub-50 10k by March", "Open now"], ["Home", "Why the bread didn’t rise"]];
+    const list = q ? all.filter(([, n]) => n.toLowerCase().includes(q.slice(0, 3))) : all;
+    const k = E.out(prog(t, M7.find + 0.1, M7.find + 0.3)) * (1 - prog(t, M7.copy - 0.2, M7.copy));
+    return `<div class="modal-dim" style="background:rgba(var(--shade),.12);opacity:${fx(k)}"></div><div class="palette" style="opacity:${fx(k)};transform:translateY(${fx((1 - k) * -8)}px)"><div class="s">${A.icon("search", 14, "var(--faint)")}${q ? esc(q) + '<span class="icaret"></span>' : '<span class="ph">Find or start a note</span>'}</div>` +
+      list.map(([f, n, s], i) => `<div class="li${i === 0 ? " on" : ""}">${f ? `<span class="f">${f} /</span>` : ""}<span class="grow">${n}</span>${s ? `<small>${s}</small>` : ""}</div>`).join("") +
+      `<div class="ft" style="top:auto;bottom:0;position:absolute"><span>↵ open</span><span>“Folder / Name” files a new note</span><span>⌘⌫ delete</span></div></div>`;
   }
-
-  function renderThreads(t, c, open, markOp) {
-    const mg = $("#mg"), cards = $("#cards");
-    const ids = ["t1", "t2", "r0", "r1", "r2", "call"];
-    const models = ids.map((id) => ({ id, m: tagModelAt(id, t) })).filter((x) => x.m);
-    // build tags, and an invisible twin for the height a streaming tag will need or the chip a folding tag becomes
-    const twin = (id, m, attr, html) => `<div class="tag" ${attr}="${id}" style="--tc:var(--${m.c});visibility:hidden"><span class="ring"></span><div class="in">${html}</div></div>`;
-    mg.innerHTML = models.map(({ id, m }) =>
-      `<div class="tag" data-t="${id}" style="--tc:var(--${m.c});opacity:${fx(m.op * markOp)}"><span class="ring"></span><div class="in">${m.html}</div></div>` +
-      (m.reserve ? twin(id, m, "data-r", m.reserve) : "") + (m.fold ? twin(id, m, "data-f", m.fold.html) : "")).join("");
-    for (const { id, m } of models) {
-      if (!m.fold) continue;
-      const a = $(`.tag[data-t="${id}"] .in`, mg), b = $(`.tag[data-f="${id}"] .in`, mg);
-      a.style.height = fx(lerp(a.offsetHeight, b.offsetHeight, m.fold.k)) + "px";
-      a.style.overflow = "hidden";
-    }
-    // stack: each tag wants the top of its words' first line; none overlap (gap 14)
-    const items = [];
-    for (const { id, m } of models) {
-      const lines = st.lineRects(m.anchor);
-      if (!lines.length) continue;
-      const el = $(`.tag[data-t="${id}"]`, mg), twin = $(`.tag[data-r="${id}"]`, mg);
-      items.push({ id, m, el, want: lines[0].y - 3, h: Math.max(el.offsetHeight, twin ? twin.offsetHeight : 0), lines, order: ids.indexOf(id) });
-    }
-    items.sort((a, b) => a.want - b.want || a.order - b.order);
-    let floor = -Infinity;
-    for (const it of items) {
-      const top = Math.max(it.want, floor + 14);
-      it.top = top;
-      it.el.style.top = fx(top) + "px";
-      floor = top + it.h;
-    }
-    $$(".tag[data-r], .tag[data-f]", mg).forEach((x) => x.remove());
-    st.tags = Object.fromEntries(items.map((it) => [it.id, it]));
-
-    // ---- the overlay: stitches under the words, threads to the tags, knots, needles
-    let svg = "";
-    const T1 = st.tags.t1, T2 = st.tags.t2;
-    const colRight = 616;
-    const sewK = (t0, t1, i, n) => clamp((t - (t0 + ((t1 - t0 - 0.13) * i) / Math.max(1, n - 1))) / 0.13);
-    // thread 1
-    {
-      const lines = st.lineRects("t1");
-      if (lines.length && t >= T.t1Sew[0]) {
-        const tied = t >= T.t1Knot, fade = 1 - prog(t, T.t1Fade[0], T.t1Fade[1]);
-        const sOp = (tied ? lerp(1, 0.38, prog(t, T.t1Knot, T.t1Knot + 0.5)) : 1) * markOp;
-        const lead = 12, sts = stitchesUnder(lines, 41, ["madder"], { lead });
-        st.stitchCounts.t1 = sts.length + 2;
-        const n = sts.length + 2;
-        svg += `<g opacity="${fx(sOp)}">` + crossSVG(lines[0].x + 4.2, lines[0].b + 0.2, 3.7, 2.1, "madder", sewK(...T.t1Sew, 0, n), sewK(...T.t1Sew, 1, n));
-        sts.forEach((s, i) => { svg += stitchSVG(s, sewK(...T.t1Sew, i + 2, n)); });
-        svg += "</g>";
-        const sewn = Math.floor(prog(t, ...T.t1Sew) * n);
-        if (t < T.t1Sew[1] && sewn > 1) { const s = sts[Math.min(sts.length - 1, sewn - 2)]; svg += needleAt(s.x1, s.y1, t); }
-        if (T1 && t >= T.t1Carry[0]) svg += threadTo("t1", "madder", sts, lines, T1, t, { carry: T.t1Carry[0], tie: T.t1Tie, knot: T.t1Knot, hover: T.t1Hover, fade, markOp, active: T1.m.active });
-      }
-    }
-    // thread 2
-    {
-      const lines = st.lineRects("t2");
-      if (lines.length && t >= T.t2Sew[0]) {
-        const tied = t >= T.t2Knot, fade = 1 - prog(t, T.t2Fade[0], T.t2Fade[1]);
-        const sOp = (tied ? lerp(1, 0.38, prog(t, T.t2Knot, T.t2Knot + 0.5)) : 1) * markOp;
-        const sts = stitchesUnder(lines, 23, ["madder"]);
-        st.stitchCounts.t2 = sts.length;
-        svg += `<g opacity="${fx(sOp)}">`;
-        sts.forEach((s, i) => { svg += stitchSVG(s, sewK(...T.t2Sew, i, sts.length)); });
-        svg += "</g>";
-        const sewn = Math.floor(prog(t, ...T.t2Sew) * sts.length);
-        if (t < T.t2Sew[1] && sewn > 0) { const s = sts[Math.min(sts.length - 1, sewn - 1)]; svg += needleAt(s.x1, s.y1, t); }
-        if (T2 && t >= T.t2Carry[0]) svg += threadTo("t2", "madder", sts, lines, T2, t, { carry: T.t2Carry[0], tie: T.t2Tie, knot: T.t2Knot, fade, markOp, active: T2.m.active });
-      }
-    }
-    // the room: one run of stitches in three colours, three threads
-    {
-      const lines = st.lineRects("room");
-      if (lines.length && t >= T.roomSew[0]) {
-        const sts = stitchesUnder(lines, 61, ["madder", "indigo", "ochre"], { len: 6.6, gap: 3.6 });
-        st.stitchCounts.room = sts.length;
-        svg += `<g opacity="${fx(markOp)}">`;
-        sts.forEach((s, i) => { svg += stitchSVG(s, sewK(...T.roomSew, i, sts.length)); });
-        svg += "</g>";
-        ROOM.forEach((r, i) => {
-          const tg = st.tags[r.id];
-          if (tg && t >= T.roomCarry[i][0]) svg += threadTo(r.id, r.c, sts, lines, tg, t, { carry: T.roomCarry[i][0], markOp, active: t < T.roomFold, slack: 1.006 + i * 0.003 });
-        });
-      }
-    }
-    // the mind called by name
-    {
-      const lines = st.lineRects("call");
-      if (lines.length && t >= T.callSew[0]) {
-        const sts = stitchesUnder(lines, 77, ["indigo"]);
-        st.stitchCounts.call = sts.length;
-        svg += `<g opacity="${fx(markOp)}">`;
-        sts.forEach((s, i) => { svg += stitchSVG(s, sewK(...T.callSew, i, sts.length)); });
-        svg += "</g>";
-        const tg = st.tags.call;
-        if (tg && t >= T.callCarry[0]) svg += threadTo("call", "indigo", sts, lines, tg, t, { carry: T.callCarry[0], markOp, active: true });
-      }
-    }
-    $("#ov").innerHTML = svg;
+  function exportHTML(t) {
+    const k = E.out(prog(t, M7.exp + 0.1, M7.exp + 0.3)) * (1 - prog(t, M7.obs - 0.2, M7.obs));
+    const sel = t < M7.exp + 0.95 ? 0 : t < M7.exp + 1.55 ? 1 : 2;
+    const inc = !(within(t, M7.exp + 1.9, M7.exp + 2.25));
+    const opt = (i, tl, d) => `<div class="opt${sel === i ? " on" : ""}"><div class="t">${tl}</div><div class="d">${d}</div></div>`;
+    return `<div class="modal-dim" style="background:rgba(var(--shade),.12);opacity:${fx(k)}"></div><div class="export" style="opacity:${fx(k)};transform:scale(${fx(0.97 + 0.03 * k)})"><h4>Export “Sub-50 10k by March”</h4><div class="opts">${opt(0, "Markdown", "Plain text for anywhere, another AI included.")}${opt(1, "Word", "To keep editing in Word, Pages or Google Docs.")}${opt(2, "HTML", "To read or print to PDF.")}</div>` +
+      `<div class="inc"><div style="flex:1"><div class="t">Include the margin</div><div class="d">Each thread sits under the paragraph it’s about.</div></div><span class="sw${inc ? " on" : ""}"><i style="left:${inc ? 14 : 2}px"></i></span></div><div class="btns"><span>Cancel</span><b>Export…</b></div></div>`;
   }
-
-  /** The thread from the hole at the column edge to the ring on its tag. */
-  function threadTo(key, color, sts, lines, tag, t, o) {
-    const last = sts[sts.length - 1] || { x1: lines[0].r, y1: lines[0].b };
-    const tr = 616;
-    const hole = tr - last.x1 < 10 ? [last.x1 + 3.5, last.y1 - 0.3] : [tr + 7, last.y1 - 0.3];
-    const ring = [640, tag.top + 15];
-    let rope, phase = null, since = 0;
-    if (o.knot != null && t >= o.tie) { phase = "tie"; since = t - o.tie; }
-    else if (t - o.carry < 2.4) { phase = "carry"; since = t - o.carry; }
-    else if (o.hover != null && t >= o.hover && t - o.hover < 1.2) { phase = "sway"; since = t - o.hover; }
-    if (phase === "tie" && since > 1.0) rope = restingRope(hole, ring, ROPE.SLACK_TIED);
-    else if (phase) rope = movingRope(key, hole, ring, phase, since, phase === "tie" ? null : o.slack);
-    else rope = restingRope(hole, ring, o.slack || ROPE.SLACK);
-    // quiet unless you look at it: 26% at rest, 60% under the pointer, full when open or being tied
-    let op = 0.26;
-    if (o.hoverOn) op = 0.6;
-    if (o.active) op = 1;
-    if (o.knot != null && t >= o.tie && t < o.knot + 0.9) op = 1;
-    if (o.knot != null && t >= o.knot + 0.9) op = lerp(1, 0.26, prog(t, o.knot + 0.9, o.knot + 1.4));
-    const carryK = phase === "carry" ? clamp(since / 0.12) : 1;
-    op *= (o.fade == null ? 1 : o.fade) * o.markOp * carryK;
-    let s = ropeSVG(rope, color, op, hole);
-    if (o.knot != null && t >= o.knot) s += `<g opacity="${fx((o.fade == null ? 1 : o.fade) * o.markOp)}">${knotSVG(ring[0] + 0.6, ring[1], 3.7, color, knotScale(t - o.knot))}</g>`;
+  function macMenuHTML(name, items, hov, open) {
+    const tab = (n) => `<span style="padding:1px 8px;border-radius:4px;${n === name ? "background:color-mix(in srgb,var(--ink) 14%,transparent)" : ""}">${n}</span>`;
+    const bar = `<div class="macmenu" style="left:-20px;top:-38px;width:1360px;height:26px;display:flex;gap:10px;align-items:center;padding-left:22px;background:color-mix(in srgb,var(--shelf) 82%,transparent);color:var(--ink);border-radius:6px;box-shadow:0 0 0 1px var(--rule)"><b style="font-weight:600;padding:0 6px">Inkling</b>${tab("File")}${tab("View")}${tab("Help")}</div>`;
+    if (!open) return bar;
+    const x = name === "File" ? 76 : 214;
+    return bar + `<div class="macmenu card" style="left:${x}px;top:-11px;width:250px;padding:5px">` + items.map((it, i) => (it === "—" ? `<div style="height:1px;background:var(--rule);margin:5px 8px"></div>` :
+      `<div style="display:flex;justify-content:space-between;padding:5px 10px;border-radius:5px;${i === hov ? "background:var(--indigo);color:#fff" : ""}"><span>${esc(it.split("  ")[0])}</span><span style="opacity:.6">${esc(it.split("  ")[1] || "")}</span></div>`)).join("") + `</div>`;
+  }
+  const DROPS = [[M6.drop + 1.05, 812, 452], [M6.drop + 1.55, 905, 520], [M6.drop + 2.05, 990, 470]];
+  function blotsSVG(t) {
+    let s = "";
+    DROPS.forEach(([b, x, y], n) => {
+      const age = t - b;
+      if (age < 0) return;
+      const r0 = rng(17 + n);
+      const alpha = age < 0.35 ? 0.85 : Math.max(0, 0.85 - (age - 0.35) * 0.36), grow = Math.min(1, age * 6);
+      const r = (2.4 + 2.6 * r0()) * (0.6 + 0.4 * grow);
+      s += `<circle cx="${x}" cy="${y}" r="${fx(r)}" style="fill:var(--ink)" opacity="${fx(alpha)}"/>`;
+      const m = 2 + Math.floor(r0() * 4);
+      for (let i = 0; i < m; i++) { const a = r0() * Math.PI * 2, d = r + 2 + r0() * 7 * grow; s += `<circle cx="${fx(x + Math.cos(a) * d)}" cy="${fx(y + Math.sin(a) * d)}" r="${fx(0.6 + r0() * 1.4)}" style="fill:var(--ink)" opacity="${fx(alpha)}"/>`; }
+    });
     return s;
   }
+  function enlargedHTML(t) {
+    const k = E.out(prog(t, T.big7[0], T.big7[0] + 0.35)) * (1 - prog(t, T.wipe8[0] - 0.1, T.wipe8[0] + 0.2));
+    const starts = [T.big7[0] + 0.25, T.big7[0] + 0.85, T.big7[0] + 1.45];
+    const sk = sketchSVG(t, starts, 1.5);
+    return `<div class="modal-dim" style="background:rgba(var(--shade),.28);opacity:${fx(k)}"></div><div class="card" style="left:360px;top:70px;width:600px;height:700px;z-index:37;padding:28px 40px;opacity:${fx(k)};transform:scale(${fx(0.96 + 0.04 * k)})">` +
+      `<div style="display:flex;justify-content:center">${sk.svg}</div><div style="margin-top:10px;font-size:13px;color:var(--graphite);text-align:center">${esc(sk.caption)}</div></div>`;
+  }
 
-  // ---------------------------------------------------------------- toolbar and ask box
-  function renderCards(t) {
-    const cards = $("#cards");
-    let html = "";
-    const selTop = (id) => { const sp = $(`#rows [data-p="${id}"] .sel`); if (!sp) return null; const r = sp.getClientRects()[0]; return r ? st.rel(r).y : null; };
-    const toolbar = (hovIdx) => `<div class="row"><span>T</span><span>H1</span><span>H2</span><span>H3</span><span>❝</span><span>•</span><span>1.</span></div><hr>` +
-      `<div class="row"><span><b>B</b></span><span><i>I</i></span><span><u>U</u></span><span><s>S</s></span><span>&lt;/&gt;</span></div>` +
-      `<div class="sw">${["fg", "madder", "indigo", "ochre", "sage", "plum", "tack", "steel"].map((c) => `<i style="background:var(--${c})"></i>`).join("")}</div><hr>` +
-      `<div class="act${hovIdx === 0 ? " hov" : ""}"><b>Find a loose thread <kbd>⌘↵</kbd></b></div>` +
-      `<div class="act${hovIdx === 1 ? " hov" : ""}"><b>Ask Inkling</b><small>Your own question</small></div>` +
-      `<div class="act"><b>Sketch it</b><small>Stitched out step by step</small></div>`;
-    if (t >= T.t2Bar && t < T.t2Click + 0.1) {
-      const y = selTop("p3");
-      if (y != null) html += `<div class="card tbar" style="left:640px;top:${fx(y - 6)}px;opacity:${fx(easeOut(prog(t, T.t2Bar, T.t2Bar + 0.18)))}">${toolbar(within(t, 48.95, 49.25) ? 0 : -1)}</div>`;
+  // ======================================================================= transitions
+  function transitionAt(t) {
+    if (within(t, ...T.wipe1)) return (tt, a, b) => unfoldWipe(tt, a, b, "f6", T.wipe1, c2 - 0.01);
+    if (within(t, ...T.wipe17)) return (tt, a, b) => unfoldWipe(tt, a, b, "t8", T.wipe17, c6 - 0.01);
+    if (within(t, ...T.wipe7)) return (tt, a, b) => stitchWipe(tt, a, b, T.wipe7, () => { const L = (MEAS.bread.anchors.k1 || [])[0]; return L ? [L.x, L.r, L.y + 25] : null; });
+    if (within(t, ...T.wipe8)) return (tt, a, b) => stitchWipe(tt, a, b, T.wipe8, () => [437, 515, 117]);
+    if (within(t, c7 - 0.6, c7 + 0.2)) return (tt, a, b) => stitchWipe(tt, a, b, [c7 - 0.6, c7 + 0.2], () => [66, 1254, 68]);
+    return null;
+  }
+  /** A tag unfolding is the wipe: its panel grows over the frame, and the next scene is
+   *  inside it. The outgoing side keeps moving until `outEnd`; the incoming side waits at
+   *  its first frame. */
+  function unfoldWipe(t, a, b, tagId, span, outEnd) {
+    const tOut = Math.min(t, outEnd), camO = camAt(tOut);
+    const geo = renderShot(a, tOut, camO, worldState(tOut), shotExtras(tOut));
+    const g = geo && geo.tags && geo.tags[tagId];
+    const r0 = g && g.panel ? [g.panel.x, g.panel.y, g.panel.w, g.panel.h] : [900, 500, 248, 160];
+    const p0 = toScreen(camO, r0[0], r0[1]), p1 = toScreen(camO, r0[0] + r0[2], r0[1] + r0[3]);
+    const k = CLOTH(prog(t, span[0] + 0.05, span[1] - 0.1));
+    const x0 = lerp(p0[0], -8, k), y0 = lerp(p0[1], -8, k), x1 = lerp(p1[0], 1928, k), y1 = lerp(p1[1], 1088, k), rad = lerp(10 * camO.z, 0, k);
+    const tIn = span[1] + 0.001, camI = camAt(tIn);
+    b.style.display = "block";
+    b.style.clipPath = `inset(${fx(y0)}px ${fx(1920 - x1)}px ${fx(1080 - y1)}px ${fx(x0)}px round ${fx(rad)}px)`;
+    renderShot(b, tIn, camI, worldState(tIn), shotExtras(tIn));
+    const op = 1 - prog(t, span[1] - 0.3, span[1]);
+    const inset = lerp(4, 16, k);
+    const html = `<div style="position:absolute;left:${fx(x0)}px;top:${fx(y0)}px;width:${fx(x1 - x0)}px;height:${fx(y1 - y0)}px;border-radius:${fx(rad)}px;box-shadow:0 0 0 1px rgba(var(--shade),.15),0 30px 60px -20px rgba(var(--shade),.6);opacity:${fx(op)}"></div>` +
+      `<div style="position:absolute;left:${fx(x0 + inset)}px;top:${fx(y0 + inset)}px;width:${fx(x1 - x0 - 2 * inset)}px;height:${fx(y1 - y0 - 2 * inset)}px;border-radius:${fx(Math.max(4, rad * 0.8))}px;border:${fx(lerp(1, 2.5, k))}px dashed color-mix(in srgb,var(--voice) 50%,transparent);opacity:${fx(op)}"></div>`;
+    return { html, geo, cam: camO };
+  }
+  /** A running stitch sews across the frame. Behind the needle is the next scene; when it
+   *  has crossed, the stitch line draws in to the next scene's own line (`target`, world
+   *  [x0, x1, y]) and hands over to it. */
+  function stitchWipe(t, a, b, span, target) {
+    const tIn = span[1] + 0.001, tOut = span[0] - 0.001;
+    const camI = camAt(tIn), camO = camAt(tOut);
+    const geo = renderShot(a, tIn, camI, worldState(tIn), shotExtras(tIn));
+    const cross = prog(t, span[0], span[1] - 0.25), draw = CLOTH(prog(t, span[1] - 0.3, span[1]));
+    const nx = lerp(-60, 1980, E.io(cross));
+    b.style.display = "block";
+    b.style.clipPath = `inset(0 0 0 ${fx(clamp(nx, 0, 1920))}px)`;
+    renderShot(b, tOut, camO, worldState(tOut), shotExtras(tOut));
+    // the line across the frame, and where it ends up
+    const tg = target();
+    const ty = tg ? toScreen(camI, 0, tg[2])[1] : 600;
+    const lx0 = tg ? toScreen(camI, tg[0], 0)[0] : 0, lx1 = tg ? toScreen(camI, tg[1], 0)[0] : 1920;
+    const y = lerp(ty, ty, 0) + 0;
+    const X0 = lerp(-60, lx0, draw), X1 = lerp(Math.min(nx, 1980), lx1, draw);
+    let st = "";
+    const n = 140;
+    for (let i = 0; i < n; i++) {
+      const u0 = i / n, u1 = (i + 0.62) / n;
+      const xa = lerp(-60, 1980, u0), xb = lerp(-60, 1980, u1);
+      if (xa > nx) break;
+      const m0 = lerp(X0, X1, (xa + 60) / 2040), m1 = lerp(X0, X1, Math.min(xb, nx) + 60 > 0 ? (Math.min(xb, nx) + 60) / 2040 : 0);
+      const yy = y + A.jitter(97, i) * 1.4 * (1 - draw);
+      st += capsule(draw > 0 ? m0 : xa, yy, draw > 0 ? m1 : Math.min(xb, nx), yy, lerp(3.4, 1.8 * camI.z, draw), "var(--voice)", 1 - prog(t, span[1] - 0.06, span[1]));
     }
-    if (t >= T.roomBar && t < T.roomClick + 0.1) {
-      const y = selTop("p2");
-      if (y != null) html += `<div class="card tbar" style="left:640px;top:${fx(y - 6)}px;opacity:${fx(easeOut(prog(t, T.roomBar, T.roomBar + 0.18)))}">${toolbar(within(t, 62.55, 62.85) ? 1 : -1)}</div>`;
+    const needle = cross < 1 ? `<g transform="translate(${fx(nx)} ${fx(y)}) rotate(${fx(-6 + 12 * Math.sin(t * 26))})"><path d="M-34 0L20 0" style="stroke:var(--graphite);stroke-width:3;stroke-linecap:round"/><ellipse cx="-27" cy="0" rx="4.4" ry="1.5" style="fill:none;stroke:var(--graphite);stroke-width:1.2"/></g>` : "";
+    return { html: `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">${st}${needle}</svg>`, geo, cam: camI };
+  }
+
+  // ======================================================================= the cold open
+  function coldOpenFX(t, cam) {
+    if (t > T.pull1 + 0.1) return "";
+    // one running stitch across the cloth, under the words; when the camera tilts down to
+    // the window it settles onto the sheet's border, which is where every tie-off will go
+    const sewK = E.io(prog(t, T.sew0, T.sew1));
+    const morph = CLOTH(prog(t, T.pull0, T.pull1 - 0.15));
+    const b0 = toScreen(cam, 66, 68), b1 = toScreen(cam, 1254, 68);
+    const X0 = lerp(330, b0[0], morph), X1 = lerp(1590, b1[0], morph), Y = lerp(548, b0[1], morph);
+    const n = 104;
+    let s = "";
+    const head = sewK * n;
+    for (let i = 0; i < n; i++) {
+      if (i > head) break;
+      const k = Math.min(1, head - i);
+      const u0 = i / n, u1 = (i + 0.64) / n;
+      const xa = lerp(X0, X1, u0), xb = lerp(X0, X1, lerp(u0, u1, k));
+      const yy = Y + A.jitter(5, i) * lerp(1.6, 0.4, morph);
+      s += capsule(xa, yy, xb, yy, lerp(3.2, 1.6 * cam.z, morph), morph > 0.5 ? "color-mix(in srgb,var(--faint) 70%,transparent)" : "var(--voice)", 1 - prog(t, T.pull1 - 0.35, T.pull1));
     }
-    if (t >= T.askBox && t < T.roomSend) {
-      const y = selTop("p2");
-      const on = [true, t >= T.chipSkeptic, t >= T.chipTutor];
-      const chips = [["Inkling", "madder"], ["Skeptic", "indigo"], ["Tutor", "ochre"], ["Editor", "sage"], ["Staff engineer", "plum"]].map(([n, c], i) =>
-        `<span class="chip${on[i] ? " on" : ""}" style="${on[i] ? `border-color:color-mix(in srgb,var(--${c}) 70%,transparent);background:color-mix(in srgb,var(--${c}) 8%,var(--raised))` : ""}"><span class="dot" style="background:var(--${c})"></span>${n}</span>`).join("");
-      const nOn = on.filter(Boolean).length;
-      const n = count(S.roomQ, t), typing = t - lastKey(S.roomQ, t) < 0.5;
-      const q = n ? `<span style="position:relative">${esc(TXT.roomQ.slice(0, n))}${caretSpan(t, typing)}</span>` : `<span class="ph">Ask Inkling about this…</span>${t >= T.chipTutor + 0.25 ? caretSpan(t, false) : ""}`;
-      if (y != null) html += `<div class="card askbox" style="left:640px;top:${fx(y - 4)}px;opacity:${fx(easeOut(prog(t, T.askBox, T.askBox + 0.18)))}"><div class="q"><span class="dot"></span>${q}</div><div class="chips">${chips}</div>` +
-        `<div class="hint">${nOn > 1 ? `${nOn} minds will answer side by side · Enter to ask · Esc to cancel` : "Pick up to three minds · Enter to ask · Esc to cancel"}</div></div>`;
+    if (sewK > 0 && sewK < 1) s += `<g transform="translate(${fx(lerp(X0, X1, sewK))} ${fx(Y)}) scale(2.2)">${A.NEEDLE(1, -7, (t * 2.6) % 1, "var(--graphite)")}</g>`;
+    // the loose end, until the tie
+    if (t >= T.sew1 && t < T.openTie + 0.25) {
+      const e = [X1, Y];
+      const r = A.simRope("tail", e, [e[0] + 70, e[1] + 12], T.sew1, Math.min(t, T.openTie - 0.25), { cutAt: T.sew1 + 0.05, opts: { maxSlack: 40 } });
+      s += A.ropeSVG(r, "var(--voice)", 0.95 * (1 - prog(t, T.openTie - 0.2, T.openTie)));
     }
-    cards.innerHTML = html;
+    if (t >= T.openTie) s += knotSVG(X1 + 4, Y, lerp(6.5, 3.2 * cam.z, morph), "var(--voice)", knotScale(t - T.openTie));
+    return `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">${s}</svg>` + openTitleHTML(t);
   }
-
-  // ---------------------------------------------------------------- chat
-  function renderChat(t) {
-    const k = easeOut(prog(t, T.chatIn[0], T.chatIn[1])) * (1 - easeIO(prog(t, T.chatOut[0], T.chatOut[1])));
-    const ch = $("#chat");
-    $("#chat-btn").classList.toggle("on", k > 0.5);
-    if (k <= 0.001) { ch.style.display = "none"; return; }
-    ch.style.display = "flex";
-    ch.style.transform = `translateX(${fx((1 - k) * 102)}%)`;
-    const open = NUM(t).length, visible = 5;
-    let log = "";
-    if (t < T.chatSend) {
-      log += `<div class="hello">I’ve read the whole note and its threads. Ask me anything about it.</div><div class="pills"><span>What am I still misunderstanding?</span><span>What have we figured out so far?</span><span>What should I work on next?</span></div>`;
-    } else {
-      log += `<div class="me">${esc(TXT.chatQ)}</div>`;
-      const text = streamed(TXT.chatA, C.chat.deltas, ...T.chatStream, t);
-      log += text ? `<div class="ans">${paras(text)}</div>` : `<div><span class="dot" style="opacity:${fx(0.3 + 0.6 * (0.5 + 0.5 * Math.sin((t / 1.1) * Math.PI * 2)))}"></span></div>`;
-    }
-    const n = count(S.chatQ, t), typing = t - lastKey(S.chatQ, t) < 0.5;
-    const input = t < T.chatSend && n ? `<span>${esc(TXT.chatQ.slice(0, n))}</span>${caretSpan(t, typing)}` : `${t >= T.chatIn[1] ? caretSpan(t, false) : ""}<span class="ph">Ask about this note…</span>`;
-    ch.innerHTML = `<header><div class="ti"><div class="nm"><span class="dot"></span>Inkling</div><small>On “${esc(TXT.title)}”. Reading this note: ${visible} threads (${open} open)</small></div><span class="gb">Copy</span><span class="gb">Clear</span><span class="gb">✕</span></header>` +
-      `<div class="log">${log}</div><footer><span class="tx">${input}</span><span class="send"><svg viewBox="0 0 12 12"><path d="M6 10V2.5M2.8 5.5L6 2.3l3.2 3.2" style="fill:none;stroke:var(--surface);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"/></svg></span></footer>`;
-  }
-
-  // ---------------------------------------------------------------- cold open
-  function renderOpen(t, c) {
-    const layer = $("#open");
-    if (t >= T.fly1 + 0.05) { layer.style.display = "none"; return; }
-    layer.style.display = "block";
-    const wmEl = $("#open-wm");
-    const W0 = 900, vb = WMS.vb.split(" ").map(Number), H0 = (W0 * vb[3]) / vb[2];
-    const x0 = 960 - W0 / 2, y0 = 470 - H0 / 2;
-    // the flight into the title bar: the target is the title bar's wordmark under the WIDE camera
-    const cw = cam(T.fly1);
-    const tbH = 26, tbW = (tbH * vb[2]) / vb[3];
-    const [tx, ty] = toScreen(cw, 112, 9 + 18 * 0);
-    const k = easeIO(prog(t, T.fly0, T.fly1));
-    const sc = lerp(1, (tbW * cw.s) / W0, k);
-    wmEl.style.transform = `translate(${fx(lerp(x0, tx, k))}px, ${fx(lerp(y0, ty, k))}px) scale(${fx(sc)})`;
-    wmEl.style.width = W0 + "px"; wmEl.style.height = fx(H0) + "px";
-    const fillK = easeIO(prog(t, T.fill0, T.fill1));
-    wmEl.innerHTML = wordmarkSVG(t, { fillK, sewn: t >= T.fill1, stitchOpacity: lerp(1, 0, prog(t, T.fill0 + 0.3, T.fill1 + 0.6)), knotScale: knotScale(t - T.knotPop) });
-    const line = $("#open-line");
-    line.style.top = "720px";
-    const lk = easeOut(prog(t, T.line0, T.line1)) * (1 - easeIO(prog(t, T.lineOut0, T.lineOut1)));
-    line.style.opacity = String(fx(lk));
-    line.style.transform = `translateY(${fx((1 - easeOut(prog(t, T.line0, T.line1))) * 10)}px)`;
-  }
-
-  // ---------------------------------------------------------------- close
-  function renderClose(t) {
-    const layer = $("#close");
-    if (t < T.icon[0]) { layer.style.display = "none"; return; }
-    layer.style.display = "block";
-    const ik = prog(t, T.icon[0], T.icon[1]);
-    const pop = ik < 0.7 ? lerp(0.86, 1.03, easeOut(ik / 0.7)) : lerp(1.03, 1, easeIO((ik - 0.7) / 0.3));
-    const icon = $("#close-icon");
-    icon.style.opacity = String(fx(easeOut(Math.min(1, ik * 1.6))));
-    icon.style.transform = `scale(${fx(pop)})`;
-    const wm = $("#close-wm");
-    const wk = easeOut(prog(t, T.closeWm[0], T.closeWm[1]));
-    wm.style.opacity = String(fx(wk));
-    if (!wm._built) { wm._built = true; }
-    wm.innerHTML = wordmarkSVG(t, { fillK: 1, sewn: true, stitchOpacity: 0, knotScale: knotScale(t - T.closeKnot) });
-    const line = $("#close-line");
-    const lk = easeOut(prog(t, T.closeLine[0], T.closeLine[1]));
-    line.style.opacity = String(fx(lk));
-    line.style.transform = `translateY(${fx((1 - lk) * 10)}px)`;
-  }
-
-  // ---------------------------------------------------------------- captions
-  function renderCaption(t) {
-    const caps = $("#caps");
-    const cap = CAPS.find((x) => t >= x.t[0] - 0.01 && t < x.t[1] + 0.3);
-    if (!cap) { caps.innerHTML = ""; return; }
-    const kin = easeOut(prog(t, cap.t[0], cap.t[0] + 0.4)), kout = easeIn(prog(t, cap.t[1], cap.t[1] + 0.28));
-    const i = cap.text.indexOf(cap.u);
-    const html = i < 0 ? esc(cap.text) : esc(cap.text.slice(0, i)) + `<span class="u">${esc(cap.u)}</span>` + esc(cap.text.slice(i + cap.u.length));
-    caps.innerHTML = `<div class="cap" style="opacity:${fx(kin * (1 - kout))};transform:translateY(${fx((1 - kin) * 8 - kout * 6)}px)">${html}<svg class="cu"></svg></div>`;
-    const capEl = $(".cap", caps), u = $(".u", capEl);
-    if (u) {
-      const cr = capEl.getBoundingClientRect(), ur = u.getBoundingClientRect();
-      const x0 = ur.left - cr.left, x1 = ur.right - cr.left, y = ur.bottom - cr.top - 2;
-      const sts = stitchesUnder([{ x: x0, r: x1, b: y }], cap.t[0] * 100, ["madder"], { len: 11, gap: 6 }).map((s) => ({ ...s, w: 3.1 }));
-      const svg = $(".cu", capEl);
-      svg.setAttribute("width", "10"); svg.setAttribute("height", "10");
-      const n = sts.length, s0 = cap.t[0] + 0.3, s1 = s0 + 0.45;
-      svg.innerHTML = sts.map((s, j) => stitchSVG(s, clamp((t - (s0 + ((s1 - s0) * j) / Math.max(1, n - 1))) / 0.12))).join("");
-    }
-  }
-
-  // ---------------------------------------------------------------- keys pressed
-  // A shortcut shows as keycaps at the foot of the frame while it is pressed.
-  const KEYS = [{ t: T.chatKey, keys: ["⌘", "J"], label: "Chat" }];
-  function renderKeys(t) {
-    const el = $("#keys");
-    const k = KEYS.find((x) => t >= x.t - 0.3 && t < x.t + 0.9);
-    if (!k) { el.style.display = "none"; return; }
-    const op = easeOut(prog(t, k.t - 0.3, k.t - 0.1)) * (1 - easeIn(prog(t, k.t + 0.6, k.t + 0.9)));
-    const down = t >= k.t && t < k.t + 0.16;
-    el.style.display = "flex";
-    el.style.opacity = String(fx(op));
-    el.innerHTML = k.keys.map((x) => `<span class="key${down ? " down" : ""}">${esc(x)}</span>`).join("") + `<span class="kl">${esc(k.label)}</span>`;
-  }
-
-  // ---------------------------------------------------------------- the pointer
-  const ARROW = `<svg width="28" height="36" viewBox="0 0 28 36"><path d="M3 2 L3 26 L9 20.5 L13.2 30.2 L17.4 28.4 L13.3 19.1 L21.5 19.1 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-  const IBEAM = `<svg width="28" height="36" viewBox="0 0 28 36"><path d="M9 4.5c2 0 3.5.6 4.5 1.8 1-1.2 2.5-1.8 4.5-1.8M9 31.5c2 0 3.5-.6 4.5-1.8 1 1.2 2.5 1.8 4.5 1.8M13.5 6.3v23.4" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/><path d="M9 4.5c2 0 3.5.6 4.5 1.8 1-1.2 2.5-1.8 4.5-1.8M9 31.5c2 0 3.5-.6 4.5-1.8 1 1.2 2.5 1.8 4.5 1.8M13.5 6.3v23.4" fill="none" stroke="#111" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-  function parseTarget(spec) {
-    // "@name" | "@name+[dx,dy]" | "@name:fx,fy" (a point inside a measured box)
-    const m = spec.match(/^@([a-z0-9]+)(?::([\d.]+),([\d.]+))?(?:\+\[(-?[\d.]+),(-?[\d.]+)\])?$/);
-    const base = TARGETS[m[1] + (m[2] ? `:${m[2]},${m[3]}` : "")] || TARGETS[m[1]];
-    if (!base) return [0, 0];
-    return [base[0] + (m[4] ? +m[4] : 0), base[1] + (m[5] ? +m[5] : 0)];
-  }
-  function pointerAt(t) {
-    let pos = null, ibeam = false;
-    for (const mv of MOVE) {
-      if (t < mv.t[0]) break;
-      if (mv.live) {
-        const p = liveSelEnd();
-        if (p) pos = p;
-        ibeam = !!mv.ibeam;
-        continue;
-      }
-      const from = mv.from ? parseTarget(mv.from) : pos || parseTarget(mv.to);
-      const to = parseTarget(mv.to);
-      const k = easeIO(prog(t, mv.t[0], mv.t[1]));
-      // a hand moves in a slight arc
-      const dx = to[0] - from[0], dy = to[1] - from[1], bow = Math.sin(Math.PI * k) * 0.08;
-      pos = [lerp(from[0], to[0], k) - dy * bow, lerp(from[1], to[1], k) + dx * bow];
-      ibeam = !!mv.ibeam && k > 0.6;
-    }
-    return { pos, ibeam };
-  }
-  function liveSelEnd() {
-    const sp = $$("#rows .sel");
-    if (!sp.length) return null;
-    const rs = sp.flatMap((s) => Array.from(s.getClientRects()));
-    const r = rs[rs.length - 1], w = $("#win").getBoundingClientRect(), s = cam(lastT).s;
-    return [(r.right - w.left) / s, (r.top - w.top) / s + r.height / s / 2];
-  }
-  function renderPointer(t, c) {
-    const el = $("#cursor");
-    const vis = PTR.find((p) => t >= p.show[0] && t < p.show[1]);
-    if (!vis) { el.style.display = "none"; return; }
-    const { pos, ibeam } = pointerAt(t);
-    if (!pos) { el.style.display = "none"; return; }
-    const fade = Math.min(prog(t, vis.show[0], vis.show[0] + 0.15), 1 - prog(t, vis.show[1] - 0.15, vis.show[1]));
-    let press = 0;
-    for (const p of PRESS) { const end = RELEASE[p] || p + 0.11; if (t >= p && t < end) press = 1; }
-    const [sx, sy] = toScreen(c, pos[0], pos[1]);
-    el.style.display = "block";
-    el.style.opacity = String(fx(fade));
-    el.innerHTML = ibeam ? IBEAM : ARROW;
-    const ox = ibeam ? -13.5 : -3, oy = ibeam ? -18 : -2;
-    el.style.transform = `translate(${fx(sx + ox)}px, ${fx(sy + oy)}px) scale(${press ? 0.9 : 1})`;
-  }
-
-  // ======================================================================== targets
-  // The pointer heads for things on the page; where they are is read off the page itself,
-  // at the moment the pointer gets there.
-  function measureIn(t, fn) {
-    renderAt(t);
-    const w = $("#win").getBoundingClientRect(), s = cam(t).s;
-    const r = fn();
-    if (!r) return null;
-    return [(r[0] - w.left) / s, (r[1] - w.top) / s];
-  }
-  const center = (el, fxk = 0.5, fyk = 0.5) => { if (!el) return null; const r = el.getBoundingClientRect(); return [r.left + r.width * fxk, r.top + r.height * fyk]; };
-  function resolveTargets() {
-    const spanOf = (sel) => { const sp = $$(sel); if (!sp.length) return null; return sp.flatMap((s) => Array.from(s.getClientRects())); };
-    const set = (name, t, fn) => { const p = measureIn(t, fn); if (p) TARGETS[name] = p; };
-    set("t1tag:.55,.62", 27.5, () => center($('.tag[data-t="t1"]'), 0.55, 0.62));
-    set("t1tag", 27.5, () => center($('.tag[data-t="t1"]')));
-    set("sketchbtn", 28.8, () => center($('.tag[data-t="t1"] .acts .pri')));
-    set("e1sel", 38.3, () => { const r = spanOf("#rows .sel"); return r && [r[0].left + r[0].width * 0.5, r[0].top + r[0].height * 0.5]; });
-    set("e2start", 39.6, () => { const r = spanOf("#rows .sel"); return r && [r[0].left, r[0].top + r[0].height * 0.5]; });
-    set("t2start", 47.5, () => { const r = spanOf("#rows .sel"); return r && [r[0].left, r[0].top + r[0].height * 0.5]; });
-    set("findbtn", 48.9, () => center($$(".tbar .act")[0], 0.32, 0.5));
-    set("t2reply", 54.2, () => center($('.tag[data-t="t2"] .reply'), 0.3, 0.5));
-    set("roomstart", 61.5, () => { const r = spanOf("#rows .sel"); return r && [r[0].left, r[0].top + r[0].height * 0.5]; });
-    set("askbtn", 62.6, () => center($$(".tbar .act")[1], 0.25, 0.4));
-    set("chip1", 63.2, () => center($$(".askbox .chip")[1]));
-    set("chip2", 63.6, () => center($$(".askbox .chip")[2]));
-    set("tell", 72.4, () => center($$("#nh .it")[0]));
-    set("hide", 87.8, () => center($$("#nh .it")[$$("#nh .it").length - 1]));
-  }
-
-  // ======================================================================== sound events
-  // What the audio renderer needs to put sound on the right frames.
-  function collectEvents() {
-    const ev = [];
-    // The typing on screen is sped up; the sound of it is not. A key sounds at most every
-    // 80 ms (about the pace of a quick typist), so fast passages read as typing, not a buzz.
-    const keysOf = (times, text, gain) => {
-      let last = -1;
-      times.forEach((t, i) => {
-        if (t - last < 0.08) return;
-        last = t;
-        ev.push({ t, kind: text[i] === " " ? "space" : "key", gain: gain || 1 });
-      });
-    };
-    keysOf(S.title, TXT.title); keysOf(S.p1, TXT.p1); keysOf(S.p2, TXT.p2); keysOf(S.p3, TXT.p3); keysOf(S.p4, TXT.p4);
-    keysOf(S.e1, EDIT1.to); keysOf(S.e2, EDIT2.to); keysOf(S.reply, TXT.reply, 0.8); keysOf(S.roomQ, TXT.roomQ, 0.8);
-    keysOf(S.brief, TXT.brief, 0.8); keysOf(S.chatQ, TXT.chatQ, 0.8); keysOf(S.p5, TXT.p5);
-    [T.enter.p1, T.enter.p2, T.enter.p3, T.enter.p4, T.enter.p5, T.roomSend, T.briefSet, T.chatSend, T.t2Send].forEach((t) => ev.push({ t, kind: "enter" }));
-    ev.push({ t: T.chatKey, kind: "chord" });
-    PRESS.forEach((t) => ev.push({ t, kind: "click" }));
-    // stitches: one soft tick per stitch as it is sewn
-    // stitches: a soft tick as they are sewn, no closer than 45 ms apart
-    const sew = (t0, t1, n, gain) => {
-      let last = -1;
-      for (let i = 0; i < n; i++) {
-        const t = t0 + ((t1 - t0 - 0.13) * i) / Math.max(1, n - 1);
-        if (t - last < 0.045) continue;
-        last = t;
-        ev.push({ t, kind: "stitch", gain: gain || 1, i });
-      }
-    };
-    WMS.glyphs.forEach((g, gi) => { const a = T.sew0 + gi * T.glyphGap; const n = Math.round(g.stitches.length / 6); for (let i = 0; i < n; i++) ev.push({ t: a + (T.glyphDur * i) / n, kind: "stitch", gain: 0.7, i }); });
-    renderAt(T.t1Sew[1] + 0.2); sew(...T.t1Sew, st.stitchCounts.t1 || 40);
-    renderAt(T.t2Sew[1] + 0.2); sew(...T.t2Sew, st.stitchCounts.t2 || 26);
-    renderAt(T.roomSew[1] + 0.2); sew(...T.roomSew, st.stitchCounts.room || 14);
-    renderAt(T.callSew[1] + 0.2); sew(...T.callSew, st.stitchCounts.call || 30);
-    SKETCH.steps.forEach((s, i) => { const [a, b] = T.skSteps[i]; const n = s.items.filter((x) => x.kind === "stitch").length; for (let j = 0; j < n; j += 2) ev.push({ t: a + (b - a) * 0.86 * (j / n), kind: "stitch", gain: 0.6, i: j }); });
-    [T.t1Motif, T.t2Motif].forEach((t) => { for (let i = 0; i < 9; i++) ev.push({ t: t + i * 0.04, kind: "stitch", gain: 0.8, i }); });
-    // threads drawn through the cloth, knots snugging tight
-    [T.t1Carry[0], T.t2Carry[0], ...T.roomCarry.map((x) => x[0]), T.callCarry[0]].forEach((t) => ev.push({ t, kind: "pull", gain: 0.6 }));
-    [T.t1Tie, T.t2Tie, T.knotPull].forEach((t) => ev.push({ t, kind: "pull", gain: 1 }));
-    [T.knotPop, T.t1Knot, T.t2Knot, T.closeKnot].forEach((t) => ev.push({ t, kind: "pop", gain: 1 }));
-    [T.t1Arrive, T.t2Think[0], T.roomSend, T.callArrive].forEach((t) => ev.push({ t, kind: "pop", gain: 0.35 }));
-    // paper and cloth: the window, the panels
-    ev.push({ t: T.win0, kind: "paper", gain: 0.9 }, { t: T.chatIn[0], kind: "slide", gain: 0.7 }, { t: T.chatOut[0], kind: "slide", gain: 0.6 },
-      { t: T.t2Bar, kind: "paper", gain: 0.25 }, { t: T.roomBar, kind: "paper", gain: 0.25 }, { t: T.askBox, kind: "paper", gain: 0.25 }, { t: T.briefOpen[0], kind: "paper", gain: 0.3 },
-      { t: T.hide[0], kind: "lift", gain: 0.6 }, { t: T.show[0], kind: "lift", gain: 0.5 }, { t: T.lamp[0], kind: "lamp", gain: 0.8 }, { t: T.winOut[0], kind: "paper", gain: 0.7 }, { t: T.icon[0], kind: "settle", gain: 0.8 });
-    ev.sort((a, b) => a.t - b.t);
-    // overlapping runs of stitches (the wordmark's letters, a sketch's lines) thin out too
-    let lastStitch = -1;
-    return ev.filter((e) => {
-      if (e.kind !== "stitch") return true;
-      if (e.t - lastStitch < 0.045) return false;
-      lastStitch = e.t;
-      return true;
+  function openTitleHTML(t) {
+    const k = prog(t, T.sew0 + 0.2, T.sew1 + 0.2);
+    if (t > T.lineUp + 0.4) return "";
+    const words = "A notebook that asks.".split(" ");
+    const out = 1 - E.in(prog(t, T.lineUp, T.lineUp + 0.32));
+    const lift = -60 * E.in(prog(t, T.lineUp, T.lineUp + 0.32)) + 4 * Math.sin(prog(t, T.openTie - 0.12, T.openTie + 0.1) * Math.PI);
+    let html = `<div style="position:absolute;left:0;right:0;top:${fx(400 + lift)}px;text-align:center;font:500 108px/1 'Fraunces Display';letter-spacing:-.02em;color:var(--ink);opacity:${fx(out)}">`;
+    words.forEach((w, i) => {
+      const wk = clamp((k * words.length - i) * 1.4);
+      const rise = (1 - spring(Math.max(0, (k * words.length - i)) * 0.5, 160, 14)) * 26;
+      html += `<span style="display:inline-block;opacity:${fx(wk)};transform:translateY(${fx(rise)}px)">${esc(w)}</span> `;
     });
+    return html + `</div>`;
   }
 
-  // ======================================================================== boot
-  async function boot() {
-    const fonts = ['400 17px "Fraunces"', '500 30px "Fraunces"', '500 17px "Fraunces"', '400 14px "Figtree"', '500 14px "Figtree"', '600 14px "Figtree"', '700 14px "Figtree"'];
-    await Promise.all(fonts.map((f) => document.fonts.load(f)));
-    await document.fonts.ready;
-    $("#desk").style.setProperty("--weave-l", `url("${ASSETS.WEAVE.light}")`);
-    $("#stage").style.setProperty("--weave-l", `url("${ASSETS.WEAVE.light}")`);
-    $("#stage").style.setProperty("--weave-d", `url("${ASSETS.WEAVE.dark}")`);
-    ["#desk-in"].forEach((s) => { $(s).style.backgroundImage = "var(--weave-l)"; $(s).style.backgroundColor = "var(--bg)"; $(s).style.backgroundSize = "48px 48px"; });
-    ["#desk-in-dark"].forEach((s) => { $(s).style.backgroundImage = "var(--weave-d)"; $(s).style.backgroundColor = "var(--bg)"; $(s).style.backgroundSize = "48px 48px"; $(s).style.opacity = "0"; });
-    $("#tb-wm").innerHTML = WM_STATIC();
-    buildWordmark();
-    buildSketch();
-    resolveTargets();
-    window.FILM.events = collectEvents();
-    // wait for the icon image too
-    const img = $("#close-icon img");
-    if (!img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
-    window.FILM.ready = true;
-    const q = new URLSearchParams(location.search);
-    if (q.has("t")) renderAt(+q.get("t"));
-    else if (q.has("play")) {
-      const t0 = performance.now() - (+q.get("play") || 0) * 1000;
-      const tick = () => { const t = (performance.now() - t0) / 1000; renderAt(Math.min(t, DUR)); if (t < DUR) requestAnimationFrame(tick); };
-      requestAnimationFrame(tick);
-    } else renderAt(0);
+  // ======================================================================= the film's layer
+  function patch(x, y, w, h, op, rot) {
+    return `<div style="position:absolute;left:${fx(x)}px;top:${fx(y)}px;width:${fx(w)}px;height:${fx(h)}px;border-radius:14px;background:color-mix(in srgb,var(--card) 94%,transparent);box-shadow:0 2px 0 rgba(var(--shade),.05),0 22px 40px -18px rgba(var(--shade),.55);opacity:${fx(op)};transform:rotate(${fx(rot || 0)}deg)"><div style="position:absolute;inset:6px;border-radius:10px;border:1.5px dashed color-mix(in srgb,var(--voice) 46%,transparent)"></div></div>`;
   }
-  window.FILM = { FPS, DUR, T, renderAt, ready: false, events: null };
-  boot().catch((e) => { window.FILM.error = String(e && e.stack || e); console.error(e); });
+  const measCtx = document.createElement("canvas").getContext("2d");
+  function textW(text, font) { measCtx.font = font; return measCtx.measureText(text).width; }
+  function captionsHTML(t) {
+    let html = "";
+    for (const c of CAPS) {
+      if (t < c.t0 || t > c.t1 + 0.05) continue;
+      const big = c.kind === "title";
+      const size = c.size || (big ? 50 : 32);
+      const font = big ? `500 ${size}px 'Fraunces Display'` : `500 ${size}px Figtree`;
+      const tw = textW(c.text, font);
+      const keyW = c.keys ? c.keys.k.length * 62 + 26 : 0;
+      const padX = big ? 38 : 30, h = big ? 104 : 80;
+      const w = tw + padX * 2 + keyW;
+      const x = 96, y = 1080 - 92 - h;
+      // in: the patch is sewn on (it unfolds from its top edge), the words stitch in behind a needle
+      const inK = spring(t - c.t0, 300, 26);
+      const sew = prog(t, c.t0 + 0.08, c.t0 + 0.08 + clamp(0.3 + c.text.length * 0.012, 0.45, 0.95));
+      // out: tied off. The thread under the words pulls taut, a knot pops, the patch lifts away
+      const tie0 = c.t1 - 0.36, taut = prog(t, tie0, tie0 + 0.14), pop = t - (tie0 + 0.14), yank = prog(t, c.t1 - 0.17, c.t1);
+      const dy = -4 * Math.sin(Math.PI * prog(t, tie0 + 0.1, c.t1 - 0.17)) - 70 * E.in(yank);
+      const op = (1 - E.in(yank));
+      const sy = clamp(inK, 0, 1.2);
+      html += `<div style="position:absolute;left:0;top:0;transform:translate(${fx(x)}px,${fx(y + dy)}px)">` + `<div style="transform-origin:0 0;transform:scaleY(${fx(sy)})">` + patch(0, 0, w, h, op) + `</div>`;
+      // words, revealed behind the needle
+      const reveal = E.io(sew) * (tw + 40);
+      html += `<div style="position:absolute;left:${padX}px;top:${big ? 22 : 20}px;white-space:nowrap;font:${font};letter-spacing:${big ? "-.012em" : "-.004em"};color:var(--ink);opacity:${fx(op)};` +
+        `-webkit-mask-image:linear-gradient(90deg,#000 ${fx(reveal - 28)}px,transparent ${fx(reveal)}px)">${esc(c.text)}</div>`;
+      // the running stitch under the words, sewn behind the needle, pulled straight at the tie
+      let st = "";
+      const ly = h - (big ? 22 : 19);
+      const stitches = runningStitch(padX, padX + tw, ly, (c.t0 * 1000) | 0, false);
+      stitches.forEach((s, i) => {
+        const sx1 = s.x1 + (taut > 0 ? (stitches[i + 1] ? stitches[i + 1].x0 - s.x1 : 0) * E.out(taut) : 0);
+        if (s.x0 > reveal) return;
+        st += capsule(s.x0, ly, Math.min(sx1, reveal), ly, big ? 2.4 : 2, "var(--voice)", op);
+      });
+      if (sew > 0 && sew < 1) st += `<g transform="translate(${fx(padX + reveal - 30)} ${fx(ly)}) scale(1.5)">${A.NEEDLE(0, -7, (t * 2.4) % 1, "var(--graphite)")}</g>`;
+      if (pop > 0) st += knotSVG(padX + tw + 6, ly, big ? 5 : 4.2, "var(--voice)", knotScale(pop) * op);
+      html += `<svg width="${fx(w + 40)}" height="${h + 20}" style="position:absolute;left:0;top:0;overflow:visible">${st}</svg>`;
+      if (c.keys) html += keysInline(t, c.keys, padX + tw + 26, (h - 52) / 2, op);
+      html += `</div>`;
+    }
+    return html;
+  }
+  function keysInline(t, K, x, y, op) {
+    const pressed = (at) => within(t, at, at + 0.22) || (K.hold && within(t, at, at + K.hold));
+    const ks = K.again && t >= K.again - 0.05 && K.k2 ? K.k2 : K.k;
+    const at = K.again && t >= K.again - 0.05 ? K.again : K.at;
+    const down = pressed(at);
+    return `<div style="position:absolute;left:${fx(x)}px;top:${fx(y)}px;display:flex;gap:8px;opacity:${fx(op * clamp((t - K.at + 0.6) * 4))}">` +
+      ks.map((k) => `<span style="min-width:52px;height:52px;padding:0 12px;display:grid;place-items:center;border-radius:11px;font:500 25px/1 Figtree;color:var(--ink);background:var(--paper);border:1px solid var(--line2);box-shadow:${down ? "0 1px 0" : "0 4px 0"} var(--line2);transform:translateY(${down ? 3 : 0}px)">${esc(k)}</span>`).join("") + `</div>`;
+  }
+  function keysHTML(t) { return ""; }
+
+  /** Chapter labels: woven tags that drop in on a thread from the top of the frame, swing,
+   *  and are tied off; the knot flies down to the border. */
+  const tagRopes = new Map();
+  function chaptersHTML(t) {
+    let html = "";
+    for (const ch of CH) {
+      const t0 = ch.t, t1 = ch.t + CH_HOLD;
+      if (t < t0 || t > t1 + 0.6) continue;
+      const ax = ch.x, ay = -12; // where its thread is pinned, above the frame
+      const drop = spring(t - t0, 70, 6.2); // a weighted swing in
+      const tie = t >= t1 - 0.5;
+      const pull = E.in(prog(t, t1 - 0.12, t1 + 0.28));
+      const ty = lerp(-260, 168, drop) - 360 * pull;
+      const sway = 9 * Math.sin((t - t0) * 3.1) * Math.exp(-(t - t0) * 1.4);
+      const tx = ax + sway;
+      const loop = [tx, ty - 4];
+      // the thread from the pin to the tag's loop
+      const rope = A.simRope("ch" + ch.n, [ax, ay], loop, t0, Math.min(t, t1 + 0.3), { b: (s) => { const d = spring(s - t0, 70, 6.2); const p = E.in(prog(s, t1 - 0.12, t1 + 0.28)); return [ax + 9 * Math.sin((s - t0) * 3.1) * Math.exp(-(s - t0) * 1.4), lerp(-260, 168, d) - 360 * p - 4]; }, tieAt: t1 - 0.5, opts: { maxSlack: 60, slackK: 0.12 } });
+      const c = `var(--${ch.c})`;
+      html += `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">${A.ropeSVG(rope, c, 0.95)}${t >= t1 - 0.22 ? knotSVG(loop[0], loop[1], 5.2, c, knotScale(t - (t1 - 0.22))) : ""}</svg>`;
+      const rot = sway * 0.35;
+      html += `<div class="chtag" style="left:${fx(tx)}px;top:${fx(ty)}px;--tc:${c};transform:translateX(-50%) rotate(${fx(rot)}deg)"><div class="lb"><div class="no">${String(ch.n).padStart(2, "0")}</div><div class="nm">${esc(ch.name)}</div></div><i class="loop"></i></div>`;
+    }
+    return html;
+  }
+  /** The sampler border at the foot of the frame: the film's progress, one motif a chapter. */
+  const BORDER = { x0: 760, x1: 1160, y: 1048 };
+  const slotX = (i) => BORDER.x0 + ((i + 0.5) * (BORDER.x1 - BORDER.x0)) / 7;
+  function borderHTML(t) {
+    if (t < T.pull1 - 0.8 || t > cEnd + 1.6) return "";
+    const op = prog(t, T.pull1 - 0.8, T.pull1) * (1 - prog(t, cEnd + 0.9, cEnd + 1.6));
+    let s = "";
+    // the dashed ground
+    const done = CH.filter((ch) => t >= ch.t + CH_HOLD + 0.7).length;
+    for (let i = 0; i < 7; i++) {
+      const x = slotX(i);
+      const landed = CH[i] && t >= CH[i].t + CH_HOLD + 0.7;
+      if (!landed) s += capsule(x - 9, BORDER.y, x + 9, BORDER.y, 1.6, "color-mix(in srgb,var(--faint) 60%,transparent)");
+      else s += motifSVG(x, BORDER.y, `var(--${CH[i].c})`, prog(t, CH[i].t + CH_HOLD + 0.7, CH[i].t + CH_HOLD + 1.1) * 1.15);
+      if (i < 6) s += capsule(x + 14, BORDER.y, slotX(i + 1) - 14, BORDER.y, 1.2, "color-mix(in srgb,var(--faint) 35%,transparent)");
+    }
+    return `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible;opacity:${fx(op)}">${s}</svg>`;
+  }
+  /** Knots in flight: a chapter's knot to the border; an app thread's knot to the page border. */
+  function flyHTML(t, cam, geo) {
+    let s = "";
+    for (const ch of CH) {
+      const a = ch.t + CH_HOLD - 0.1, b = a + 0.8;
+      if (!within(t, a, b)) continue;
+      const k = CLOTH(prog(t, a, b));
+      const from = [ch.x, 160], to = [slotX(ch.n - 1), BORDER.y];
+      const x = lerp(from[0], to[0], k), y = lerp(from[1], to[1], k) - 180 * Math.sin(Math.PI * prog(t, a, b));
+      s += knotSVG(x, y, 6, `var(--${ch.c})`, 1);
+    }
+    // in the app: a tied thread's knot joins the border at the top of the page
+    for (const [a, b] of [T.fly2, T.fly9, ED.fly]) {
+      if (!within(t, a, b) || !geo) continue;
+      const id = a === T.fly2[0] ? "t1" : a === T.fly9[0] ? "t2" : "t8";
+      const g = geo.tags[id];
+      const from = g && g.ropeEnd ? g.ropeEnd : [1000, 300];
+      const k = CLOTH(prog(t, a, b));
+      const wx = lerp(from[0], 660, k), wy = lerp(from[1], 68, k) - 60 * Math.sin(Math.PI * prog(t, a, b));
+      const p = toScreen(cam, wx, wy);
+      s += knotSVG(p[0], p[1], 3.2 * cam.z, "var(--voice)", 1);
+    }
+    return s ? `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">${s}</svg>` : "";
+  }
+
+  // ======================================================================= the pointer
+  function pointerPath(t, cam, geo) {
+    // world-space targets, resolved against this frame's geometry
+    const G = geo || { tags: {} };
+    const tag = (id, dx = 26, dy = 13) => () => { const g = G.tags[id]; return g ? [g.x + dx, g.y + dy] : null; };
+    const at = (x, y) => () => [x, y];
+    const word = (id, f = 0.5, line = 0) => () => { const L = (MEAS.main.anchors[id] || [])[line]; return L ? [lerp(L.x, L.r, f), L.y + 15 + (t >= T.save8 ? 28 : 0)] : null; };
+    const keys = [
+      [T.hover1 - 0.7, T.hover1, tag("f6")],
+      [T.t1hover - 0.7, T.t1hover, tag("t1")],
+      [T.e1sel - 0.4, T.e1sel, word("t1", 0.12, 0), true],
+      [T.e2drag[0] - 0.3, T.e2drag[0], at(552, 292), true],
+      [T.e2drag[0], T.e2drag[1], at(940, 292), true],
+      [T.sel3[0] - 0.4, T.sel3[0], word("t2", 0), true], [T.sel3[0], T.sel3[1], word("t2", 1), true], [T.find3 - 0.35, T.find3, () => [1050, (MEAS.main.anchors.t2 || [{ y: 350 }])[0].y + 88]],
+      [T.sel4[0] - 0.4, T.sel4[0], word("t3", 0), true], [T.sel4[0], T.sel4[1], word("t3", 1), true], [T.askClick4 - 0.4, T.askClick4, () => [1060, (MEAS.main.anchors.t3 || [{ y: 220 }])[0].y + 120]],
+      [T.sel5[0] - 0.4, T.sel5[0], word("t4", 0), true], [T.sel5[0], T.sel5[1], word("t4", 1), true], [T.askClick5 - 0.4, T.askClick5, () => [1060, (MEAS.main.anchors.t4 || [{ y: 270 }])[0].y + 120]],
+      [T.chip5a - 0.3, T.chip5a, () => [1140, (MEAS.main.anchors.t4 || [{ y: 270 }])[0].y + 46]], [T.chip5b - 0.3, T.chip5b, () => [1046, (MEAS.main.anchors.t4 || [{ y: 270 }])[0].y + 72]],
+      [T.hov5b - 0.3, T.hov5b, tag("t5")], [T.hov5c - 0.3, T.hov5c, tag("t6")],
+      [T.sketch7 - 0.8, T.sketch7 - 0.3, () => [1040, 377]], [T.larger7 - 0.4, T.larger7, () => { const g = G.tags.k1; return g && g.panel ? [g.panel.x + 52, g.panel.y + g.panel.h - 18] : [1050, 760]; }],
+      [T.tell8 - 0.45, T.tell8, at(480, 106)],
+      [T.hov9[0] - 0.3, T.hov9[0], tag("t4")], [T.hov9[2] - 0.3, T.hov9[2], tag("t5")], [T.hov9[4] - 0.3, T.hov9[4], tag("t6")],
+      [T.drag9[0] - 0.4, T.drag9[0], tag("t2")], [T.drag9[0], T.drag9[1], tag("t2")],
+      [T.replyFocus9 - 0.3, T.replyFocus9, () => { const g = G.tags.t2; return g && g.panel ? [g.panel.x + 60, g.panel.y + g.panel.h - 60] : null; }],
+      [T.resolveHov9 - 0.35, T.resolveHov9, () => { const g = G.tags.t2; return g && g.panel ? [g.panel.x + 30, g.panel.y + g.panel.h - 20] : null; }],
+      [T.open10 - 0.4, T.open10, tag("t3")],
+      [T.reopen11 - 0.4, T.reopen11, word("t2", 0.5)],
+      [T.reopen11 + 0.5, T.reopen11 + 0.8, () => { const g = G.tags.t2; return g && g.panel ? [g.panel.x + 30, g.panel.y + g.panel.h - 20] : null; }],
+      [T.reopen11 + 1.0, T.reopen11 + 1.3, () => { const g = G.tags.t2; return g && g.panel ? [g.panel.x + g.panel.w - 22, g.panel.y + g.panel.h - 20] : null; }],
+      [T.reopen11 + 1.45, T.reopen11 + 1.75, () => { const g = G.tags.t2; return g && g.panel ? [g.panel.x + g.panel.w - 80, g.panel.y + g.panel.h - 20] : null; }],
+      [T.menu16 - 0.45, T.menu16, at(385, 106 + 28)], [T.pick16 - 0.45, T.pick16, at(400, 106 + 28 + 92)],
+      [ED.act - 0.4, ED.act, tag("t8", 120, 40)],
+      [ED.hov - 0.35, ED.hov, () => { const g = G.tags.t8; return g && g.panel ? [g.panel.x + 30, g.panel.y + g.panel.h - 20] : null; }],
+      [ED.tie - 0.1, ED.tie, () => { const g = G.tags.t8; return g && g.panel ? [g.panel.x + 31, g.panel.y + g.panel.h - 19] : null; }],
+      ...DROPS.map(([b, x, y], i) => [b - 0.45, b, at(x, y)]),
+    ];
+    let cur = null, ibeam = false, press = 0, visible = false;
+    for (let i = 0; i < keys.length; i++) {
+      const [a, b, fn, ib] = keys[i];
+      if (t < a - 0.5 || t > b + 0.9 || t > ED.knot + 0.5 && b < ED.act) continue;
+      const p = fn();
+      if (!p) continue;
+      const prev = i > 0 && keys[i - 1][1] > a - 1.0 ? keys[i - 1][2]() : null;
+      const from = prev || [p[0] + 120, p[1] + 160];
+      const k = E.io(prog(t, a, b));
+      const arc = Math.sin(Math.PI * k) * 18;
+      cur = [lerp(from[0], p[0], k) + arc * 0.3, lerp(from[1], p[1], k) - arc];
+      ibeam = !!ib;
+      visible = true;
+      press = within(t, b, b + 0.12) ? 1 : 0;
+    }
+    return visible ? { p: cur, ibeam, press } : null;
+  }
+  function renderPointer(t, cam, geo) {
+    const el = $("#cursor");
+    const P = pointerPath(t, cam, geo);
+    if (!P) { el.style.display = "none"; return; }
+    const s = toScreen(cam, P.p[0], P.p[1]);
+    el.style.display = "block";
+    const sc = 1.25 * (P.press ? 0.9 : 1);
+    el.style.transform = `translate(${fx(s[0])}px, ${fx(s[1])}px) scale(${fx(sc)})`;
+    el.innerHTML = P.ibeam
+      ? `<svg width="14" height="26" viewBox="-7 -13 14 26"><path d="M-4 -11h8M-4 11h8M0 -11v22" style="stroke:#fff;stroke-width:3.4;stroke-linecap:round"/><path d="M-4 -11h8M-4 11h8M0 -11v22" style="stroke:#111;stroke-width:1.4;stroke-linecap:round"/></svg>`
+      : `<svg width="22" height="30" viewBox="0 0 22 30"><path d="M1.5 1.5v22.5l6-5.4 3.8 8.6 3.6-1.6-3.8-8.4 8-.6z" style="fill:#111;stroke:#fff;stroke-width:1.5;stroke-linejoin:round"/></svg>`;
+  }
+
+  // ======================================================================= sound cues
+  // The score is made from these (audio.js). Every cue says where it is: `pan` is where the
+  // thing sits on screen at that moment (-1 left .. 1 right), from the camera.
+  const EVENTS = [];
+  function buildEvents() {
+    const E_ = EVENTS;
+    const ev = (o) => E_.push(o);
+    const pw = (t, x, y) => clamp((toScreen(camAt(t), x, y || 400)[0] - 960) / 960, -0.9, 0.9);
+    const ps = (sx) => clamp((sx - 960) / 960, -0.9, 0.9);
+    const M = MEAS.main, an = (id) => (M.anchors[id] || [{ x: 351, y: 300, r: 900, b: 328 }]);
+    const brief = (t) => (t >= T.save8 ? 28 : 0);
+    const colL = 351, col = 614;
+    const caretX = (text, i) => colL + ((i % 74) / 74) * col;
+    const keys = (times, text, by, pan) => times.forEach((tk, i) => ev({ type: "tap", t: tk, pan: pan != null ? pan : pw(tk, caretX(text, i), by), v: /[ .,]/.test(text[i]) ? 0.55 : 0.8 + 0.2 * Math.sin(i * 7.1) }));
+    const cap = (o) => ev(o);
+    // ---- the cold open
+    ev({ type: "pierce", t: T.pierce, pan: ps(330) });
+    ev({ type: "sew", t0: T.sew0, t1: T.sew1, pan0: ps(330), pan1: ps(1590), r0: 5, r1: 15, gain: 0.9 });
+    ev({ type: "loose", t: T.sew1 + 0.18, pan: ps(1590), mind: "inkling" });
+    ev({ type: "duck", t0: T.openTie - 0.55, t1: T.openTie, level: 0.12 });
+    ev({ type: "taut", t0: T.openTie - 0.5, t1: T.openTie, pan0: ps(1590), pan1: ps(1590), f0: 110, f1: 165 });
+    ev({ type: "knot", t: T.openTie, pan: ps(1590), resolve: 1 });
+    ev({ type: "whoosh", t: T.lineUp, dur: 0.35, pan0: 0, pan1: 0, v: 0.5 });
+    ev({ type: "whoosh", t: T.pull0, dur: T.pull1 - T.pull0, pan0: 0, pan1: 0, v: 0.55, low: true });
+    // ---- chapters: a tag drops in on its thread, tied off; its knot lands in the border
+    for (const ch of CH) {
+      const t0 = ch.t, tie = ch.t + CH_HOLD - 0.22;
+      ev({ type: "whoosh", t: t0, dur: 0.4, pan0: ps(ch.x), pan1: ps(ch.x), v: 0.35 });
+      ev({ type: "thump", t: t0 + 0.33, pan: ps(ch.x), v: 0.7 });
+      ev({ type: "taut", t0: tie - 0.3, t1: tie, pan0: ps(ch.x), pan1: ps(ch.x), f0: 130, f1: 196, v: 0.5 });
+      ev({ type: "knot", t: tie, pan: ps(ch.x), resolve: 1, v: 0.75 });
+      ev({ type: "whoosh", t: ch.t + CH_HOLD - 0.1, dur: 0.8, pan0: ps(ch.x), pan1: ps(slotX(ch.n - 1)), v: 0.3 });
+      ev({ type: "stitch", t: ch.t + CH_HOLD + 0.7, pan: ps(slotX(ch.n - 1)) });
+      ev({ type: "stitch", t: ch.t + CH_HOLD + 0.82, pan: ps(slotX(ch.n - 1)) });
+    }
+    // ---- captions: stitched in behind a needle, tied off, lifted
+    for (const c of CAPS) {
+      const big = c.kind === "title";
+      ev({ type: "stitchrun", t0: c.t0 + 0.08, t1: c.t0 + 0.08 + clamp(0.3 + c.text.length * 0.012, 0.45, 0.95), pan0: -0.85, pan1: big ? -0.1 : -0.35, v: big ? 0.5 : 0.32 });
+      ev({ type: "stitch", t: c.t1 - 0.22, pan: -0.3, v: 0.4 });
+      if (c.keys) { ev({ type: "key", t: c.keys.at, pan: -0.2 }); if (c.keys.again) ev({ type: "key", t: c.keys.again, pan: -0.2 }); }
+    }
+    // ---- ch1: the guide, your sentence, its question
+    ev({ type: "whoosh", t: T.glide0, dur: T.glide1 - T.glide0, pan0: 0, pan1: 0, v: 0.25, low: true });
+    if (MEAS.moonAt) {
+      ev({ type: "unfold", t: MEAS.moonAt - 0.5, pan: -0.45 });
+      [0, 0.35, 0.7].forEach((d, i) => ev({ type: "sew", t0: MEAS.moonAt - 0.3 + d, t1: MEAS.moonAt - 0.3 + d + 0.3, pan0: -0.55, pan1: -0.4, r0: 11, r1: 12, gain: 0.4, soft: true }));
+      ev({ type: "fold", t: MEAS.moonAt + 1.6, pan: -0.45 });
+    }
+    const lastY = MEAS.start.lastY;
+    keys(S.first, FIRST, lastY);
+    ev({ type: "needle", t0: T.read1[0], t1: T.read1[1], pan: pw(T.read1[0], 325, lastY) });
+    ev({ type: "duck", t0: T.read1[1] - 0.45, t1: T.read1[1] + 0.05, level: 0.35 });
+    ev({ type: "sew", t0: T.sew1a, t1: T.sew1b, pan0: pw(T.sew1a, 351, lastY), pan1: pw(T.sew1b, 740, lastY), r0: 9, r1: 13 });
+    ev({ type: "taut", t0: T.carry1, t1: T.carry1 + 0.55, pan0: pw(T.carry1, 760, lastY), pan1: pw(T.carry1 + 0.5, 1020, lastY), f0: 98, f1: 147 });
+    ev({ type: "thump", t: T.carry1 + 0.5, pan: pw(T.carry1 + 0.5, 1030, lastY) });
+    ev({ type: "unfold", t: T.hover1, pan: pw(T.hover1, 1100, lastY) });
+    ev({ type: "loose", t: T.hover1 + 0.1, pan: pw(T.hover1, 1100, lastY), mind: "inkling" });
+    ev({ type: "voice", t0: T.hover1 + 0.5, t1: T.hover1 + 3.4, mind: "inkling", text: TXT.first, pan: pw(T.hover1, 1100, lastY) });
+    ev({ type: "whoosh", t: T.wipe1[0], dur: T.wipe1[1] - T.wipe1[0], pan0: 0.4, pan1: 0, v: 0.55 });
+    // ---- ch2: written, read, a thread, fixed, tied off
+    keys(S.title, "Sub-50 10k by March", 150);
+    const by = (id) => (M.blocks[id] || { y: 300 }).y + 14;
+    keys(S.p1, P1, by("p1")); keys(S.p2, P2, by("p2")); keys(S.p3, P3, by("p3"));
+    ev({ type: "needle", t0: T.read2a[0], t1: T.read2a[1], pan: pw(T.read2a[0], 325, by("p1")) });
+    ev({ type: "tack", t: T.read2a[1], pan: pw(T.read2a[1], 325, by("p1")) });
+    ev({ type: "needle", t0: T.read2b[0], t1: T.read2b[1], pan: pw(T.read2b[0], 325, by("p2")), v: 0.5 });
+    ev({ type: "tick", t: T.t1arrive, pan: pw(T.t1arrive, 1030, by("p2")), v: 0.35 });
+    const a1 = an("t1")[0];
+    ev({ type: "unfold", t: T.t1hover, pan: pw(T.t1hover, 1100, a1.y) });
+    ev({ type: "loose", t: T.t1hover + 0.1, pan: pw(T.t1hover, 1100, a1.y), mind: "inkling" });
+    ev({ type: "voice", t0: T.t1hover + 0.45, t1: T.t1hover + 3.2, mind: "inkling", text: TXT.correction, pan: pw(T.t1hover, 1100, a1.y) });
+    ev({ type: "fold", t: T.t1fold, pan: pw(T.t1fold, 1100, a1.y) });
+    ev({ type: "tick", t: T.e1sel, pan: pw(T.e1sel, a1.x + 60, a1.y), v: 0.5 });
+    keys(S.e1, EDIT1.to, a1.y); keys(S.e2, EDIT2.to, by("p2"));
+    ev({ type: "needle", t0: T.reread[0], t1: T.reread[1], pan: pw(T.reread[0], 325, by("p2")) });
+    ev({ type: "unfold", t: T.settleOpen, pan: pw(T.settleOpen, 1100, a1.y) });
+    ev({ type: "voice", t0: T.settle[0], t1: T.settle[1], mind: "inkling", text: TXT.settle, pan: pw(T.settle[0], 1100, a1.y) });
+    tieOff(T.breath2, T.tie2, T.knot2, T.fly2, (t) => pw(t, 1018, a1.y + 10), 2);
+    keys(S.p4, P4, by("p4"));
+    ev({ type: "needle", t0: T.read2d[0], t1: T.read2d[1], pan: pw(T.read2d[0], 325, by("p4")), v: 0.5 });
+    ev({ type: "tack", t: T.read2d[1], pan: pw(T.read2d[1], 325, by("p4")) });
+    // ---- ch3: asking
+    const a2 = an("t2")[0], a3 = an("t3")[0], a4 = an("t4")[0];
+    ev({ type: "tick", t: T.bar3, pan: pw(T.bar3, 1100, a2.y), v: 0.4 });
+    sewThread(T.sew3, T.carry3, a2, "right", T.open3, "inkling", TXT.probe, T.open3 + 0.4, T.open3 + 3.6);
+    ev({ type: "tick", t: T.bar4, pan: pw(T.bar4, 1100, a3.y), v: 0.4 }); ev({ type: "tick", t: T.askClick4, pan: pw(T.askClick4, 1100, a3.y), v: 0.6 });
+    keys(S.q4, TXT.askQ, a3.y, pw(T.type4[0], 1100, a3.y));
+    ev({ type: "key", t: T.send4, pan: pw(T.send4, 1100, a3.y), v: 0.6 });
+    sewThread(T.sew4, T.carry4, a3, "left", T.carry4 + 0.6, "inkling", TXT.ask, ...T.stream4);
+    ev({ type: "tick", t: T.bar5, pan: pw(T.bar5, 1100, a4.y), v: 0.4 }); ev({ type: "tick", t: T.askClick5, pan: pw(T.askClick5, 1100, a4.y), v: 0.6 });
+    ev({ type: "chip", t: T.chip5a, pan: pw(T.chip5a, 1140, a4.y), mind: "skeptic" }); ev({ type: "chip", t: T.chip5b, pan: pw(T.chip5b, 1050, a4.y), mind: "tutor" });
+    keys(S.q5, TXT.roomQ, a4.y, pw(T.type5[0], 1100, a4.y));
+    ev({ type: "key", t: T.send5, pan: pw(T.send5, 1100, a4.y), v: 0.6 });
+    ev({ type: "sew", t0: T.sew5[0], t1: T.sew5[1] + 0.12, pan0: pw(T.sew5[0], a4.x, a4.y), pan1: pw(T.sew5[1], a4.r, a4.y), r0: 11, r1: 16, gain: 1.1, triple: true });
+    [["inkling", 0, 147], ["skeptic", 1, 110], ["tutor", 2, 196]].forEach(([m, k, f]) => ev({ type: "taut", t0: T.carry5 + k * 0.08, t1: T.carry5 + 0.5 + k * 0.08, pan0: pw(T.carry5, 970, a4.y), pan1: pw(T.carry5 + 0.5, 1030, a4.y + k * 40), f0: f * 0.75, f1: f, mind: m, v: 0.6 }));
+    for (const [m, k] of [["inkling", 0], ["skeptic", 1], ["tutor", 2]]) ev({ type: "thump", t: T.carry5 + 0.5 + k * 0.08, pan: pw(T.carry5 + 0.5, 1030, a4.y + k * 40), v: 0.5 });
+    ev({ type: "unfold", t: T.open5, pan: pw(T.open5, 1100, a4.y) });
+    ev({ type: "voice", t0: T.stream5.inkling[0], t1: T.stream5.inkling[1], mind: "inkling", text: TXT.room.inkling, pan: pw(T.open5, 1110, a4.y) });
+    ev({ type: "voice", t0: T.stream5.skeptic[0], t1: T.stream5.skeptic[1], mind: "skeptic", text: TXT.room.skeptic, pan: pw(T.hov5b, 1110, a4.y + 40), gainAt: [[T.hov5b, 1]], gain: 0.45 });
+    ev({ type: "voice", t0: T.stream5.tutor[0], t1: T.stream5.tutor[1], mind: "tutor", text: TXT.room.tutor, pan: pw(T.hov5c, 1110, a4.y + 80), gainAt: [[T.hov5c, 1]], gain: 0.4 });
+    ev({ type: "unfold", t: T.hov5b, pan: pw(T.hov5b, 1110, a4.y + 40) }); ev({ type: "unfold", t: T.hov5c, pan: pw(T.hov5c, 1110, a4.y + 80) }); ev({ type: "fold", t: T.fold5, pan: 0.4 });
+    const b5 = M.blocks.p5 || { y: 470 };
+    keys(S.p5, P5, b5.y + 14);
+    ev({ type: "needle", t0: T.read6[0], t1: T.read6[1], pan: pw(T.read6[0], 325, b5.y) });
+    sewThread(T.sew6, T.carry6, { x: 351, r: 880, y: b5.y }, "left", T.carry6 + 0.6, "skeptic", TXT.call, ...T.stream6);
+    ev({ type: "sew", t0: T.wipe7[0], t1: T.wipe7[1] - 0.25, pan0: -0.9, pan1: 0.9, r0: 16, r1: 20, gain: 0.8 });
+    ev({ type: "whoosh", t: T.wipe7[0], dur: T.wipe7[1] - T.wipe7[0], pan0: -0.6, pan1: 0.6, v: 0.35 });
+    const k1 = (MEAS.bread.anchors.k1 || [{ x: 420, r: 760, y: 230 }])[0];
+    ev({ type: "tick", t: T.bar7, pan: pw(T.bar7, 1100, k1.y), v: 0.4 }); ev({ type: "tick", t: T.sketch7, pan: pw(T.sketch7, 1100, k1.y), v: 0.6 });
+    sewThread(T.sew7, T.carry7, k1, "right", null, null, null);
+    ev({ type: "needle", t0: T.think7[0], t1: T.think7[1], pan: pw(T.think7[0], 1100, k1.y), v: 0.5 });
+    ev({ type: "voice", t0: T.idea7 + 0.1, t1: T.idea7 + 0.9, mind: "inkling", text: TXT.idea, pan: pw(T.idea7, 1100, k1.y) });
+    T.steps7.forEach((st) => ev({ type: "sew", t0: st, t1: st + 0.75, pan0: pw(st, 1040, 500), pan1: pw(st + 0.7, 1160, 500), r0: 10, r1: 12, gain: 0.55, soft: true }));
+    T.steps7.forEach((st, i) => ev({ type: "loose", t: st + 0.78, pan: pw(st, 1100, 500), mind: "inkling", step: i }));
+    ev({ type: "tick", t: T.larger7, pan: pw(T.larger7, 1050, 760), v: 0.6 });
+    [T.big7[0] + 0.25, T.big7[0] + 0.85, T.big7[0] + 1.45].forEach((st) => ev({ type: "sew", t0: st, t1: st + 0.6, pan0: -0.2, pan1: 0.2, r0: 12, r1: 14, gain: 0.5, soft: true }));
+    ev({ type: "sew", t0: T.wipe8[0], t1: T.wipe8[1] - 0.25, pan0: -0.9, pan1: 0.9, r0: 16, r1: 20, gain: 0.8 });
+    ev({ type: "whoosh", t: T.wipe8[0], dur: T.wipe8[1] - T.wipe8[0], pan0: -0.6, pan1: 0.6, v: 0.35 });
+    ev({ type: "tick", t: T.tell8, pan: pw(T.tell8, 480, 106), v: 0.6 });
+    keys(S.brief, TXT.brief, 140);
+    ev({ type: "tick", t: T.save8, pan: pw(T.save8, 900, 180), v: 0.6 });
+    ev({ type: "whoosh", t: T.chatIn8[0], dur: 0.45, pan0: 0.9, pan1: 0.5, v: 0.35 });
+    ev({ type: "tick", t: T.pills8, pan: 0.5, v: 0.3 }); ev({ type: "tick", t: T.pills8 + 0.5, pan: 0.5, v: 0.3 });
+    keys(S.chat, TXT.chatQ, 820, 0.45);
+    ev({ type: "key", t: T.chatSend8, pan: 0.5, v: 0.6 });
+    ev({ type: "voice", t0: T.chatStream8[0], t1: T.chatStream8[1], mind: "inkling", text: TXT.chat, pan: 0.45 });
+    ev({ type: "tick", t: T.clear8, pan: 0.5, v: 0.35 });
+    // ---- ch4: threads
+    ev({ type: "whoosh", t: T.chatOut9[0], dur: 0.4, pan0: 0.5, pan1: 0.9, v: 0.3 });
+    [["t4", 0, "inkling", TXT.room.inkling], ["t5", 2, "skeptic", TXT.room.skeptic], ["t6", 4, "tutor", TXT.room.tutor]].forEach(([id, k, m, text]) => {
+      const tt = T.hov9[k];
+      ev({ type: "unfold", t: tt, pan: pw(tt, 1100, a4.y + 28) }); ev({ type: "fold", t: T.hov9[k + 1], pan: pw(tt, 1100, a4.y + 28) });
+      ev({ type: "voice", t0: tt + 0.15, t1: tt + 0.75, mind: m, text, pan: pw(tt, 1100, a4.y + 28), gain: 0.7, words: 5 });
+    });
+    ev({ type: "whoosh", t: T.jump9[0], dur: 0.45, pan0: 0.5, pan1: -0.6, v: 0.45 }); ev({ type: "whoosh", t: T.jump9[1], dur: 0.45, pan0: -0.6, pan1: 0.6, v: 0.45 });
+    const a2b = { ...a2, y: a2.y + 28 };
+    ev({ type: "tick", t: T.drag9[0], pan: pw(T.drag9[0], 1030, a2b.y), v: 0.6 });
+    ev({ type: "taut", t0: T.drag9[0], t1: T.drag9[1], pan0: pw(T.drag9[0], 1030, a2b.y), pan1: pw(T.drag9[1], 1120, a2b.y + 132), f0: 110, f1: 165, v: 0.55 });
+    ev({ type: "thump", t: T.drag9[1], pan: pw(T.drag9[1], 1120, a2b.y + 132), v: 0.6 });
+    ev({ type: "unfold", t: T.dragOpen9, pan: pw(T.dragOpen9, 1000, a2b.y + 132) });
+    keys(S.reply, TXT.reply, a2b.y + 300, pw(T.reply9[0], 1000, a2b.y + 300));
+    ev({ type: "key", t: T.send9, pan: pw(T.send9, 1000, a2b.y + 300), v: 0.6 });
+    ev({ type: "needle", t0: T.send9 + 0.1, t1: T.answer9[0], pan: pw(T.send9, 1000, a2b.y + 300), v: 0.4 });
+    ev({ type: "voice", t0: T.answer9[0], t1: T.answer9[1], mind: "inkling", text: TXT.answer, pan: pw(T.answer9[0], 1000, a2b.y + 300) });
+    tieOff(T.breath9, T.tie9, T.knot9, T.fly9, (t) => pw(t, 1110, a2b.y + 145), 2);
+    const a3b = { ...a3, y: a3.y + 28 };
+    ev({ type: "unfold", t: T.open10, pan: pw(T.open10, 260, a3b.y) });
+    ev({ type: "key", t: T.dis10, pan: -0.2 });
+    ev({ type: "snip", t: T.snip10, pan: pw(T.snip10, 300, a3b.y), stop: 0.85 });
+    ev({ type: "tick", t: T.snip10 + 0.95, pan: pw(T.snip10 + 0.9, 100, 820), v: 0.35 });
+    ev({ type: "key", t: T.undo10, pan: -0.2 });
+    ev({ type: "unsnip", t: T.undo10 + 0.02, pan: pw(T.undo10, 300, a3b.y) });
+    ev({ type: "tick", t: T.reopen11, pan: pw(T.reopen11, 700, a2b.y), v: 0.55 });
+    ev({ type: "unfold", t: T.reopen11 + 0.05, pan: pw(T.reopen11, 1000, a2b.y + 132) });
+    [0.5, 0.95, 1.4].forEach((d) => ev({ type: "tick", t: T.reopen11 + d, pan: 0.35, v: 0.3 }));
+    ev({ type: "key", t: T.hide12, pan: -0.2 });
+    ev({ type: "lift", t: T.hide12, pan: 0 });
+    ev({ type: "duck", t0: T.hide12 + 0.12, t1: T.show12, level: 0.06, hard: true });
+    ev({ type: "key", t: T.show12, pan: -0.2 });
+    ev({ type: "lift", t: T.show12 + 0.02, pan: 0, back: true });
+    ev({ type: "whoosh", t: T.right13, dur: 0.6, pan0: -0.6, pan1: 0.6, v: 0.35 });
+    ev({ type: "marks", t: T.marks13, pan: 0.1 });
+    ev({ type: "whoosh", t: T.both13, dur: 0.5, pan0: 0.5, pan1: -0.4, v: 0.3 });
+    ev({ type: "snip", t: T.snip14, pan: 0.4, stop: 0.32 });
+    // ---- ch5: minds
+    ["staff", "editor", "skeptic", "tutor", "investor"].forEach((m, i) => ev({ type: "chip", t: T.chips15 + i * 0.3 + 0.02, pan: -0.5 + i * 0.25, mind: m }));
+    ev({ type: "tick", t: T.blank15, pan: 0.4, v: 0.6 });
+    keys(S.name, "Coach", 0, -0.1); keys(S.desc, COACH.description, 0, -0.05); keys(S.how, COACH.howItThinks, 0, 0);
+    ev({ type: "tick", t: T.voice15, pan: 0.3, v: 0.55 }); ev({ type: "tick", t: T.often15, pan: 0.35, v: 0.55 }); ev({ type: "tick", t: T.create15, pan: 0.3, v: 0.7 });
+    ev({ type: "chip", t: T.create15 + 0.05, pan: 0.2, mind: "coach" });
+    ev({ type: "whoosh", t: T.pan16[0], dur: T.pan16[1] - T.pan16[0], pan0: 0.8, pan1: -0.6, v: 0.5, low: true });
+    ev({ type: "tick", t: T.menu16, pan: pw(T.menu16, 385, 134), v: 0.55 }); ev({ type: "tick", t: T.pick16, pan: pw(T.pick16, 400, 226), v: 0.6 });
+    const b6 = M.blocks.p6 || { y: 520 };
+    keys(S.p6, P6, b6.y + 42);
+    ev({ type: "needle", t0: T.read16[0], t1: T.read16[1], pan: pw(T.read16[0], 325, b6.y + 28) });
+    sewThread(T.sew16, T.carry16, { x: 351, r: 760, y: b6.y + 28 }, "right", T.open16, "coach", TXT.coach, T.open16 + 0.3, T.open16 + 2.8);
+    ev({ type: "whoosh", t: T.wipe17[0], dur: T.wipe17[1] - T.wipe17[0], pan0: 0.3, pan1: 0, v: 0.55 });
+    // ---- ch6 and ch7: the montages run on a sewing-machine groove; each cut lands on a beat
+    ev({ type: "groove", t0: c6, t1: cEnd, bpm: 96 });
+    const riff = [40, 43, 45, 47, 50, 47, 45, 43]; // E2 G2 A2 B2 D3 ... (E dorian)
+    const beats = [M6.dark, M6.ink, M6.letter, M6.size, M6.mode, M6.pace, M6.drop, M6.speak, M6.learn, M6.keys, M7.side, M7.find, M7.copy, M7.exp, M7.obs, M7.help, M7.model, M7.claude, M7.blocks];
+    beats.forEach((b, i) => ev({ type: "bass", t: b, note: riff[i % riff.length] }));
+    ev({ type: "tick", t: M6.dark + 0.75, pan: 0.3, v: 0.6 }); ev({ type: "swell", t0: M6.dark + 0.85, t1: M6.dark + 2.4, note: 40 });
+    for (let i = 0; i < 8; i++) ev({ type: "pluck", t: M6.ink + i * (BEAT / 2), note: [64, 66, 67, 69, 71, 73, 74, 76][i], pan: -0.35 + i * 0.1, v: 0.55 });
+    ev({ type: "tick", t: M6.letter + 0.35, pan: 0.2, v: 0.6 }); ev({ type: "pluck", t: M6.letter + 0.35, note: 71, pan: 0.2, v: 0.5 });
+    [[0.05, 62], [0.45, 74], [0.95, 67]].forEach(([d, n]) => { ev({ type: "tick", t: M6.size + d, pan: 0.1, v: 0.5 }); ev({ type: "pluck", t: M6.size + d, note: n, pan: 0.1, v: 0.4 }); });
+    ev({ type: "tick", t: M6.mode, pan: -0.3, v: 0.55 }); ev({ type: "tick", t: M6.mode + 0.35, pan: -0.25, v: 0.6 });
+    ev({ type: "tick", t: M6.pace + 0.35, pan: 0.3, v: 0.6 });
+    ev({ type: "tick", t: M6.drop + 0.3, pan: 0.35, v: 0.6 });
+    DROPS.forEach(([b, x, y]) => ev({ type: "drop", t: b, pan: pw(b, x, y) }));
+    ev({ type: "key", t: M6.speak + 0.15, pan: -0.2, hold: 1.8 });
+    ev({ type: "breath", t0: M6.speak + 0.3, t1: M6.speak + 1.9, pan: 0.5 });
+    ev({ type: "tick", t: M6.learn + 0.3, pan: 0.4, v: 0.6 });
+    ev({ type: "voice", t0: M6.learn + 0.95, t1: M6.learn + 1.7, mind: "inkling", text: TXT.learned, pan: 0.1, words: 6 });
+    ev({ type: "tick", t: M6.keys + 0.45, pan: 0.4, v: 0.6 }); [1.1, 1.2, 1.3].forEach((d) => ev({ type: "tap", t: M6.keys + d, pan: 0.3, v: 0.9 }));
+    ev({ type: "sew", t0: c7 - 0.6, t1: c7 - 0.05, pan0: -0.9, pan1: 0.9, r0: 16, r1: 20, gain: 0.7 });
+    ev({ type: "key", t: M7.side + 0.1, pan: -0.2 }); ev({ type: "whoosh", t: M7.side + 0.15, dur: 0.35, pan0: -0.9, pan1: -0.5, v: 0.35 }); ev({ type: "tick", t: M7.side + 1.2, pan: -0.6, v: 0.5 });
+    ev({ type: "key", t: M7.find + 0.1, pan: -0.2 }); for (let i = 0; i < 5; i++) ev({ type: "tap", t: M7.find + 0.5 + i * 0.09, pan: 0, v: 0.7 }); ev({ type: "key", t: M7.find + 1.3, pan: 0, v: 0.5 });
+    ev({ type: "key", t: M7.copy + 0.1, pan: -0.2 }); ev({ type: "pop", t: M7.copy + 0.22, pan: 0 });
+    ev({ type: "key", t: M7.exp + 0.1, pan: -0.2 }); [0.95, 1.55, 1.9, 2.25].forEach((d) => ev({ type: "tick", t: M7.exp + d, pan: 0, v: 0.55 }));
+    ev({ type: "tick", t: M7.obs + 0.2, pan: -0.6, v: 0.5 }); ev({ type: "tick", t: M7.obs + 0.6, pan: -0.55, v: 0.6 });
+    for (let i = 0; i < 7; i++) ev({ type: "stitch", t: M7.obs + 1.1 + i * 0.18, pan: -0.7, v: 0.5 });
+    ev({ type: "tick", t: M7.help + 0.12, pan: -0.3, v: 0.5 }); ev({ type: "tick", t: M7.help + 0.45, pan: -0.25, v: 0.6 });
+    ev({ type: "tick", t: M7.model + 0.5, pan: 0.2, v: 0.4 }); ev({ type: "tick", t: M7.model + 1.5, pan: 0.3, v: 0.55 });
+    for (let k = 0; k < 7; k++) ev({ type: "pluck", t: M7.blocks + 0.3 + k * (BEAT / 2), note: [52, 55, 57, 59, 62, 64, 67][k], pan: 0.3, v: 0.5 });
+    // ---- the end: the Coach's thread tied off; the border grows into the mark
+    const b6y = b6.y + 28 + 28;
+    ev({ type: "tick", t: ED.act, pan: pw(ED.act, 1100, b6y), v: 0.5 });
+    tieOff(ED.breath, ED.tie, ED.knot, ED.fly, (t) => pw(t, 1010, b6y + 10), 2);
+    ev({ type: "weave", t0: ED.weave[0], t1: ED.weave[1], blocks: 4 });
+    ev({ type: "swell", t0: ED.morph[0], t1: ED.morph[1] + 1.2, note: 52 });
+    ev({ type: "sew", t0: ED.word[0], t1: ED.word[1], pan0: 0.0, pan1: 0.55, r0: 12, r1: 4, gain: 0.7 });
+    ev({ type: "stitch", t: ED.dot[0], pan: 0.0, v: 1 }); ev({ type: "stitch", t: ED.dot[1], pan: 0.0, v: 1 });
+    ev({ type: "knot", t: ED.dot[1], pan: 0, resolve: 3 });
+    E_.sort((a, b) => (a.t ?? a.t0) - (b.t ?? b.t0));
+
+    // a held breath, a pull, the knot (and its flight to the page's border)
+    function tieOff(breath, tie, knot, fly, panAt, resolve) {
+      ev({ type: "duck", t0: breath, t1: tie + 0.02, level: 0.14 });
+      ev({ type: "tick", t: tie, pan: panAt(tie), v: 0.55 });
+      ev({ type: "taut", t0: tie, t1: knot, pan0: panAt(tie), pan1: panAt(knot), f0: 98, f1: 196, v: 0.9 });
+      ev({ type: "knot", t: knot, pan: panAt(knot), resolve });
+      ev({ type: "whoosh", t: fly[0], dur: fly[1] - fly[0], pan0: panAt(fly[0]), pan1: 0, v: 0.35 });
+      ev({ type: "stitch", t: fly[1], pan: 0, v: 0.8 }); ev({ type: "stitch", t: fly[1] + 0.1, pan: 0, v: 0.7 });
+    }
+    // a thread pulled from the words to the margin, and its tag
+    function sewThread(sew, carry, a, side, open, mind, text, s0, s1) {
+      const y = a.y + 14;
+      ev({ type: "sew", t0: sew[0], t1: sew[1], pan0: pw(sew[0], a.x, y), pan1: pw(sew[1], a.r, y), r0: 9, r1: 14 });
+      const tabX = side === "right" ? 1030 : 290;
+      ev({ type: "taut", t0: carry, t1: carry + 0.5, pan0: pw(carry, side === "right" ? 977 : 339, y), pan1: pw(carry + 0.5, tabX, y), f0: 98, f1: 147, mind });
+      ev({ type: "thump", t: carry + 0.48, pan: pw(carry + 0.5, tabX, y) });
+      if (open != null) { ev({ type: "unfold", t: open, pan: pw(open, tabX + (side === "right" ? 120 : -120), y) }); ev({ type: "loose", t: open + 0.1, pan: pw(open, tabX, y), mind }); }
+      if (text) ev({ type: "voice", t0: s0, t1: s1, mind, text, pan: pw(s0, tabX + (side === "right" ? 120 : -120), y) });
+    }
+  }
+
+  // ======================================================================= coverage
+  // Every row of design/capabilities.md, and when the film shows it (render.ts coverage
+  // writes coverage.md from this, so the times always match the cut).
+  const COVERAGE = [];
+  function buildCoverage() {
+    const c = (section, row, t, what) => COVERAGE.push({ section, row, t: Math.round(t * 10) / 10, what });
+    c("Writing", "A plain page: title, paragraphs, three heading sizes, bullet and numbered lists, quotes", M7.blocks + 0.3, "A paragraph is selected and the selection menu's first row turns it into H1, H2, H3, a quote, a bullet and a numbered item, one per half beat; the guide's headings and bullets are seen in chapter 1");
+    c("Writing", "Speak instead of typing", M6.speak + 0.15, "⌥ is held, the corner shows Listening… and then the words as they come; letting go puts “Race morning I’ll eat by six.” in the note");
+    c("Writing", "Ink from the pointer", M6.drop, "The switch in Settings › Appearance turns on; on the page, three drops of ink fall where the pointer rests, dry and fade");
+    c("Writing", "Your look", M6.dark, "Settings › Appearance: System, Light and Dark (the whole desk turns to Lamplight), then the seven thread colours, lettering (Inkling’s own, like your notes) and text size (small, large, default)");
+    c("Writing", "An immersive window", T.title2[0], "No bar: as the title and first paragraphs are typed, the sidebar toggle, Chat and the row above the title fade; caption “No bar. The controls fade while you write.”");
+    c("Reading along", "Reads each paragraph at your pause", T.read2a[0], "After each paragraph the needle bobs in the gutter and leaves a tacking stitch; Settings › Reading shows pace Regular and Slow at " + mmss(M6.pace));
+    c("Reading along", "Speaks only when it is worth it", T.t1arrive, "Most paragraphs get only a tacking stitch; ¶2 gets a correction (×); the guide’s Moon thread unfolds with its sketch at " + mmss(MEAS.moonAt || c1 + 3));
+    c("Reading along", "Waits while you type", T.t1arrive, "The correction arrives while ¶3 is being typed and stays folded on its tab until the writer pauses");
+    c("Reading along", "Fix the words, the thread settles", T.e1sel, "5:30 becomes 4:55 in the text; Inkling reads it again, says why it settles, and the thread ties itself off");
+    c("Reading along", "Your first sentence", T.type1[0], "In the new notebook’s guide, the first sentence you write gets a question (real output)");
+    c("Reading along", "Reads along, or waits to be asked", M6.mode, "The mode menu in the row above the title switches Reads along to Waits to be asked; Settings › Reading shows the default for new notes");
+    c("Reading along", "Tell Inkling what a note is for", T.tell8, "Tell Inkling, above the title: the brief is typed and saved; the chat that follows answers with it in mind");
+    c("Reading along", "Learns about you", M6.learn, "Settings › About you: the switch turns on and what it learned from a reply appears (real output)");
+    c("Threads", "A thread from the words to the margin", T.sew1a, "Running stitch under your sentence, the thread carried to a folded tag; a correction starts with a cross-stitch at " + mmss(T.t1arrive));
+    c("Threads", "Tags fold away", T.hov9[0], "Pointing at three folded tabs unfolds each in turn; clicking opens one with its reply box at " + mmss(T.dragOpen9));
+    c("Threads", "Move a tag", T.drag9[0], "A tab is dragged down the margin, its thread stretching; it opens toward the side with room");
+    c("Threads", "Numbered questions", c4 + 1.1, "Open questions numbered 1 to 6 in reading order, each with a knot and its number in the gutter");
+    c("Threads", "Reply in the tag", T.replyFocus9, "A reply is written in the tag and the mind answers in the same thread (real output)");
+    c("Threads", "Tie off", T.tie9, "Resolve: the thread pulls taut, the knot is tied and flies to the border at the top of the page");
+    c("Threads", "Snip", T.dis10, "⇧⌘⌫ snips a thread (the sound stops dead), the stitches come out, “Thread dismissed · Undo ⌥⌘Z” shows, and ⌥⌘Z brings it back");
+    c("Threads", "Reopen, Copy, Make a note", T.reopen11, "A tied-off thread is opened again: Reopen, the copy icon and Make a note are each pointed at; caption names all three");
+    c("Threads", "Jump between threads", T.jump9[0], "⌥⌘↓ twice: the camera jumps to the next open thread each time");
+    c("Threads", "Hide threads", T.hide12, "⇧⌘. lifts every mark off the page and leaves just the words (the sound drops away too); again, and they come back");
+    c("Threads", "Where threads go", T.right13, "Both margins, then everything moves to the right margin, then marks only (a small mark after each passage); Settings › Reading has the three cards");
+    c("Threads", "How many are open", c4 + 1.1, "“6 loose threads” above the title, counting down as threads are tied off");
+    c("Asking", "Find a loose thread", T.sel3[0], "Words selected, the selection menu, ⌘↵: a question on the long-run line (real output)");
+    c("Asking", "Ask your own question", T.sel4[0], "Selection menu › Ask Inkling, a question typed in the ask box, the answer streams into a tag in the left margin (real output)");
+    c("Asking", "Sketch it", T.sel7, "In another note, words selected › Sketch it: “Stitching a sketch…”, then three steps stitched out with captions, and See it larger (real output)");
+    c("Asking", "Ask the room", T.sel5[0], "Skeptic and Socratic tutor added in the ask box: three threads in three colours, three answers (real output)");
+    c("Asking", "Call a mind by name", T.p5[0], "A paragraph starting “Skeptic,” gets the Skeptic’s answer on an indigo thread (real output)");
+    c("Asking", "Chat about the whole note", T.chatKey8, "⌘J opens the chat with its three suggested questions; a question, the answer streams (real output); Clear is pointed at");
+    c("Minds", "Pick the note’s mind", T.menu16, "The name above the title opens the mind menu; Coach is picked");
+    c("Minds", "Built-in minds", T.chips15, "New mind › Start from: Staff engineer, Editor, Skeptic, Socratic tutor, Investor (and Blank); caption lists them with Inkling; the room’s chips show them too");
+    c("Minds", "Make your own", T.blank15, "From Blank: name, description, how it thinks, voice (Blunt) and how often (Often), Create mind");
+    c("Minds", "Each mind has its thread colour", T.open16, "The Coach’s question arrives on its own thread; the margin shows madder, indigo and ochre threads side by side");
+    c("Notebook", "Notes and folders", M7.side, "⌘\\: the sidebar with folders (one unfolds), dots on notes with open threads, New note, New folder");
+    c("Notebook", "Find or start a note", M7.find, "⌘K: the palette filters to “bread” as it is typed");
+    c("Notebook", "Copy a note", M7.copy, "⇧⌘C: “Copied as Markdown”");
+    c("Notebook", "Export", M7.exp, "⇧⌘E: Markdown, then Word, then HTML; Include the margin off and on");
+    c("Notebook", "Import from Obsidian", M7.obs, "File › Import from Obsidian…: a vault’s folders and notes arrive in the sidebar");
+    c("Notebook", "Welcome guide", M7.help, "Help › Welcome Guide opens the Start here note");
+    c("Model and keys", "Runs on your Claude", M7.claude, "Settings › Model: Claude, signed in through this Mac’s Claude Code login; caption says so");
+    c("Model and keys", "Pick the model and effort", M7.model, "Settings › Model: the models Claude Code offers (Default, Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, specific versions) and effort for reading along and for asking");
+    c("Model and keys", "Every shortcut can be changed", M6.keys, "Settings › Shortcuts: the Hide threads key is clicked, “Press the new keys”, and ⌥⌘H takes its place");
+  }
+  const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+  // ======================================================================= boot
+  const FILM = { FPS, DUR, BEAT, T, M6, M7, ready: false, error: null, renderAt, events: EVENTS, coverage: COVERAGE, chapters: CH, camAt };
+  window.FILM = FILM;
+  async function boot() {
+    try {
+      const m = document.createElement("div");
+      m.id = "measure";
+      m.style.cssText = "position:absolute;left:0;top:0;width:1320px;height:860px;visibility:hidden;overflow:hidden";
+      m.innerHTML = '<div class="page"></div>';
+      $("#stage").appendChild(m);
+      A.applyTheme(m, 0, "madder", {});
+      await document.fonts.ready;
+      await Promise.all(["400 17px 'Fraunces Text'", "500 17px 'Fraunces Text'", "600 30px 'Fraunces Display'", "500 30px 'Fraunces Display'", "400 14px Figtree", "500 14px Figtree", "600 14px Figtree"].map((f) => document.fonts.load(f)));
+      A.measureWordmark();
+      buildSketch();
+      buildLogo();
+      // Settings: where each part of each pane sits, for the camera
+      const sh = document.createElement("div");
+      sh.style.cssText = "position:absolute;left:0;top:0;width:900px;height:721px";
+      m.appendChild(sh);
+      MEAS.set = {};
+      const panes = { Appearance: { pane: "Appearance", look: "light", size: "default", lettering: "own", ink: "madder" }, Reading: { pane: "Reading", placement: "both" }, NewMind: { pane: "NewMind" },
+        "About you": { pane: "About you" }, Shortcuts: { pane: "Shortcuts", rec: {} }, Model: { pane: "Model", model: 0 } };
+      for (const k in panes) MEAS.set[k] = window.SETTINGS.measure(sh, panes[k]);
+      sh.remove();
+      const ms = MEAS.set;
+      SCROLL.ink = Math.max(0, ms.Appearance.dots.y - 330); SCROLL.letter = Math.max(0, ms.Appearance.letter.y - 300); SCROLL.size = Math.max(0, ms.Appearance.size.y - 300);
+      SCROLL.drop = Math.max(0, ms.Appearance.inkdrop.y - 380); SCROLL.keys = Math.max(0, ms.Shortcuts.hide.y - 430); SCROLL.model = Math.max(0, ms.Model.models.y - 150);
+      // the main note, finished, for the camera's targets
+      const full = { blocks: [["p1", P1], ["p2", P2.replace(" and hold 5:30 per km on every run", ", two of them at 4:55 per km").replace("If I hold 5:30", "If I hold 4:55")], ["p3", P3], ["p4", P4], ["p5", P5], ["p6", P6], ["p7", P7]].map(([id, text]) => ({ id, kind: "p", text, ranges: [] })),
+        threads: [], header: {}, title: { text: "Sub-50 10k by March" }, border: {} };
+      const rng2 = (bid, phrase, id) => { const b = full.blocks.find((x) => x.id === bid); const i = b.text.indexOf(phrase); b.ranges.push({ a: i, b: i + phrase.length, id }); full.threads.push({ id, block: bid, kind: "question", noTag: true, sew: 0 }); };
+      rng2("p2", "If I hold 4:55 for the whole race, I’ll come in just under 50.", "t1"); rng2("p3", "I’ll add a kilometre every week until I reach 16.", "t2");
+      rng2("p1", TXT.askTarget, "t3"); rng2("p2", "four days a week", "t4"); rng2("p5", P5, "t7"); rng2("p6", P6, "t8");
+      measureNote("main", full);
+      const bp = breadPage(0); bp.threads = [{ id: "k1", block: "b2", kind: "question", noTag: true, sew: 0 }]; bp.menus = [];
+      measureNote("bread", bp);
+      // the guide: where "Your turn" ends, so the glide stops with your sentence in view
+      const sp = startPage(T.glide0);
+      sp.scroll = 0;
+      measureNote("startRaw", sp);
+      const lastB = sp.blocks[sp.blocks.length - 1];
+      const lb = MEAS.startRaw.blocks[lastB.id];
+      MEAS.startEnd = Math.max(0, lb.y - 520);
+      MEAS.start = { lastY: lb.y - MEAS.startEnd + 14 };
+      const moonB = sp.blocks.find((b) => b.text.startsWith("The far side of the Moon"));
+      if (moonB) {
+        const my = MEAS.startRaw.blocks[moonB.id].y;
+        for (let tt = T.glide0; tt < T.glide1; tt += 0.02) if (my - startScroll(tt) < 300) { MEAS.moonAt = tt; break; }
+      }
+      buildCamera();
+      buildEvents();
+      buildCoverage();
+      FILM.ready = true;
+      const q = new URLSearchParams(location.search);
+      if (q.has("t")) renderAt(+q.get("t"));
+      else if (q.has("play")) { const t0 = performance.now() - (+q.get("play") || 0) * 1000; const loop = () => { renderAt(Math.min(DUR, (performance.now() - t0) / 1000)); requestAnimationFrame(loop); }; loop(); }
+      else renderAt(0);
+    } catch (e) {
+      FILM.error = String(e && e.stack || e);
+      console.error(e);
+    }
+  }
+  boot();
 })();

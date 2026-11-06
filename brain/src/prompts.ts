@@ -267,6 +267,7 @@ export function relatePrompt(ctx: Context, target: string, before: string[], pas
     "- text: your margin note, at most 40 words. Say what the other note says, naming it by its title in plain words (no quote marks around the title), and end with one question that lets the writer decide. Do not say which one is right: you cannot know.",
     "Otherwise set passage to 0 and quote, other and text to empty strings.",
     "Never raise anything else about the paragraph here, and never repeat a point already in the margin.",
+    REPEATS,
   );
   return lines.join("\n");
 }
@@ -274,7 +275,7 @@ export function relatePrompt(ctx: Context, target: string, before: string[], pas
 export const RELATE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["same_subject", "relation", "passage", "quote", "other", "text"],
+  required: ["same_subject", "relation", "passage", "quote", "other", "text", "repeats"],
   properties: {
     same_subject: { type: "boolean" },
     relation: { type: "string", enum: ["none", "contradicts", "depends"] },
@@ -282,6 +283,7 @@ export const RELATE_SCHEMA = {
     quote: { type: "string" },
     other: { type: "string" },
     text: { type: "string" },
+    repeats: { type: "integer" },
   },
 } as const;
 

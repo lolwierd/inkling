@@ -426,6 +426,16 @@ describe("what each task sends back", () => {
       for (let i = 0; i < silent.length; i++) expect((await b.end(`s${i}`)).data).toEqual({ speak: false });
     });
 
+    test("a clash that makes a point the writer let stand again is held back", async () => {
+      const b = brain();
+      const point = { quote: "Saturday 14 March", point: "Is the office open on Saturday?", kind: "question", mind: "Inkling", reason: "It is." };
+      b.send(run("l", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 1 } })], passages }));
+      expect((await b.end("l")).data).toEqual({ speak: false, repeats: 1 });
+      // a number that names no point is ignored
+      b.send(run("m", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 4 } })], passages }));
+      expect((await b.end("m")).data).toMatchObject({ speak: true, other: "Friday 13 March" });
+    });
+
     test("with no passages there is no model call", async () => {
       const b = brain();
       b.send(run("n", { task: "relate", ctx: ctx(), target: target + " " + fake({ hang: true }), before: [], passages: [{ note: "x", noteTitle: "Empty", text: "  " }] }));

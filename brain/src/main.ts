@@ -319,6 +319,12 @@ async function relate(
   const prompt = relatePrompt(input.ctx, input.target, input.before, input.passages);
   const { data, usage } = await runStructured<unknown>(sys, prompt, RELATE_SCHEMA, settings, signal, onLimit);
   const d = structured(data);
+  // A point the writer let stand is not raised again here either.
+  const repeats = repeated(d.repeats, input.ctx.letStand.length);
+  if (repeats > 0) {
+    log(`relate held back: it makes let-stand point ${repeats} again`);
+    return { data: { speak: false, repeats }, usage };
+  }
   const n = typeof d.passage === "number" ? d.passage : Number.NaN;
   const relation = d.relation === "contradicts" || d.relation === "depends" ? d.relation : null;
   const say = text(d.text).trim();

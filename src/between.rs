@@ -799,6 +799,9 @@ mod tests {
             mind_name: "Inkling".into(),
             tag_offset: (0., 0.),
             created_at: Utc::now(),
+            reason: None,
+            ended_at: None,
+            first_quote: None,
         }
     }
 

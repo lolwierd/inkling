@@ -252,7 +252,7 @@ The schema, in the order the model fills it, so it judges the subject before it 
 export const RELATE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["same_subject", "relation", "passage", "quote", "other", "text"],
+  required: ["same_subject", "relation", "passage", "quote", "other", "text", "repeats"],
   properties: {
     same_subject: { type: "boolean" },
     relation: { type: "string", enum: ["none", "contradicts", "depends"] },
@@ -260,9 +260,14 @@ export const RELATE_SCHEMA = {
     quote: { type: "string" },
     other: { type: "string" },
     text: { type: "string" },
+    repeats: { type: "integer" },
   },
 } as const;
 ```
+
+`repeats` is Let it stand's field, last as in the reads' schemas: the number of a point the
+writer let stand that this note would make again (the system prompt lists them), or 0.
+The brain then holds the thread back, as it does a read's.
 
 Replies and second looks on a thread between notes go through the existing `reply` task with
 the other end attached (below). The reply prompt then says, after the thread's history:
@@ -479,7 +484,9 @@ paragraphs before it, nearest last. The answer, `done.data`, is `{ "speak": fals
 `passage` is the 0-based index into the request's `passages`; `note` is that passage's
 `note`; `quote` is always a substring of `target` (the whole of it if nothing matched);
 `other` is always a substring of `passages[passage].text` (otherwise the answer is
-`speak: false`); `relation` is `"contradicts"` or `"depends"`; `text` is not empty. With no
+`speak: false`); `relation` is `"contradicts"` or `"depends"`; `text` is not empty. A clash
+that would make a point the writer let stand again comes back as
+`{ "speak": false, "repeats": n }`, as a read does. With no
 passages the brain answers `{ "speak": false }` without a model call. It ends in exactly one
 `done` or `error`, like every task. Effort: the read's (`heavy: false`), and the read's 120 s
 timeout.
@@ -622,7 +629,7 @@ joining *Sunday 22 March* to the calendar's *Sunday 15 March*, a distractor "Mar
 and "Journal", which waits to be asked and shares the bib words):
 
 ```text
-# t14-between-read: a paragraph that disagrees with another note gets one thread quoting both
+# t16-between-read: a paragraph that disagrees with another note gets one thread quoting both
 # fixture: between
 # tags: between
 wait: 1500
@@ -640,7 +647,7 @@ quit
 expect: note("Race-week plan").elsewhere.some(e => e.quote === "Friday 13 March" && e.note === note("Race calendar").id)
 expect: rangeText(note("Race-week plan"), note("Race-week plan").threads.find(t => t.quote === "Saturday 14 March")) === "Saturday 14 March"
 
-# t15-between-save: a visiting end follows edits in its note and goes home; it is never saved there
+# t17-between-save: a visiting end follows edits in its note and goes home; it is never saved there
 # fixture: between
 # env: FAKE_READ_DEFAULT=silent
 switch: Race calendar
@@ -655,7 +662,7 @@ quit
 expect: !note("Race calendar").threads.some(t => t.id === "b1") && !("elsewhere" in note("Race calendar"))
 expect: note("Race-week plan").elsewhere.find(e => e.thread === "b1").start === textOf(note("Race calendar")).indexOf("Sunday 15 March")
 
-# t16-between-never-twice: a pair already joined is not sent again; a cut one neither
+# t18-between-never-twice: a pair already joined is not sent again; a cut one neither
 # fixture: between
 switch: Race-week plan
 dismiss: 1
@@ -687,9 +694,9 @@ A speak on any of the three silent cases is a false alarm. Run on 7 Nov 2026: al
 2. `src/between.rs` index and gate, with unit tests.
 3. Brain: protocol, prompt, schema, shaping, fake brain, tests, parity.
 4. The page: `look_elsewhere` after a read, the `relating` slot, `debug_state`; fixture
-   `between`; scenario t14. **End to end here:** a thread between notes appears on a real
+   `between`; scenario t16. **End to end here:** a thread between notes appears on a real
    page with the fake brain, stored with its far end.
-5. Visiting ends in `load_into_editor` and `flush`; scenarios t15 and t16. The far end now
+5. Visiting ends in `load_into_editor` and `flush`; scenarios t17 and t18. The far end now
    shows in the other note as an ordinary thread, and the app agent's display work has
    real data to draw.
 6. `elsewhere_wire` and `summary_wire`; export's far-end line.

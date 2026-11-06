@@ -616,7 +616,10 @@ impl AppView {
 
     /// Debug aid: macOS stops drawing a window that is fully covered, so a
     /// background screenshot shows a stale frame. INKLING_JIGGLE=<ms> nudges the
-    /// window by a pixel every <ms>, which makes AppKit ask for a fresh frame.
+    /// window by a pixel every <ms>, which makes AppKit ask for a fresh frame. It is the
+    /// height that wobbles: a change of width would lay the whole note out again on every
+    /// nudge and move every tag, so nothing measured or dumped under the jiggle would be
+    /// what the window shows at rest.
     fn jiggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ms) = std::env::var("INKLING_JIGGLE").ok().and_then(|v| v.parse::<u64>().ok()) else { return };
         // At least a frame apart: 0 would resize the window in a busy loop.
@@ -630,7 +633,7 @@ impl AppView {
                     let asked = *ASKED.lock().unwrap_or_else(|e| e.into_inner());
                     let (w, h) = asked.map_or((s.width, s.height), |(w, h)| (px(w), px(h)));
                     let d = if grow { px(1.) } else { px(-1.) };
-                    window.resize(size(w + d, h));
+                    window.resize(size(w, h + d));
                 });
                 if ok.is_err() {
                     break;

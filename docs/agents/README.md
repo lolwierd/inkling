@@ -104,7 +104,8 @@ is. Measured on this branch: the same scenario dumped `"slots": []` without
 `INKLING_JIGGLE` and the real tag position with it. It is not only cosmetic:
 `pick_side`, which decides the margin a new thread goes to, reads the editor's layout,
 which only updates while the window draws. `scripts/dev` sets `INKLING_JIGGLE=120`; the
-cost is a window width that wobbles by one pixel.
+cost is a window height that wobbles by one pixel (it was the width until the code-health
+pass, which laid the whole note out again on every nudge).
 
 ### 6. Safety in code where a mistake is silent and permanent
 

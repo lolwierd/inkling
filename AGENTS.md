@@ -166,7 +166,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 - A window that is covered or in the background stops drawing. Anything computed while
   painting is then stale: editor layout, the margin slots in a dump, which side a new
   thread goes (`pick_side`), scroll-to-words. `INKLING_JIGGLE=<ms>` nudges the window so
-  it keeps drawing; `scripts/dev` turns it on (the width then wobbles by 1 px).
+  it keeps drawing; `scripts/dev` turns it on (the height then wobbles by 1 px; the width
+  stays, so the note is not laid out again on every nudge).
 - Rust 2024: `impl IntoElement` in a return type captures every lifetime in scope, so
   view helpers return `AnyElement` (`.into_any_element()`).
 - `gpui_kit::*` brings in GPUI's `test` macro, which shadows std's: write

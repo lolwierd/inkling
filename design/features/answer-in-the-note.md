@@ -8,10 +8,11 @@ a thread whose knot points at your words in the note.
 Show its working, Loose ends, Turn it over, Threads between notes, Read it through, web
 sources and Threads of your own (`settle`, like every read, never looks things up; a thread
 of your own is never answered). The shared part and Answer in the note are done (scenarios
-t40 to t45; six live checks against the real model, below). Write it in is being built by a
-second agent on top of the shared part. Screenshots, light and dark:
-`design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, and the back of
-the note, `answer-in-the-note-back-light.jpg`.
+t40 to t45; six live checks against the real model, below). Write it in is built on top of
+the shared part (scenarios t46 to t48). Screenshots, light and dark:
+`design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, the back of
+the note, `answer-in-the-note-back-light.jpg`, and Write it in's offer and what it writes,
+`write-it-in-{offer,written}-{light,dark}.jpg`.
 
 They are built by two agents at once. This doc is the contract between them: the
 **shared part** (the answer link and its knot) is built first, on `feat-answer`; then
@@ -116,12 +117,12 @@ them.
 
    The button has the tooltip: **"Puts your reply under the paragraph this thread is
    about, for you to rework in your own words. The thread is already tied off."**
-3. Press Write it in (or Tab to it and press Return):
+3. Press Write it in (or Tab to it and press Return; ⌃Tab out of the note reaches it first):
    - Your reply appears as a new paragraph right under "Sunday is the long run. I’ll add a
      kilometre every week until I reach 16.", word for word, in your typeface.
    - It washes in the thread's colour for a moment, the tag closes, and the caret waits at
      the end of the new paragraph, so you can start reworking it straight away.
-   - The knot from Answer in the note sews in at its end: the thread now points to it.
+   - The knot from Answer in the note sits at its end: the thread now points to it.
    - A toast says **"Your reply is in the note, ready to rework."** with **Undo** (8 s).
 4. Rework it into a sentence of your own. The knot follows your edits. Inkling reads the
    reworked paragraph like any edited paragraph; the words exactly as you replied are not
@@ -137,7 +138,9 @@ then the result itself, washed, with the caret in it. *Can I take it back*: Undo
 
 When it is offered: the thread is tied off by your reply (`tied_by == Reply`), it has no
 answer in the note yet, it is not a thread between notes visiting from its home in another
-note (`visiting_here`: its answer belongs in the home note's words), threads are not hidden,
+note (`visiting_here`: its answer belongs in the home note's words), it is not a thread of
+your own (`own`: nothing was asked of a mind), the note does not already have the reply word
+for word (you typed it, or ⌘⇧Z brought it back), threads are not hidden,
 and your last reply in it has at least four words (the floor the reading loop uses for a paragraph worth reading; "Yes, exactly." is
 not worth writing in). It is not offered for threads tied off by hand, by an edit, or by an
 answer in the note. Closing the tag without pressing it is the "no": nothing is stored.
@@ -156,7 +159,7 @@ answer in the note. Closing the tag without pressing it is the "no": nothing is 
 | **Undo** | A tie-off is not a text edit, so ⌘Z does not untie it; Reopen does. ⌘Z that removes all of the answer's words removes the knot (the thread stays tied off). Redo brings the words back; the saved answer finds them again by their words, and the knot returns the next time the note opens. | One undo step: ⌘Z or the toast's Undo removes the paragraph; the toast's Undo works only while the paragraph is unchanged. |
 | **Several minds** | Any open thread can be answered, whichever mind asked it. The check runs as the thread's own mind, so Skeptic judges Skeptic's question by its own standard; its line in the thread is in its voice, and the knot is in its colour. One paragraph can tie off several threads, such as three minds asked the same thing in Ask the room; each gets its own knot, side by side after the answer. | The offer is per thread, under whichever mind's thread your reply settled. |
 | **The thread's own paragraph** | A sentence added to the paragraph a thread hangs on counts too, as long as the quoted words themselves are unchanged (if they changed, Fix the words re-checks instead, one look per edit). | The paragraph goes under it. |
-| **Lists, callouts, code** | A checklist item, a callout line or a code block is read like a paragraph and can be an answer. | "Under its paragraph" means under the whole list, callout patch or code block the thread's words are in, so the new paragraph never splits them. |
+| **Lists, callouts, code** | A checklist item, a callout line or a code block is read like a paragraph and can be an answer. | "Under its paragraph" means under the whole list, quote, callout patch or code block the thread's words are in, so the new paragraph never splits them. |
 | **The first sentence of a new notebook** | The probe is unchanged; there are no threads to answer yet. | Not affected. |
 
 ## Data model
@@ -502,28 +505,20 @@ quit
 - `t45-answer-own.txt`: a thread of your own is never answered (not open to the minds, no
   `settle`), while a mind's thread named by the same paragraph ties off.
 
-`t46-write-it-in.txt` (for the Write it in build; the number is the next free one when it lands):
+Write it in, as built:
 
-```text
-# fixture: running-plan
-wait: 1500
-activate: 2
-reply: I start at 8 km in the first week of December and take the last week easy. [[resolved]]
-settle
-dump: offered
-expect: d.statuses.includes("t2:Resolved:Inkling") && d.offer === "t2"
-writein
-settle
-dump: written
-expect: d.kinds.length === 7 && d.answers[0].thread === "t2"
-expect: textOf(note("Sub-50 10k by March")).split("\n")[4].startsWith("I start at 8 km")
-expect: !requests.some(r => r.input.task === "read" && r.input.target.startsWith("I start at 8 km"))
-expect: d.toasts.some(t => t.text.startsWith("Your reply is in the note"))
-key: cmd-z
-dump: undone
-expect: d.kinds.length === 6 && d.answers.length === 0
-quit
-```
+- `t46-write-it-in.txt`: a reply ties thread 2 off and its tag offers Write it in. Pressed,
+  the reply is a paragraph under "Sunday is the long run…", the thread's answer with its
+  knot; the tag closes with the caret at its end, and the words as you replied are never
+  read. ⌘Z takes it out (and its toast with it) and the offer is back; ⌘⇧Z brings it back
+  with no offer, since the note says it; the toast's Undo takes it out while it reads as it
+  went in; reworked, it is read like any paragraph.
+- `t47-write-it-in-keys-marks.txt` (fixture `replied`, thread 2 tied off by your reply):
+  ⌃Tab out of the note reaches the button and Return presses it; no offer while threads are
+  hidden; Marks only offers it in the card; the export says "Answered in the note".
+- `t48-write-it-in-between.txt`: a reply at a thread's far end (threads between notes) ties
+  it off with no offer there; in its home note the tag offers it, and the reply goes in
+  there.
 
 ### Live checks (the real model, a handful of calls)
 
@@ -572,12 +567,12 @@ date fixed, all six pass.
 
 | File | What |
 |---|---|
-| `src/editor.rs` | `State::insert_paragraph_after(line, text)` and its `NoteEditor` wrapper; tests |
+| `src/editor.rs` | `State::insert_paragraph_after(line, text)` and `remove_paragraph(line)` (the toast's Undo), with their `NoteEditor` wrappers; tests |
 | `src/note_page/write_in.rs` (new, `impl NotePage`) | `write_in_offer` (the tag row), `write_in`, `undo_write_in` |
-| `src/note_page.rs` (hooks) | `mod write_in;`; `tag_panel` adds `write_in_offer` |
+| `src/note_page.rs` (hooks) | `mod write_in;`; `tag_panel` adds `write_in_offer`; `NotePage.written_in` (what the toast's Undo takes out); `script_step` and `debug_state` (`offer`, `written_in`) |
 | `src/toast.rs`, `src/app.rs` | `Kind::WrittenIn` (8 s, Undo) and its arm in the stack's Undo |
 | `src/script.rs` | `writein`, `undo-writein` |
-| scenario `t46` (or the next free number); `design/capabilities.md` | one row under Threads |
+| scenarios `t46` to `t48`, fixture `replied`; `design/capabilities.md` | one row under Threads |
 
 The two meet only in `tag_panel` (one line each, on different lines) and in
 `capabilities.md` (one row each). Write it in reads `tied_by` and writes `answer` through

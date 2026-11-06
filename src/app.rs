@@ -1839,6 +1839,9 @@ impl Render for AppView {
                 crate::toast::stack(px(chat), window, cx, |this, kind, window, cx| match kind {
                     Kind::NoteDeleted => this.undo_delete(window, cx),
                     Kind::ThreadDismissed => this.page.update(cx, |p, cx| p.undo_dismiss(cx)),
+                    Kind::WrittenIn => {
+                        this.page.update(cx, |p, cx| p.undo_write_in(cx));
+                    }
                     _ => {}
                 })
             })

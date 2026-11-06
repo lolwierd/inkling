@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 04:52 IST"
+UPDATED = "7 Nov 2026, 05:20 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -31,6 +31,7 @@ WAITING = [
 RUNNING = []
 
 DONE = [
+    ("On GitHub, private", "master is pushed to github.com/lolwierd/inkling as a private repository; the worktree branches stay on the Mac. The app in Applications is the new build, icon included."),
     ("All nine features from the manifesto", "Answer in the note, Write it in, Let it stand, Turn it over, Threads of your own, Show its working, Loose ends, Read it through and Threads between notes, each built by its own agent, merged one at a time and checked against the others."),
     ("Web sources, when you ask", "Inkling can look things up for what you ask it; reading along never searches. A source shows only when the page really says what it quotes. Capped at $2.50 a call."),
     ("Code health", "The drag now follows every pointer move (before: 1 move in 36). On a long note, idle CPU fell from 95% to 7.5% and typing from 94% to 7.6%; threads are 20 times cheaper to draw; the tag's five hover maps became one state."),

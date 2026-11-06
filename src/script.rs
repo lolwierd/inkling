@@ -65,6 +65,7 @@
 //! set: pace=slow            # pace=regular|slow, placement=both|right|marks,
 //!                           # learn=on|off, mode=thinks|ask (new notes)
 //! width: 900                # resize the window to this width
+//! size: 900x620             # resize the window to this width and height
 //! dump: label               # log the page's state as one JSON line
 //! log: anything             # write a marker into the log
 //! shot: label               # a screenshot, for the runner: the app only logs the step
@@ -72,6 +73,20 @@
 //!                           # captures the window into <notebook>/shots/label.png
 //! expect: d.threads.length === 1   # skipped here: `scripts/dev e2e` checks it after
 //!                                  # the run against the dump above it
+//! ```
+//!
+//! And for driving the window like a person, for screenshots and keyboard checks:
+//!
+//! ```text
+//! key: cmd-k                # a keystroke (several, space separated: `key: cmd-a backspace`)
+//! click: 640, 300           # click at a point in the window (logical pixels)
+//! point: 640, 300           # move the pointer there (`hover: n` rests it on thread n's tag)
+//! size: 900x620             # resize the window to this width and height
+//! snap: name                # write the window as drawn to $INKLING_SNAP_DIR/name.png, else
+//!                           # <notebook>/shots/name.png, with no Screen Recording permission
+//!                           # needed (a `qa` build: cargo build --features qa)
+//! set: appearance=dark      # also size=small|default|large, ink=madder|indigo|…,
+//!                           # lettering=own|notes, pointer=on|off
 //! ```
 //!
 //! A step that cannot do anything (an unknown step, a phrase or thread that is not
@@ -132,6 +147,25 @@ pub enum Step {
     Shot(String),
     /// Wait until the page is settled (`NotePage::settled`), at most this many ms.
     Settle(u64),
+    /// Resize the window to (width, height).
+    Size(f32, f32),
+    /// Keystrokes, dispatched to the window as if typed (`cmd-k`, `alt-cmd-down`).
+    Key(Vec<String>),
+    /// A left click at a point in the window.
+    Click(f32, f32),
+    /// The pointer moves to a point in the window.
+    Pointer(f32, f32),
+    /// Write the window as it was last drawn to `<name>.png`, from inside the app.
+    Snap(String),
+}
+
+/// "640, 300" or "640 300" as a point.
+fn point_arg(arg: &str) -> Option<(f32, f32)> {
+    let mut it = arg.split([',', ' ']).filter(|s| !s.is_empty()).map(|s| s.trim().parse::<f32>());
+    match (it.next(), it.next(), it.next()) {
+        (Some(Ok(x)), Some(Ok(y)), None) => Some((x, y)),
+        _ => None,
+    }
 }
 
 /// How long `settle` waits at most when the step does not say.
@@ -217,6 +251,23 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "settle" => Step::Settle(arg.parse().unwrap_or(SETTLE_MAX_MS)),
                 // for the runner, which checks it after the run
                 "expect" => return None,
+                "size" => match arg.split_once(['x', 'X']).map(|(w, h)| (w.trim().parse(), h.trim().parse())) {
+                    Some((Ok(w), Ok(h))) => Step::Size(w, h),
+                    _ => {
+                        log::warn!("script: size needs `WIDTHxHEIGHT`: {l:?}");
+                        return None;
+                    }
+                },
+                "key" => Step::Key(arg.split_whitespace().map(str::to_string).collect()),
+                "click" | "point" => match point_arg(&arg) {
+                    Some((x, y)) if cmd == "click" => Step::Click(x, y),
+                    Some((x, y)) => Step::Pointer(x, y),
+                    None => {
+                        log::warn!("script: {cmd} needs `x, y`: {l:?}");
+                        return None;
+                    }
+                },
+                "snap" => Step::Snap(if arg.is_empty() { "snap".into() } else { arg }),
                 _ => {
                     log::warn!("script: unknown step {l:?}");
                     return None;
@@ -270,6 +321,31 @@ mod tests {
                 Step::Wait(SHOT_HOLD_MS),
                 Step::Settle(SETTLE_MAX_MS),
                 Step::Settle(500),
+            ]
+        );
+    }
+
+    #[std::prelude::v1::test]
+    fn parses_window_steps() {
+        let steps = parse(
+            "size: 900x620\n\
+             key: cmd-k  alt-cmd-down\n\
+             click: 640, 300\n\
+             point: 12 40\n\
+             snap: sidebar-open\n\
+             snap\n\
+             click: 1\n\
+             size: wide\n",
+        );
+        assert_eq!(
+            steps,
+            vec![
+                Step::Size(900., 620.),
+                Step::Key(vec!["cmd-k".into(), "alt-cmd-down".into()]),
+                Step::Click(640., 300.),
+                Step::Pointer(12., 40.),
+                Step::Snap("sidebar-open".into()),
+                Step::Snap("snap".into()),
             ]
         );
     }

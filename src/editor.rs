@@ -2483,7 +2483,7 @@ fn runs_for_line(snap: &DocSnapshot, start: usize, end: usize, style: &LineStyle
         let color = active
             .iter()
             .find_map(|m| match m {
-                Mark::Color(c) if *c != 0 => Some(Hsla::from(rgb(*c))),
+                Mark::Color(c) if *c != 0 => Some(crate::theme::text_color(*c, &snap.palette)),
                 _ => None,
             })
             .unwrap_or(style.color);
@@ -2758,8 +2758,15 @@ impl Element for EditorElement {
                         underline: None,
                         strikethrough: None,
                     };
-                    let shaped = window.text_system().shape_line(SharedString::from(ph), st.size, &[run], None);
-                    let _ = shaped.paint(line_origin, line.line_height, TextAlign::Left, None, window, cx);
+                    // Wrapped like the words it stands in for: a long invitation (the first
+                    // run's) stays inside the column instead of running into the margin.
+                    let wrap = (bounds.size.width - line.indent).max(px(40.));
+                    let shaped = window.text_system().shape_text(SharedString::from(ph), st.size, &[run], Some(wrap), None);
+                    let mut y = line_origin.y;
+                    for row in shaped.into_iter().flatten() {
+                        let _ = row.paint(point(line_origin.x, y), line.line_height, TextAlign::Left, None, window, cx);
+                        y += line.line_height * (row.wrap_boundaries().len() + 1) as f32;
+                    }
                 }
             } else {
                 let _ = line.wrapped.paint(line_origin, line.line_height, TextAlign::Left, None, window, cx);

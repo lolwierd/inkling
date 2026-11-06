@@ -16,6 +16,22 @@ pub const SERIF: &str = "Fraunces Text";
 /// Titles and headings: Fraunces at its display optical size.
 pub const DISPLAY: &str = "Fraunces Display";
 
+/// The interface's type scale, in Figtree: five sizes, so labels, rows and hints line up
+/// from one surface to the next. The writer's words follow the text-size setting
+/// ([`note_size`]) instead.
+pub mod ts {
+    /// Key hints, counts, captions and fine print.
+    pub const META: f32 = 11.;
+    /// Secondary lines and quiet buttons.
+    pub const SMALL: f32 = 12.;
+    /// Menus, rows, labels and buttons: the interface's own size.
+    pub const UI: f32 = 13.;
+    /// Text fields, and Inkling's words in a panel.
+    pub const BODY: f32 = 14.;
+    /// Dialog and panel titles.
+    pub const TITLE: f32 = 15.;
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     /// The writing page: flat, no texture.
@@ -183,16 +199,32 @@ pub fn thread_hex(ink: InkColor) -> (u32, u32) {
 }
 
 /// Text colours offered in the selection toolbar: the same threads, for your own words.
-pub const TEXT_COLORS: [(u32, &str); 8] = [
-    (0x000000, "Default"),
-    (0x6f6862, "Grey"),
-    (0x6e4b2e, "Walnut"),
-    (0x8f6214, "Ochre"),
-    (0xa63f32, "Madder"),
-    (0x4f7350, "Sage"),
-    (0x2e3f7a, "Indigo"),
-    (0x6b3e62, "Plum"),
+/// A note stores the linen value; lamplight draws its lighter twin, so coloured words
+/// still read on the dark page.
+pub const TEXT_COLORS: [(u32, u32, &str); 8] = [
+    (0x000000, 0x000000, "Default"),
+    (0x6f6862, 0xa39a8f, "Grey"),
+    (0x6e4b2e, 0xc49a73, "Walnut"),
+    (0x8f6214, 0xd9a548, "Ochre"),
+    (0xa63f32, 0xd9705e, "Madder"),
+    (0x4f7350, 0x8db88e, "Sage"),
+    (0x2e3f7a, 0x8c9be0, "Indigo"),
+    (0x6b3e62, 0xc08ab4, "Plum"),
 ];
+
+/// How a stored text colour (`Mark::Color`) draws on `p`'s page: 0 is the ink, a
+/// toolbar colour is its twin for the light, and any other colour (from an older
+/// build) is lifted on the dark page so it does not sink into it.
+pub fn text_color(hex: u32, p: &Palette) -> Hsla {
+    if hex == 0 {
+        return p.ink;
+    }
+    if let Some((_, dark, _)) = TEXT_COLORS.iter().find(|(light, _, _)| *light == hex) {
+        return c(if p.dark { *dark } else { hex });
+    }
+    let base = c(hex);
+    if p.dark && base.l < 0.62 { Hsla { l: (1. - base.l).clamp(0.62, 0.8), ..base } } else { base }
+}
 
 pub fn load_fonts(cx: &mut App) {
     let fonts: Vec<Cow<'static, [u8]>> = vec![
@@ -280,5 +312,20 @@ mod tests {
             }
         }
         assert_eq!((note_size(TextSize::Small), note_size(TextSize::Default), note_size(TextSize::Large)), (px(15.), px(17.), px(19.)));
+    }
+
+    #[std::prelude::v1::test]
+    fn coloured_words_read_on_both_pages() {
+        for p in [Palette::light(), Palette::dark()] {
+            assert_eq!(text_color(0, &p), p.ink, "the default colour is the ink");
+            for (light, _, name) in TEXT_COLORS.iter().skip(1) {
+                let fg = text_color(*light, &p);
+                assert!(contrast(fg, p.paper) >= 4.5, "{name} on the {} page: {}", if p.dark { "dark" } else { "light" }, contrast(fg, p.paper));
+            }
+            // A colour an older build stored, which the toolbar no longer offers.
+            let old = text_color(0x33689c, &p);
+            assert!(contrast(old, p.paper) >= 3., "an old colour on the {} page: {}", if p.dark { "dark" } else { "light" }, contrast(old, p.paper));
+        }
+        assert_eq!(text_color(0x2e3f7a, &Palette::light()), c(0x2e3f7a), "linen draws what was stored");
     }
 }

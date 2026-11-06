@@ -6,7 +6,7 @@ use gpui_kit::*;
 use gpui_kit::prelude::*;
 
 use crate::store::{Folder, Note, Store};
-use crate::theme::Theme;
+use crate::theme::{SANS, Theme, ts};
 use crate::ui;
 
 #[derive(Clone, Debug)]
@@ -23,6 +23,8 @@ pub struct Palette {
     input: Entity<InputState>,
     selected: usize,
     current: Option<String>,
+    /// The list's scroll position: the highlighted row stays in view as the arrows move it.
+    scroll: ScrollHandle,
     _subs: Vec<Subscription>,
 }
 
@@ -43,14 +45,22 @@ impl Palette {
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Find or start a note"));
         let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, _, cx| match ev {
             InputEvent::PressEnter { .. } => this.choose(cx),
-            InputEvent::Change => {
-                this.selected = 0;
-                cx.notify();
-            }
+            InputEvent::Change => this.select(0, cx),
             _ => {}
         });
         input.update(cx, |i, cx| i.focus(window, cx));
-        Self { input, selected: 0, current, _subs: vec![sub] }
+        Self { input, selected: 0, current, scroll: ScrollHandle::new(), _subs: vec![sub] }
+    }
+
+    /// Give the search box the keyboard (again).
+    pub fn focus(&self, window: &mut Window, cx: &mut App) {
+        self.input.update(cx, |i, cx| i.focus(window, cx));
+    }
+
+    fn select(&mut self, ix: usize, cx: &mut Context<Self>) {
+        self.selected = ix;
+        self.scroll.scroll_to_item(ix);
+        cx.notify();
     }
 
     fn rows(&self, cx: &App) -> Vec<Row> {
@@ -74,14 +84,12 @@ impl Palette {
         let rows = self.rows(cx);
         match ev.keystroke.key.as_str() {
             "down" => {
-                self.selected = clamp_selection(self.selected + 1, rows.len());
+                self.select(clamp_selection(self.selected + 1, rows.len()), cx);
                 cx.stop_propagation();
-                cx.notify();
             }
             "up" => {
-                self.selected = clamp_selection(self.selected, rows.len()).saturating_sub(1);
+                self.select(clamp_selection(self.selected, rows.len()).saturating_sub(1), cx);
                 cx.stop_propagation();
-                cx.notify();
             }
             "escape" => {
                 cx.stop_propagation();
@@ -185,15 +193,17 @@ impl Render for Palette {
         let rows = self.rows(cx);
         let selected = clamp_selection(self.selected, rows.len());
         let current = self.current.clone();
-        let mut list = div().flex().flex_col().py(px(4.));
+        let query_empty = self.input.read(cx).value().trim().is_empty();
+        let mut list = vec![];
         for (i, row) in rows.iter().enumerate() {
             let on = i == selected;
+            let create = matches!(row.kind, RowKind::Create);
             let label = match &row.kind {
                 RowKind::Note(_) => row.title.clone(),
-                RowKind::Create => format!("Start “{}”", row.title),
+                RowKind::Create => format!("Start \u{201c}{}\u{201d}", row.title),
             };
             let is_current = matches!(&row.kind, RowKind::Note(id) if Some(id) == current.as_ref());
-            list = list.child(
+            list.push(
                 div()
                     .id(("palette-row", i))
                     .mx(px(6.))
@@ -201,11 +211,13 @@ impl Render for Palette {
                     .py(px(7.))
                     .rounded(px(7.))
                     .when(on, |d| d.bg(p.wash))
+                    .when(!on, |d| d.hover(move |s| s.bg(p.wash.opacity(0.5))))
                     .cursor_pointer()
                     .flex()
                     .flex_row()
                     .items_center()
                     .gap(px(8.))
+                    .child(ui::icon(if create { "plus" } else { "file-text" }, 13., p.faint))
                     .child(
                         div()
                             .flex_1()
@@ -215,22 +227,24 @@ impl Render for Palette {
                                     .flex()
                                     .items_center()
                                     .gap(px(6.))
-                                    .text_size(px(13.))
+                                    .text_size(px(ts::UI))
                                     .text_color(p.ink)
-                                    .when_some(row.folder.clone(), |d, f| d.child(div().text_color(p.faint).child(format!("{f} /"))))
-                                    .child(label),
+                                    .when_some(row.folder.clone(), |d, f| d.child(div().flex_none().max_w(px(140.)).truncate().text_color(p.faint).child(format!("{f} /"))))
+                                    .child(div().min_w(px(0.)).truncate().child(label)),
                             )
                             .when_some(row.snippet.clone(), |d, s| {
-                                d.child(div().text_size(px(11.)).text_color(p.faint).truncate().child(s))
+                                d.child(div().mt(px(1.)).text_size(px(ts::META)).text_color(p.graphite).truncate().child(s))
                             }),
                     )
-                    .when(is_current, |d| d.child(div().text_size(px(10.5)).text_color(p.faint).child("Open now")))
+                    .when(is_current, |d| d.child(ui::key_hint("Open now", &t)))
+                    .when(on && !is_current, |d| d.child(ui::key_hint("\u{21a9}", &t)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.selected = i;
                         this.choose(cx);
                     })),
             );
         }
+        let empty = rows.is_empty();
         div()
             .absolute()
             .top_0()
@@ -238,6 +252,8 @@ impl Render for Palette {
             .size_full()
             .flex()
             .justify_center()
+            // The card is as tall as its rows, not stretched to the window.
+            .items_start()
             .pt(px(120.))
             .bg(p.dim.opacity(0.25))
             .occlude()
@@ -245,21 +261,15 @@ impl Render for Palette {
             .child(
                 div()
                     .id("palette")
-                    .w(px(440.))
-                    .max_h(px(420.))
+                    .w(px(460.))
                     .flex()
                     .flex_col()
                     .rounded(px(12.))
                     .bg(p.card)
                     .border_1()
                     .border_color(p.rule)
-                    .shadow(vec![BoxShadow {
-                        color: hsla(0., 0., 0., if p.dark { 0.5 } else { 0.14 }),
-                        offset: point(px(0.), px(12.)),
-                        blur_radius: px(32.),
-                        spread_radius: px(-8.),
-                        inset: false,
-                    }])
+                    .shadow(ui::modal_shadow(&p))
+                    .font_family(SANS)
                     .capture_key_down(cx.listener(Self::on_key))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child(
@@ -268,13 +278,18 @@ impl Render for Palette {
                             .py(px(10.))
                             .flex()
                             .items_center()
-                            .gap(px(8.))
+                            .gap(px(10.))
                             .border_b_1()
                             .border_color(p.rule)
-                            .child(ui::icon("search", 13., p.faint))
-                            .child(div().flex_1().text_size(px(14.)).child(Input::new(&self.input).appearance(false))),
+                            .child(ui::icon("search", 14., p.faint))
+                            .child(div().flex_1().child(Input::new(&self.input).appearance(false).px_0().text_size(px(ts::BODY)))),
                     )
-                    .child(div().id("palette-list").max_h(px(330.)).overflow_y_scroll().child(list))
+                    .when(empty, |d| {
+                        d.child(div().px(px(16.)).py(px(14.)).text_size(px(ts::UI)).text_color(p.graphite).child("No notes yet. Type a title to start one."))
+                    })
+                    .when(!empty, |d| {
+                        d.child(div().id("palette-list").max_h(px(336.)).py(px(4.)).overflow_y_scroll().track_scroll(&self.scroll).children(list))
+                    })
                     .child(
                         div()
                             .px(px(14.))
@@ -283,11 +298,12 @@ impl Render for Palette {
                             .gap(px(14.))
                             .border_t_1()
                             .border_color(p.rule)
-                            .text_size(px(10.5))
+                            .text_size(px(ts::META))
                             .text_color(p.faint)
-                            .child("↵ open")
-                            .child("“Folder / Name” files a new note")
-                            .child("⌘⌫ delete"),
+                            .child("\u{21a9} open")
+                            .child(if query_empty { "Type to find or start a note" } else { "\u{201c}Folder / Name\u{201d} files a new note" })
+                            .child(div().flex_1())
+                            .child("\u{2318}\u{232b} delete"),
                     ),
             )
     }

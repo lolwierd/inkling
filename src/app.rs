@@ -13,7 +13,7 @@ use crate::palette::{Palette, PaletteEvent};
 use crate::settings::{SettingsEvent, SettingsView, Tab};
 use crate::store::{Folder, Note, Store, new_id};
 use crate::store::ThreadStatus;
-use crate::theme::{SANS, Theme};
+use crate::theme::{SANS, Theme, ts};
 use crate::ui::{self, icon};
 
 gpui_kit::actions!(
@@ -143,7 +143,9 @@ pub struct AppView {
     settings: Option<Entity<SettingsView>>,
     export: Option<(ExportStage, Format, bool)>,
     new_folder: Option<Entity<gpui_kit::component::input::InputState>>,
-    toast: Option<(String, std::time::Instant)>,
+    toast: Option<Toast>,
+    /// The note deleted last, where it sat in the list, and when: Undo puts it back.
+    deleted: Option<(Note, usize, Instant)>,
     speech: Entity<SpeechState>,
     talk: Talk,
     talk_timer: Option<Task<()>>,
@@ -275,10 +277,77 @@ fn export_file_name(title: &str, ext: &str) -> String {
     format!("{base}.{ext}")
 }
 
+/// Script steps that act on the window itself, as the platform would: keystrokes,
+/// the pointer, and snapshots of what was last drawn.
+fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
+    use crate::script::Step;
+    let none = Modifiers::default();
+    let move_to = |position: Point<Pixels>| PlatformInput::MouseMove(MouseMoveEvent { position, pressed_button: None, modifiers: none });
+    match step {
+        Step::Key(keys) => {
+            for k in keys {
+                match Keystroke::parse_with_os(k, OperatingSystem::Mac) {
+                    Ok(ks) => {
+                        window.dispatch_keystroke(ks, cx);
+                    }
+                    Err(e) => log::warn!("script: not a keystroke {k:?}: {e}"),
+                }
+            }
+        }
+        Step::Click(x, y) => {
+            let position = point(px(*x), px(*y));
+            window.dispatch_event(move_to(position), cx);
+            let (button, click_count) = (MouseButton::Left, 1);
+            window.dispatch_event(PlatformInput::MouseDown(MouseDownEvent { button, position, modifiers: none, click_count, first_mouse: false }), cx);
+            window.dispatch_event(PlatformInput::MouseUp(MouseUpEvent { button, position, modifiers: none, click_count }), cx);
+        }
+        Step::Pointer(x, y) => {
+            window.dispatch_event(move_to(point(px(*x), px(*y))), cx);
+        }
+        Step::Snap(name) => snap(name, window),
+        _ => {}
+    }
+}
+
+/// Write the window, as it was last drawn, to `$INKLING_SNAP_DIR/<name>.png` (the
+/// notebook folder when unset). Needs GPUI's offscreen render: `--features qa`.
+#[cfg(feature = "qa")]
+fn snap(name: &str, window: &mut Window) {
+    let dir = std::env::var_os("INKLING_SNAP_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| Store::data_dir().join("shots"));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join(format!("{name}.png"));
+    match window.render_to_image().and_then(|img| img.save(&path).map_err(Into::into)) {
+        Ok(()) => log::info!("script snap: {}", path.display()),
+        Err(e) => log::error!("script snap {name}: {e:#}"),
+    }
+}
+
+#[cfg(not(feature = "qa"))]
+fn snap(name: &str, _: &mut Window) {
+    log::warn!("script: snap {name} needs a qa build (cargo build --features qa)");
+}
+
 /// Folder names match ignoring case, in any script ("été" is "ÉTÉ").
 fn same_folder_name(a: &str, b: &str) -> bool {
     a.trim().to_lowercase() == b.trim().to_lowercase()
 }
+
+/// A short message at the bottom of the window. One that offers Undo stays as long as
+/// a dismissed thread's does.
+struct Toast {
+    text: String,
+    shown: Instant,
+    undo: bool,
+}
+
+impl Toast {
+    fn life(&self) -> Duration {
+        if self.undo { UNDO_DELETE } else { Duration::from_secs(3) }
+    }
+}
+
+/// How long "Note deleted · Undo" stays.
+const UNDO_DELETE: Duration = Duration::from_secs(8);
 
 /// A drop of ink left by the pointer ("Ink from the pointer").
 struct Blot {
@@ -338,6 +407,7 @@ impl AppView {
             let _ = weak_page.update(cx, |p, cx| p.flush(cx));
             true
         });
+        subs.push(cx.on_focus_lost(window, |this, window, cx| this.restore_focus(window, cx)));
         subs.push(cx.observe_window_activation(window, |this, window, cx| {
             if !window.is_window_active() {
                 let step = this.talk.deactivated();
@@ -399,6 +469,7 @@ impl AppView {
             export: None,
             new_folder: None,
             toast: None,
+            deleted: None,
             speech,
             talk: Talk::Idle,
             talk_timer: None,
@@ -451,31 +522,39 @@ impl AppView {
         };
         let steps = crate::script::parse(&src);
         cx.spawn_in(window, async move |this, cx| {
+            use crate::script::Step;
             cx.background_executor().timer(std::time::Duration::from_millis(1200)).await;
             for step in steps {
                 log::info!("script: {step:?}");
-                if let crate::script::Step::Wait(ms) = step {
-                    cx.background_executor().timer(std::time::Duration::from_millis(ms)).await;
-                    continue;
-                }
-                if let crate::script::Step::Settle(max) = step {
-                    let started = std::time::Instant::now();
-                    loop {
-                        cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
-                        let Ok(settled) = this.update_in(cx, |app, _, cx| app.page.read(cx).settled()) else { return };
-                        if settled {
-                            log::info!("script: settled after {} ms", started.elapsed().as_millis());
-                            break;
-                        }
-                        if started.elapsed() >= std::time::Duration::from_millis(max) {
-                            log::warn!("script: settle gave up after {max} ms");
-                            break;
-                        }
+                let ok = match step {
+                    Step::Wait(ms) => {
+                        cx.background_executor().timer(std::time::Duration::from_millis(ms)).await;
+                        continue;
                     }
-                    continue;
-                }
-                let ok = this.update_in(cx, |app, window, cx| app.script_step(step, window, cx));
-                if ok.is_err() {
+                    Step::Settle(max) => {
+                        let started = std::time::Instant::now();
+                        loop {
+                            cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
+                            let Ok(settled) = this.update_in(cx, |app, _, cx| app.page.read(cx).settled()) else { return };
+                            if settled {
+                                log::info!("script: settled after {} ms", started.elapsed().as_millis());
+                                break;
+                            }
+                            if started.elapsed() >= std::time::Duration::from_millis(max) {
+                                log::warn!("script: settle gave up after {max} ms");
+                                break;
+                            }
+                        }
+                        continue;
+                    }
+                    // Input goes to the window as the platform would send it, outside any
+                    // view's update, so the views it reaches can update themselves.
+                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) | Step::Snap(_) => {
+                        cx.update(|window, cx| window_step(&step, window, cx)).is_ok()
+                    }
+                    _ => this.update_in(cx, |app, window, cx| app.script_step(step, window, cx)).is_ok(),
+                };
+                if !ok {
                     break;
                 }
                 cx.background_executor().timer(std::time::Duration::from_millis(250)).await;
@@ -508,6 +587,13 @@ impl AppView {
                 self.export = None;
             }
             Step::Quit => cx.quit(),
+            Step::Size(w, h) => window.resize(size(px(*w), px(*h))),
+            Step::Set(..) => {
+                self.page.update(cx, |p, cx| p.script_step(&step, window, cx));
+                // Appearance, text size and threads change the theme.
+                apply_theme(window.appearance(), cx);
+                cx.refresh_windows();
+            }
             _ => self.page.update(cx, |p, cx| p.script_step(&step, window, cx)),
         }
         cx.notify();
@@ -576,8 +662,11 @@ impl AppView {
         }
     }
 
-    /// Escape closes the topmost overlay this view owns. The palette and settings
-    /// handle their own, being focused. Returns whether it closed something.
+    /// Escape closes the topmost thing that is open, one per press: this view's
+    /// overlays first (the palette and settings handle their own, being focused), then
+    /// whatever the page has open, wherever the keyboard is: a menu, the question box,
+    /// the open thread from its reply box, the chat from its box. Returns whether it
+    /// closed something.
     fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.export.is_some() {
             self.close_export(window, cx);
@@ -589,9 +678,25 @@ impl AppView {
             self.sidebar_open = false;
             cx.notify();
         } else {
-            return false;
+            return self.page.update(cx, |p, cx| p.escape(window, cx));
         }
         true
+    }
+
+    /// Nothing in the window has the keyboard any more (the box that had it went away:
+    /// a thread closed from the keyboard, a question box that was sent): give it to the
+    /// topmost thing still open, else the note, so typing and every shortcut keep
+    /// working. Without this the window's shortcuts go deaf until the next click.
+    fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(settings) = &self.settings {
+            window.focus(&settings.focus_handle(cx), cx);
+        } else if let Some(palette) = self.palette.clone() {
+            palette.update(cx, |p, cx| p.focus(window, cx));
+        } else if self.export.is_some() {
+            window.focus(&self.focus, cx);
+        } else {
+            self.page.update(cx, |p, cx| p.restore_focus(window, cx));
+        }
     }
 
     fn on_pointer(&mut self, ev: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -665,7 +770,9 @@ impl AppView {
         // The corner hint is for a quiet page; once threads hang in the margin it would
         // sit on top of their tags, so it steps aside.
         let threads_out = self.page.read(cx).note.threads.iter().any(|t| t.status == ThreadStatus::Open);
-        if !self.listening && (chat_open || threads_out) {
+        // Nor does it belong on top of a dialog or the drawer.
+        let covered = self.sidebar_open || self.palette.is_some() || self.settings.is_some() || self.export.is_some();
+        if !self.listening && (chat_open || threads_out || covered) {
             return div().into_any_element();
         }
         if !self.listening {
@@ -673,7 +780,7 @@ impl AppView {
                 .absolute()
                 .bottom(px(10.))
                 .right(px(14.))
-                .text_size(px(11.))
+                .text_size(px(ts::META))
                 .font_family(SANS)
                 .text_color(p.faint)
                 .child("Hold \u{2325} to speak \u{b7} \u{2318}J chat \u{b7} \u{2318}K notes")
@@ -699,7 +806,7 @@ impl AppView {
                 Animation::new(Duration::from_millis(900)).repeat(),
                 move |d, delta| d.opacity(0.35 + 0.65 * (0.5 + 0.5 * (delta * std::f32::consts::TAU).sin())),
             ))
-            .child(div().text_size(px(12.)).text_color(p.graphite).child(partial))
+            .child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child(partial))
             .into_any_element()
     }
 
@@ -709,6 +816,7 @@ impl AppView {
             PageEvent::OpenNote(id) => self.open_note(id.clone(), window, cx),
             PageEvent::OpenSettings(tab) => self.open_settings(*tab, window, cx),
             PageEvent::Learned => self.toast("Inkling noted something about you (Settings › About you)", cx),
+            PageEvent::Toast(text) => self.toast(text, cx),
         }
     }
 
@@ -804,9 +912,34 @@ impl AppView {
                 None => self.create_note("", None, window, cx),
             }
         }
+        // ⌘⌫ in the palette is one keystroke away from clearing the search box, so a
+        // deleted note can come back for a few seconds.
+        let kept = {
+            let store = cx.global::<Store>();
+            store.notes.iter().position(|n| n.id == id).map(|at| (store.notes[at].clone(), at, Instant::now()))
+        };
         cx.global_mut::<Store>().delete_note(&id);
-        self.toast("Note deleted", cx);
+        self.deleted = kept;
+        self.show_toast("Note deleted", true, cx);
         cx.notify();
+    }
+
+    /// Put the note deleted last back where it was, and open it.
+    fn undo_delete(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((note, at, when)) = self.deleted.take() else { return };
+        if when.elapsed() > UNDO_DELETE {
+            return;
+        }
+        let id = note.id.clone();
+        {
+            let store = cx.global_mut::<Store>();
+            store.save_note(&note);
+            let at = at.min(store.notes.len());
+            store.notes.insert(at, note);
+        }
+        self.toast = None;
+        self.palette = None;
+        self.open_note(id, window, cx);
     }
 
     fn open_settings(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
@@ -834,13 +967,19 @@ impl AppView {
     }
 
     fn toast(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.show_toast(text, false, cx);
+    }
+
+    fn show_toast(&mut self, text: &str, undo: bool, cx: &mut Context<Self>) {
         let shown = Instant::now();
-        self.toast = Some((text.to_string(), shown));
+        let toast = Toast { text: text.to_string(), shown, undo };
+        let life = toast.life();
+        self.toast = Some(toast);
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(3)).await;
+            cx.background_executor().timer(life).await;
             let _ = this.update(cx, |this, cx| {
-                // Only this toast: a newer one keeps its own three seconds.
-                if this.toast.as_ref().is_some_and(|(_, at)| *at == shown) {
+                // Only this toast: a newer one keeps its own time.
+                if this.toast.as_ref().is_some_and(|t| t.shown == shown) {
                     this.toast = None;
                     cx.notify();
                 }
@@ -850,7 +989,8 @@ impl AppView {
         cx.notify();
     }
 
-    /// The export dialog takes the keyboard, so typing does not go into the note behind it.
+    /// The export dialog takes the keyboard (its card tracks this view's focus), so typing
+    /// does not go into the note behind it.
     fn open_export(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.export = Some((ExportStage::Choose, Format::Markdown, true));
         self.sidebar_open = false;
@@ -986,6 +1126,7 @@ impl AppView {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let current = self.page.read(cx).note_id().to_string();
+        let hidden = self.page.read(cx).just_my_words;
         let store = cx.global::<Store>();
         let notes = store.notes.clone();
         let folders = store.folders.clone();
@@ -996,25 +1137,31 @@ impl AppView {
             .and_then(|a| a.email.clone())
             .unwrap_or_else(|| "This Mac".into());
 
-        let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
-            let id = n.id.clone();
-            let on = n.id == current;
-            let open = n.open_threads();
+        // One look for every row: the open note sits on the thread's wash, a row under
+        // the pointer on a lighter one, so the two never look the same.
+        let row = move |id: SharedString, on: bool| {
             div()
-                .id(SharedString::from(format!("note-{}", n.id)))
+                .id(id)
                 .mx(px(6.))
-                .pl(px(8. + indent))
-                .pr(px(8.))
+                .px(px(8.))
                 .py(px(5.))
                 .rounded(px(6.))
                 .flex()
                 .items_center()
-                .gap(px(7.))
-                .text_size(px(12.5))
+                .gap(px(8.))
+                .text_size(px(ts::UI))
                 .cursor_pointer()
-                .when(on, |d| d.bg(p.wash))
-                .hover(move |s| s.bg(p.wash))
-                .child(icon("file-text", 12., p.faint))
+                .when(on, |d| d.bg(p.wash).font_weight(FontWeight::MEDIUM))
+                .when(!on, |d| d.hover(move |s| s.bg(p.wash.opacity(0.5))))
+                .active(|s| s.opacity(0.8))
+        };
+        let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
+            let id = n.id.clone();
+            let on = n.id == current;
+            let open = n.open_threads();
+            row(SharedString::from(format!("note-{}", n.id)), on)
+                .pl(px(8. + indent))
+                .child(icon("file-text", 13., p.faint))
                 .child(
                     div()
                         .flex_1()
@@ -1023,7 +1170,20 @@ impl AppView {
                         .text_color(p.ink)
                         .child(if n.title.trim().is_empty() { "Untitled".to_string() } else { n.title.clone() }),
                 )
-                .when(open > 0, |d| d.child(ui::small_dot(t.voice_ink.opacity(0.7), 4.)))
+                // open threads: the note's knot, with their count
+                .when(open > 0, |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .flex_none()
+                            .items_center()
+                            .gap(px(4.))
+                            .text_size(px(ts::META))
+                            .text_color(p.faint)
+                            .child(ui::small_dot(t.voice_ink.opacity(0.8), 5.))
+                            .child(open.to_string()),
+                    )
+                })
                 .on_click(cx.listener(move |this, _, window, cx| this.open_note(id.clone(), window, cx)))
         };
 
@@ -1031,37 +1191,36 @@ impl AppView {
         for f in &folders {
             let fid = f.id.clone();
             let collapsed = f.collapsed;
+            let inside: Vec<&Note> = notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect();
+            let group = SharedString::from(format!("folder-row-{}", f.id));
             list = list.child(
-                div()
-                    .id(SharedString::from(format!("folder-{}", f.id)))
-                    .mx(px(6.))
-                    .px(px(8.))
-                    .py(px(5.))
-                    .rounded(px(6.))
-                    .flex()
-                    .items_center()
-                    .gap(px(7.))
-                    .text_size(px(12.5))
+                row(SharedString::from(format!("folder-{}", f.id)), false)
+                    .group(group.clone())
                     .text_color(p.graphite)
-                    .cursor_pointer()
-                    .hover(move |s| s.bg(p.wash))
-                    .group("folder-row")
-                    .child(icon(if collapsed { "folder" } else { "folder-open" }, 12., p.faint))
+                    .child(icon(if collapsed { "folder" } else { "folder-open" }, 13., p.faint))
                     .child(div().flex_1().min_w(px(0.)).truncate().child(f.name.clone()))
+                    .when(collapsed && !inside.is_empty(), |d| d.child(ui::key_hint(inside.len().to_string(), &t)))
                     .child({
                         // Remove the folder; its notes stay, at the top level.
                         let fid = fid.clone();
                         div()
                             .id(SharedString::from(format!("folder-remove-{}", f.id)))
                             .invisible()
-                            .group_hover("folder-row", |s| s.visible())
+                            .group_hover(group, |s| s.visible())
                             .p(px(2.))
                             .rounded(px(4.))
                             .hover(move |s| s.bg(p.wash))
-                            .child(icon("x", 10., p.faint))
+                            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove folder (its notes stay)").build(window, cx))
+                            .child(icon("x", 11., p.faint))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
                                 cx.global_mut::<Store>().delete_folder(&fid);
+                                // The open note may have been in it: it is at the top level now.
+                                this.page.update(cx, |page, _| {
+                                    if page.note.folder.as_deref() == Some(fid.as_str()) {
+                                        page.note.folder = None;
+                                    }
+                                });
                                 this.toast("Folder removed; its notes are still here", cx);
                             }))
                     })
@@ -1075,7 +1234,10 @@ impl AppView {
                     })),
             );
             if !collapsed {
-                for n in notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())) {
+                if inside.is_empty() {
+                    list = list.child(div().pl(px(42.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
+                }
+                for n in inside {
                     list = list.child(note_row(n, 14., cx));
                 }
             }
@@ -1093,12 +1255,13 @@ impl AppView {
                 .rounded(px(6.))
                 .flex()
                 .items_center()
-                .text_size(px(11.5))
+                .text_size(px(ts::SMALL))
                 .text_color(p.graphite)
                 .cursor_pointer()
-                .hover(move |s| s.bg(p.wash).text_color(p.ink))
+                .hover(move |s| s.bg(p.wash.opacity(0.5)).text_color(p.ink))
+                .active(|s| s.opacity(0.8))
                 .child(div().flex_1().child(label))
-                .child(div().text_size(px(10.)).text_color(p.faint).child(keys))
+                .child(ui::key_hint(keys, &t))
         };
 
         let new_folder = self.new_folder.clone();
@@ -1112,11 +1275,12 @@ impl AppView {
             .child(
                 div()
                     .id("sidebar")
-                    .w(px(232.))
+                    .w(px(240.))
                     .h_full()
                     .flex()
                     .flex_col()
                     .bg(p.shelf)
+                    .font_family(SANS)
                     // the drawer lies on top of the page
                     .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(2.), px(0.)), blur_radius: px(14.), spread_radius: px(0.), inset: false }])
                     .border_r_1()
@@ -1128,87 +1292,50 @@ impl AppView {
                             .items_center()
                             .justify_between()
                             .pl(px(86.))
-                            .pr(px(12.))
+                            .pr(px(10.))
                             .child(ui::wordmark(&t, 18.))
-                            .child(
-                                div()
-                                    .id("sidebar-close")
-                                    .p(px(4.))
-                                    .rounded(px(5.))
-                                    .cursor_pointer()
-                                    .hover(move |s| s.bg(p.wash))
-                                    .child(icon("x", 13., p.graphite))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.sidebar_open = false;
-                                        cx.notify();
-                                    })),
-                            ),
+                            .child(ui::icon_button("sidebar-close", "x", 13., &t).on_click(cx.listener(|this, _, _, cx| {
+                                this.sidebar_open = false;
+                                cx.notify();
+                            }))),
                     )
                     .child(
-                        div()
-                            .id("sidebar-search")
-                            .mx(px(6.))
-                            .px(px(8.))
-                            .py(px(5.))
-                            .rounded(px(6.))
-                            .flex()
-                            .items_center()
-                            .gap(px(7.))
-                            .text_size(px(12.))
+                        row("sidebar-search".into(), false)
                             .text_color(p.graphite)
-                            .cursor_pointer()
-                            .hover(move |s| s.bg(p.wash))
-                            .child(icon("search", 12., p.faint))
+                            .child(icon("search", 13., p.faint))
                             .child(div().flex_1().child("Find or start a note"))
-                            .child(div().text_size(px(10.)).text_color(p.faint).child("⌘K"))
+                            .child(ui::key_hint("\u{2318}K", &t))
                             .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
                     )
                     .child(
-                        div()
-                            .id("sidebar-new")
-                            .mx(px(6.))
-                            .px(px(8.))
-                            .py(px(5.))
-                            .rounded(px(6.))
-                            .flex()
-                            .items_center()
-                            .gap(px(7.))
-                            .text_size(px(12.))
+                        row("sidebar-new".into(), false)
                             .text_color(p.graphite)
-                            .cursor_pointer()
-                            .hover(move |s| s.bg(p.wash))
-                            .child(icon("plus", 12., p.faint))
-                            .child("New note")
+                            .child(icon("plus", 13., p.faint))
+                            .child(div().flex_1().child("New note"))
+                            .child(ui::key_hint("\u{2318}N", &t))
                             .on_click(cx.listener(|this, _, window, cx| this.create_note("", None, window, cx))),
                     )
                     .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().child(list).child(
                         match new_folder {
                             Some(input) => div()
-                                .mx(px(14.))
-                                .mt(px(6.))
-                                .px(px(6.))
-                                .py(px(3.))
-                                .rounded(px(6.))
-                                .border_1()
-                                .border_color(p.rule)
-                                .text_size(px(12.))
-                                .child(gpui_kit::component::input::Input::new(&input).appearance(false))
-                                .into_any_element(),
-                            None => div()
-                                .id("new-folder")
                                 .mx(px(6.))
                                 .mt(px(6.))
                                 .px(px(8.))
-                                .py(px(5.))
+                                .py(px(2.))
                                 .rounded(px(6.))
+                                .border_1()
+                                .border_color(p.faint)
+                                .bg(p.paper)
                                 .flex()
                                 .items_center()
-                                .gap(px(7.))
-                                .text_size(px(12.))
+                                .gap(px(8.))
+                                .child(icon("folder-plus", 13., p.faint))
+                                .child(div().flex_1().child(gpui_kit::component::input::Input::new(&input).appearance(false).px_0().text_size(px(ts::UI))))
+                                .into_any_element(),
+                            None => row("new-folder".into(), false)
+                                .mt(px(6.))
                                 .text_color(p.faint)
-                                .cursor_pointer()
-                                .hover(move |s| s.bg(p.wash))
-                                .child(icon("folder-plus", 12., p.faint))
+                                .child(icon("folder-plus", 13., p.faint))
                                 .child("New folder")
                                 .on_click(cx.listener(|this, _, window, cx| this.start_new_folder(window, cx)))
                                 .into_any_element(),
@@ -1216,25 +1343,24 @@ impl AppView {
                     ))
                     .child(
                         div()
-                            .pt(px(8.))
+                            .pt(px(10.))
                             .pb(px(10.))
                             .border_t_1()
                             .border_color(p.rule)
-                            .child(div().px(px(14.)).text_size(px(11.)).text_color(p.ink).truncate().child(who))
-                            .child(div().px(px(14.)).mb(px(6.)).text_size(px(10.)).text_color(p.faint).child("All notes saved on this Mac"))
-                            .child(action("sb-copy", "Copy this note", "⌘⇧C").on_click(cx.listener(|this, _, window, cx| {
+                            .child(div().px(px(14.)).text_size(px(ts::SMALL)).text_color(p.ink).truncate().child(who))
+                            .child(div().px(px(14.)).mb(px(6.)).text_size(px(ts::META)).text_color(p.faint).child("All notes saved on this Mac"))
+                            .child(action("sb-copy", "Copy this note", "\u{2318}\u{21e7}C").on_click(cx.listener(|this, _, _, cx| {
                                 this.copy_note(cx);
                                 this.sidebar_open = false;
-                                let _ = window;
                             })))
-                            .child(action("sb-export", "Export this note", "⌘⇧E").on_click(cx.listener(|this, _, window, cx| {
+                            .child(action("sb-export", "Export this note\u{2026}", "\u{2318}\u{21e7}E").on_click(cx.listener(|this, _, window, cx| {
                                 this.open_export(window, cx);
                             })))
-                            .child(action("sb-jmw", "Hide threads", "⌘⇧.").on_click(cx.listener(|this, _, _, cx| {
+                            .child(action("sb-jmw", if hidden { "Show threads" } else { "Hide threads" }, "\u{2318}\u{21e7}.").on_click(cx.listener(|this, _, _, cx| {
                                 this.toggle_jmw(cx);
                                 this.sidebar_open = false;
                             })))
-                            .child(action("sb-custom", "Customize Inkling", "⌘,").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Customize, window, cx))))
+                            .child(action("sb-custom", "Customize Inkling", "\u{2318},").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Customize, window, cx))))
                             .child(action("sb-minds", "Minds", "").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Minds, window, cx))))
                             .child(action("sb-model", "Model", "").on_click(cx.listener(|this, _, window, cx| this.open_settings(Tab::Model, window, cx)))),
                     ),
@@ -1280,7 +1406,11 @@ impl AppView {
         let name = input.read(cx).value().trim().to_string();
         if keep && !name.is_empty() {
             let store = cx.global_mut::<Store>();
-            store.folders.push(Folder { id: new_id(), name, collapsed: false });
+            match store.folders.iter_mut().find(|f| same_folder_name(&f.name, &name)) {
+                // a folder by that name is already here: open it rather than make a twin
+                Some(f) => f.collapsed = false,
+                None => store.folders.push(Folder { id: new_id(), name, collapsed: false }),
+            }
             store.save_folders();
         }
         // The field is gone; give the keyboard back to the note.
@@ -1297,10 +1427,7 @@ impl AppView {
     }
 
     fn toggle_jmw(&mut self, cx: &mut Context<Self>) {
-        self.page.update(cx, |p, cx| {
-            p.just_my_words = !p.just_my_words;
-            cx.notify();
-        });
+        self.page.update(cx, |p, cx| p.set_hidden(!p.just_my_words, cx));
         cx.notify();
     }
 
@@ -1332,62 +1459,60 @@ impl AppView {
                 .child(
                     div()
                         .id("export")
-                        .w(px(330.))
-                        .p(px(16.))
+                        .track_focus(&self.focus)
+                        .w(px(440.))
+                        .p(px(18.))
                         .rounded(px(12.))
                         .bg(p.paper)
                         .border_1()
                         .border_color(p.rule)
+                        .shadow(ui::modal_shadow(&p))
+                        .font_family(SANS)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .child(div().text_size(px(14.)).text_color(p.ink).child(format!(
-                            "Export “{}”",
-                            if title.is_empty() { "Untitled".to_string() } else { title }
+                        .child(div().text_size(px(ts::TITLE)).text_color(p.ink).truncate().child(format!(
+                            "Export \u{201c}{}\u{201d}",
+                            if title.trim().is_empty() { "Untitled".to_string() } else { title }
                         )))
                         .child(
                             div()
-                                .mt(px(12.))
+                                .mt(px(14.))
                                 .flex()
                                 .gap(px(8.))
                                 .child(choice("ex-md", Format::Markdown, "Markdown", "Plain text for anywhere, another AI included.", cx))
                                 .child(choice("ex-docx", Format::Word, "Word", "To keep editing in Word, Pages or Google Docs.", cx))
-                                .child(choice("ex-html", Format::Html, "HTML", "To read or print to PDF.", cx)),
+                                .child(choice("ex-html", Format::Html, "HTML", "To read, or print to PDF.", cx)),
                         )
                         .child(
                             div()
-                                .mt(px(12.))
+                                .id("ex-threads-row")
+                                .mt(px(10.))
                                 .p(px(10.))
                                 .rounded(px(9.))
                                 .border_1()
                                 .border_color(p.rule)
                                 .flex()
                                 .items_center()
+                                .gap(px(12.))
+                                .cursor_pointer()
+                                .hover(move |s| s.border_color(p.faint))
                                 .child(
                                     div()
                                         .flex_1()
-                                        .child(div().text_size(px(12.)).text_color(p.ink).child("Include the margin"))
-                                        .child(div().text_size(px(10.5)).text_color(p.graphite).child("Each thread sits under the paragraph it's about.")),
+                                        .min_w(px(0.))
+                                        .child(div().text_size(px(ts::UI)).text_color(p.ink).child("Include the threads"))
+                                        .child(div().text_size(px(ts::META)).text_color(p.graphite).child("Each thread sits under the paragraph it's about.")),
                                 )
-                                .child(
-                                    div()
-                                        .id("ex-threads")
-                                        .w(px(30.))
-                                        .h(px(18.))
-                                        .rounded_full()
-                                        .relative()
-                                        .bg(if with_threads { p.ink } else { p.rule })
-                                        .cursor_pointer()
-                                        .child(div().absolute().top(px(2.)).left(if with_threads { px(14.) } else { px(2.) }).size(px(14.)).rounded_full().bg(p.paper))
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            if let Some(e) = this.export.as_mut() {
-                                                e.2 = !e.2;
-                                            }
-                                            cx.notify();
-                                        })),
-                                ),
+                                .child(ui::switch("ex-threads", with_threads, &t))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    if let Some(e) = this.export.as_mut() {
+                                        e.2 = !e.2;
+                                    }
+                                    cx.notify();
+                                })),
                         )
                         .child(
                             div()
-                                .mt(px(14.))
+                                .mt(px(16.))
                                 .flex()
                                 .justify_end()
                                 .items_center()
@@ -1395,7 +1520,7 @@ impl AppView {
                                 .child(ui::ghost_button("ex-cancel", "Cancel", &t).on_click(cx.listener(|this, _, window, cx| {
                                     this.close_export(window, cx)
                                 })))
-                                .child(ui::primary_button("ex-go", "Export…", &t).on_click(cx.listener(move |this, _, window, cx| {
+                                .child(ui::primary_button("ex-go", "Export\u{2026}", &t).on_click(cx.listener(move |this, _, window, cx| {
                                     this.run_export(format, with_threads, window, cx)
                                 }))),
                         ),
@@ -1403,20 +1528,37 @@ impl AppView {
                 .into_any_element(),
         )
     }
+
+    /// The export dialog from the keyboard: ← → pick the format, Return exports.
+    fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((_, format, with_threads)) = self.export else { return };
+        let formats = [Format::Markdown, Format::Word, Format::Html];
+        let at = formats.iter().position(|f| *f == format).unwrap_or(0);
+        match ev.keystroke.key.as_str() {
+            "enter" if ev.keystroke.modifiers == Modifiers::default() => self.run_export(format, with_threads, window, cx),
+            "left" => self.export = Some((ExportStage::Choose, formats[at.saturating_sub(1)], with_threads)),
+            "right" => self.export = Some((ExportStage::Choose, formats[(at + 1).min(formats.len() - 1)], with_threads)),
+            _ => return,
+        }
+        cx.stop_propagation();
+        cx.notify();
+    }
 }
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
-        let toast = self.toast.as_ref().filter(|(_, at)| at.elapsed().as_secs() < 3).map(|(m, _)| m.clone());
+        let toast = self.toast.as_ref().filter(|t| t.shown.elapsed() < t.life()).map(|t| (t.text.clone(), t.undo));
         let sidebar = self.sidebar_open.then(|| self.sidebar(cx));
         let export = self.export_dialog(cx);
         let badge = self.listening_badge(cx);
         let blots = self.blot_layer(cx);
+        // The window itself is not focusable: a click on the linen, the header or any
+        // other chrome leaves the keyboard where it was (in the note) instead of taking
+        // it to the window, where typing goes nowhere.
         div()
             .id("app")
-            .track_focus(&self.focus)
             .size_full()
             .relative()
             .flex()
@@ -1445,6 +1587,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
+            .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_pointer))
             .child(div().flex_1().min_h(px(0.)).child(self.page.clone()))
             .child(self.chrome_layer(window, cx))
@@ -1452,7 +1595,7 @@ impl Render for AppView {
             .children(self.palette.clone())
             .children(self.settings.clone())
             .children(export)
-            .children(toast.map(|m| {
+            .children(toast.map(|(m, undo)| {
                 div()
                     .absolute()
                     .bottom(px(18.))
@@ -1462,13 +1605,29 @@ impl Render for AppView {
                     .justify_center()
                     .child(
                         div()
-                            .px(px(14.))
-                            .py(px(7.))
+                            .flex()
+                            .items_center()
+                            .gap(px(14.))
+                            .px(px(16.))
+                            .py(px(8.))
                             .rounded_full()
                             .bg(p.ink)
+                            .shadow(ui::popover_shadow(&p))
                             .text_color(p.paper)
-                            .text_size(px(12.))
-                            .child(m),
+                            .text_size(px(ts::SMALL))
+                            .child(m)
+                            .when(undo, |d| {
+                                d.child(
+                                    div()
+                                        .id("toast-undo")
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .cursor_pointer()
+                                        .hover(|s| s.opacity(0.8))
+                                        .active(|s| s.opacity(0.6))
+                                        .child("Undo")
+                                        .on_click(cx.listener(|this, _, window, cx| this.undo_delete(window, cx))),
+                                )
+                            }),
                     )
             }))
             .child(badge)

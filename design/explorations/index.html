@@ -372,39 +372,68 @@ kbd { font: 500 var(--t1)/1 var(--ui); color: var(--faint); border: 1px solid va
 .syn .ok::before { content: "✓ "; }
 .syn .bad::before { content: "✕ "; color: var(--madder); }
 
-/* ---------- other blocks ---------- */
+/* ---------- other blocks: sewn in your ink or the colour of their kind, never madder ---------- */
 .nb { font: 400 var(--t4)/28px var(--body); font-variation-settings: "SOFT" 100, "WONK" 0; }
 .nb h5 { font: 600 20px/1.3 var(--body); font-variation-settings: "SOFT" 100, "WONK" 0; margin: 0 0 6px; }
+.sew-host { position: relative; }
+svg.sew { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.st { transform-box: fill-box; transform-origin: 0% 50%; }
+.sewing .st { animation: st-in calc(130ms * var(--slow, 1)) cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i) * var(--every, 40ms) * var(--slow, 1)); }
+@keyframes st-in { from { transform: scaleX(0); opacity: 0; } 35% { opacity: 1; } to { transform: scaleX(1); opacity: 1; } }
+.unpick .st { animation: st-out calc(110ms * var(--slow, 1)) ease-in both; animation-delay: calc((var(--n) - var(--i)) * 18ms * var(--slow, 1)); }
+@keyframes st-out { to { transform: scaleX(0); opacity: 0; } }
+html.reduce .sewing .st { animation: st-fade 120ms ease-out both; }
+html.reduce .unpick .st { animation: st-fade 120ms ease-in reverse both; }
+@keyframes st-fade { from { opacity: 0; } }
+/* table */
 .nt { border-collapse: collapse; font: 400 var(--t2)/1.4 var(--ui); margin: 6px 0 0; }
-.nt th { text-align: left; font: 600 var(--t1)/1.3 var(--ui); color: var(--faint); padding: 0 36px 7px 0; border-bottom: 1px solid var(--edge); }
+.nt th { text-align: left; font: 600 var(--t1)/1.3 var(--ui); color: var(--faint); padding: 0 36px 8px 0; border-bottom: 1px solid var(--edge); }
 .nt td { padding: 7px 36px 7px 0; border-bottom: 1px solid var(--rule); color: var(--ink); font-variant-numeric: tabular-nums; }
 .nt th:last-child, .nt td:last-child { padding-right: 8px; }
 .nt td.r, .nt th.r { text-align: right; }
 .nt td.no { color: var(--graphite); }
-.cklist { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
-.cklist label { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: start; gap: 6px; cursor: pointer; }
-.cklist input { appearance: none; -webkit-appearance: none; width: 15px; height: 15px; margin: 6px 0 0; border: 1.5px solid var(--graphite); border-radius: 4px; display: grid; place-items: center; background: var(--paper); cursor: pointer; transition: background-color 120ms ease-out, border-color 120ms ease-out; }
-.cklist input::after { content: ""; width: 7px; height: 4px; border-left: 1.8px solid var(--paper); border-bottom: 1.8px solid var(--paper); transform: translateY(-1px) rotate(-45deg) scale(.4); opacity: 0; transition: transform 140ms cubic-bezier(.2,.7,.2,1), opacity 100ms ease-out; }
-.cklist input:checked { background: var(--ink); border-color: var(--ink); }
-.cklist input:checked::after { opacity: 1; transform: translateY(-1px) rotate(-45deg) scale(1); }
-.cklist input:checked + span { color: var(--graphite); text-decoration: line-through; text-decoration-color: var(--faint); text-decoration-thickness: 1px; }
-.callout { border-radius: 8px; padding: 9px 14px 11px; margin-top: 10px; border: 1px solid; }
-.callout .k { display: block; font: 600 var(--t1)/1.6 var(--ui); }
+.nt.sewn-head th, .nt.sewn-rows th, .nt.sewn-rows td { border-bottom-color: transparent; }
+/* checklist: a real checkbox underneath, drawn as thread */
+.ck-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.ck { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; cursor: pointer; }
+.ck input { position: absolute; left: -1px; top: 4px; width: 20px; height: 20px; margin: 0; opacity: 0; cursor: pointer; }
+.ck .box { width: 18px; height: 18px; margin-top: 5px; overflow: visible; }
+.ck input:focus-visible + .box { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius: 3px; }
+.ck .tx { position: relative; display: block; transition: color 160ms ease-out; }
+.ck input:checked ~ .tx { color: var(--graphite); }
+.ck-list.ck-c input:checked ~ .tx { text-decoration: line-through; text-decoration-color: var(--faint); text-decoration-thickness: 1px; }
+/* callouts: --kc is the kind's thread */
+.callout { position: relative; border-radius: 8px; padding: 10px 16px 12px; margin-top: 10px; background: color-mix(in srgb, var(--kc) 6%, var(--paper)); }
+.callout.note { --kc: var(--indigo); } .callout.warn { --kc: var(--ochre); } .callout.tip { --kc: var(--sage); }
+.callout .k { display: block; font: 600 var(--t1)/1.6 var(--ui); color: var(--kc); }
 .callout p { font: 400 var(--t4)/26px var(--body); font-variation-settings: "SOFT" 100, "WONK" 0; }
-.callout.note { background: color-mix(in srgb, var(--indigo) 6%, var(--paper)); border-color: color-mix(in srgb, var(--indigo) 22%, var(--rule)); }
-.callout.note .k { color: var(--indigo); }
-.callout.warn { background: color-mix(in srgb, var(--ochre) 8%, var(--paper)); border-color: color-mix(in srgb, var(--ochre) 26%, var(--rule)); }
-.callout.warn .k { color: var(--ochre); }
-.callout.tip { background: color-mix(in srgb, var(--sage) 7%, var(--paper)); border-color: color-mix(in srgb, var(--sage) 24%, var(--rule)); }
-.callout.tip .k { color: var(--sage); }
-.nq { margin: 10px 0 0; padding: 0 0 0 16px; position: relative; }
-.nq::before { content: ""; position: absolute; left: 2px; top: 4px; bottom: 4px; width: 2px; background: var(--rule); border-radius: 1px; }
+.callout.co-seam { border-radius: 0 8px 8px 0; padding-left: 22px; }
+.callout.co-label { border: 1px solid color-mix(in srgb, var(--kc) 26%, var(--rule)); margin-top: 20px; padding-top: 14px; }
+.callout.co-label .k { position: absolute; left: 12px; top: -9px; background: var(--card); border: 1px solid color-mix(in srgb, var(--kc) 34%, var(--edge)); border-radius: 3px; padding: 0 13px; line-height: 16px; }
+/* quote */
+.nq { margin: 10px 0 0; padding: 0 0 0 18px; position: relative; }
+.nq.q-bar::before { content: ""; position: absolute; left: 2px; top: 4px; bottom: 4px; width: 2px; background: var(--rule); border-radius: 1px; }
 .nq p { font-style: italic; color: var(--graphite); }
 .nq cite { display: block; font: 400 var(--t1)/1.6 var(--ui); font-style: normal; color: var(--faint); }
 .nfig { margin: 12px 0 0; }
 .nfig .img { border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--rule); }
 .nfig figcaption { font: 400 var(--t1)/1.5 var(--ui); color: var(--faint); margin-top: 6px; }
 .nfig figcaption b { color: var(--graphite); font-weight: 600; }
+/* the options, block by block */
+.og { display: grid; grid-template-columns: minmax(0, 250px) minmax(0, 1fr); gap: var(--s5); padding: var(--s5) 0; border-top: 1px solid var(--rule); }
+.og:first-child { border-top: 0; padding-top: 0; }
+.og-head h3 { margin-bottom: 6px; }
+.og-head p { font-size: var(--t2); color: var(--graphite); }
+.og-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: var(--s4); align-items: start; }
+.opt { margin: 0; min-width: 0; }
+.opt-stage { background: var(--paper); border-radius: 10px; padding: 14px 18px 18px; box-shadow: 0 0 0 1px var(--rule); }
+.opt.rec .opt-stage { box-shadow: 0 0 0 2px var(--ink); }
+.opt figcaption { margin-top: 10px; font-size: var(--t2); color: var(--graphite); }
+.opt figcaption b { color: var(--ink); font-weight: 600; }
+.opt figcaption small { font: 500 var(--t1)/1 var(--ui); color: var(--paper); background: var(--ink); padding: 3px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; }
+.opt figcaption p { margin-top: 4px; }
+.opt figcaption i { font-style: normal; color: var(--faint); display: block; margin-top: 6px; font-size: var(--t1); }
+@media (max-width: 860px) { .og { grid-template-columns: 1fr; } }
 .blk-notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--s4); margin-top: var(--s5); }
 .blk-notes div { padding: 12px 14px; border-radius: 8px; background: var(--paper); border: 1px solid var(--rule); font-size: var(--t2); color: var(--graphite); }
 .blk-notes b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
@@ -447,14 +476,14 @@ html.qa #qa { display: block; white-space: pre-wrap; font: 11px/1.4 ui-monospace
     <article id="m-tag" aria-labelledby="m-tag-h">
       <div class="e-num">1.1</div>
       <h3 id="m-tag-h" style="font:500 22px/1.25 var(--body);font-variation-settings:'SOFT' 100,'WONK' 0">Tags stay folded until you look</h3>
-      <p class="e-what" style="max-width:76ch">A thread’s tag sits folded on its thread: the mind’s mark, its name and the thread’s number, nothing else. Rest the pointer on it and it unfolds to show the question; click and it opens for a reply. It folds again when you move away, press Esc or start typing. Four ways to unfold it are below, on the same note; pick one here and try it.</p>
+      <p class="e-what" style="max-width:76ch">A thread’s tag sits folded on its thread: the mind’s mark, its name and the thread’s number, nothing else. Rest the pointer on it and it drops open to show the question; click and it opens for a reply. It folds again when you move away, press Esc or start typing. Drop is the pick; the other three ways it could open are here too, on the same note, to compare.</p>
       <div class="stage cloth" style="margin-top:var(--s4)">
         <div class="fit" data-w="1000" data-h="474"><div class="fit-inner"><div id="hl-host"></div></div></div>
       </div>
       <div class="hl-ctl">
         <div class="seg" role="group" aria-label="How a tag unfolds" id="hl-style">
-          <button type="button" data-style="unfold" aria-pressed="true">Unfold<small>recommended</small></button>
-          <button type="button" data-style="drop" aria-pressed="false">Drop</button>
+          <button type="button" data-style="drop" aria-pressed="true">Drop<small>the pick</small></button>
+          <button type="button" data-style="unfold" aria-pressed="false">Unfold</button>
           <button type="button" data-style="unroll" aria-pressed="false">Unroll</button>
           <button type="button" data-style="stitch" aria-pressed="false">Stitch round</button>
         </div>
@@ -463,12 +492,12 @@ html.qa #qa { display: block; white-space: pre-wrap; font: 11px/1.4 ui-monospace
       </div>
       <div class="ruler" id="hl-ruler"></div>
       <dl class="spec" style="margin-top:var(--s4)">
-        <div><dt>Duration</dt><dd>Unfold to read: settled in under 300 ms. Open for a reply: under 300 ms more. Fold: about 250 ms.</dd></div>
-        <div><dt>Easing</dt><dd>Critically damped springs, no bounce: height 520 / 45.6, width 700 / 53. The width leads when unfolding; when folding it waits 60 ms for the height.</dd></div>
-        <div><dt>What moves</dt><dd>The label’s width and height, out from its loop; the crease at the moving edge; the thread, from 26% to 60% (read) or 100% (open); tags below step down. The header row, the loop and your words never move.</dd></div>
-        <div><dt>Hover and click</dt><dd>The pointer rests 120 ms before anything unfolds, so passing over the margin opens nothing; leaving folds it after 250 ms. Click or Enter opens it and puts the caret in the reply. Esc, a click elsewhere or a key in the note folds it. One tag unfolded at a time.</dd></div>
-        <div><dt>Reduced</dt><dd>No unfolding: the label is drawn at its new size and fades in over 120 ms.</dd></div>
-        <div><dt>GPUI</dt><dd class="g">The card’s body sits in a div with <code>overflow_hidden</code>; <code>with_spring</code> drives width and height between the folded and measured sizes (<code>margin::measured</code> already records heights). The crease is one div with a <code>linear_gradient</code> at the clip edge, its height the formula in the frames below. Springs keep their velocity when retargeted, so hover-off mid-unfold folds back smoothly. GPUI cannot rotate or skew a div with text in it, so none of the four flips or tilts the label. S to M.</dd></div>
+        <div><dt>Duration</dt><dd>Full height in about 200 ms, 4% past it at 260, settled by 380. Opening for a reply runs the same spring again. Folding takes about 250 ms.</dd></div>
+        <div><dt>Easing</dt><dd>Height: a spring with a little give, stiffness 300, damping 25 (ζ 0.72). Width: 700 / 53, no bounce, and it leads. Folding: 700 / 53 for both, the width 60 ms behind the height.</dd></div>
+        <div><dt>What moves</dt><dd>The label’s width and height, out from its loop; the thread, from 26% to 60% (read) or 100% (open); tags below step down. Nothing is drawn at the edge. The header row, the loop and your words never move.</dd></div>
+        <div><dt>Hover and click</dt><dd>The pointer rests 120 ms before anything drops, so passing over the margin opens nothing; leaving folds it 250 ms later. Click or Enter opens it and puts the caret in the reply. Esc, a click elsewhere or a key in the note folds it. One tag open at a time.</dd></div>
+        <div><dt>Reduced</dt><dd>No drop: the label is drawn at its new size and fades in over 120 ms.</dd></div>
+        <div><dt>GPUI</dt><dd class="g">The card’s body sits in a div with <code>overflow_hidden</code>; <code>with_spring</code> drives its width and height between the folded and measured sizes (<code>margin::measured</code> already records heights). Nothing else is drawn. Springs keep their velocity when retargeted, so leaving mid-drop folds back from where it is. GPUI cannot rotate or skew a div with text in it, so none of the four flips or tilts the label. S.</dd></div>
       </dl>
 
       <div class="film" aria-label="The four ways, frame by frame">
@@ -478,19 +507,20 @@ html.qa #qa { display: block; white-space: pre-wrap; font: 11px/1.4 ui-monospace
 
       <div class="rec-box">
         <div>
-          <h3>Recommended: Unfold</h3>
+          <h3>The pick: Drop</h3>
           <ol>
-            <li><b>It is what the object does.</b> A woven label is folded, and you read one by unfolding it. The crease is the only part of the motion that is drawn; everything else is a size changing.</li>
-            <li><b>Nothing you read moves.</b> The header row stays put, the loop the thread is tied to stays put, and the question is uncovered where it will rest, so you can start reading the first line while the rest unfolds.</li>
-            <li><b>The folded label says it opens.</b> A sliver of folded-under cloth shows along its bottom edge at rest. No chevron, no button.</li>
-            <li><b>It is calm at the hundredth hover.</b> A critically damped spring: no bounce, settled in under 300 ms, and if you move away mid-unfold it folds back from where it is.</li>
+            <li><b>It is the cleanest.</b> Nothing is drawn: no crease, no roll, no stitching at the edge. The label falls open from the loop it hangs by, and the only thing that changes is its size.</li>
+            <li><b>It is the thread’s own physics.</b> A tag hanging on a thread finds its length with a small give, the same give the rope has when it sags. The label and its thread move as one object.</li>
+            <li><b>Nothing you read moves.</b> The header row and the loop stay put, and the question is uncovered where it will rest, so the first line can be read while the rest is still dropping.</li>
+            <li><b>A folded tag still says it opens, without a bar.</b> It answers the pointer at once: the label lifts a little, 120 ms before anything drops. Its thread stays still: no sway on hover.</li>
+            <li><b>It is the cheapest to build.</b> One clipped div and two springs; no gradient, no extra element.</li>
           </ol>
         </div>
         <div>
           <h3>Why not the others</h3>
           <ol>
-            <li><b>Drop</b> is the plainest and the cheapest, and its 4% bounce is charming twice and tiring after that. Keep it as the fallback if the crease looks fussy at 1×: it is the same clip without the strip.</li>
-            <li><b>Unroll</b> reads well, but a roll is paper, a scroll, and it leaves a cylinder under every folded tag in the margin.</li>
+            <li><b>Unfold</b> draws its crease as a strip along the bottom edge. On a tag at rest it looked out of place, and it is the fussiest of the four to draw.</li>
+            <li><b>Unroll</b> reads well, but a roll is paper, a scroll, not a woven label.</li>
             <li><b>Stitch round</b> is the loveliest once and the slowest every other time (about 700 ms before you can read). It belongs to a thread’s first arrival, not to every hover.</li>
           </ol>
         </div>
@@ -526,7 +556,7 @@ html.qa #qa { display: block; white-space: pre-wrap; font: 11px/1.4 ui-monospace
 <section class="sec" id="code" aria-labelledby="s3">
   <div class="wrap">
     <div class="sec-head"><div class="sec-num">03</div><div><h2 class="sec-title" id="s3">Code</h2>
-      <p class="sec-lede">Code is the one place a note is allowed a grid. A sampler’s alphabet is worked on even-weave, every letter the same number of threads wide, and code is set the same way: monospace on a flat ground. The block itself is plain, because thread is Inkling’s: the only stitches you will ever see in a code block are a question about one of its lines.</p></div></div>
+      <p class="sec-lede">Code is the one place a note is allowed a grid. A sampler’s alphabet is worked on even-weave, every letter the same number of threads wide, and code is set the same way: monospace on a flat ground. The block itself stays plain: code is read one character at a time, so nothing is sewn into it except, in madder, Inkling’s question about one of its lines.</p></div></div>
     <div class="sec-body">
       <div class="code-sheets" id="code-sheets"></div>
       <dl class="spec" style="margin-top:var(--s5)" aria-label="The parts of a code block">
@@ -552,7 +582,9 @@ html.qa #qa { display: block; white-space: pre-wrap; font: 11px/1.4 ui-monospace
 <section class="sec" id="blocks" aria-labelledby="s4">
   <div class="wrap">
     <div class="sec-head"><div class="sec-num">04</div><div><h2 class="sec-title" id="s4">Other blocks</h2>
-      <p class="sec-lede">The same rule holds: your blocks are plain and flat, and thread appears only where Inkling asks about something. Checkboxes are controls, so they get no stitching. Colour in a block means a kind (note, warning, tip), never a mind.</p></div></div>
+      <p class="sec-lede">Your blocks can be sewn too. What tells yours from Inkling’s is colour, not stitching: madder, and rose beside it, is only ever Inkling’s. A block is sewn in your ink or in the thread of its kind, and its words stay in Fraunces. Buttons and toggles in the app’s chrome stay plain; anything inside your note is yours to sew, checkboxes included. Each block has two or three ways to sew it, live, and the one recommended goes into the note at the end.</p></div></div>
+    <div id="opts"></div>
+    <h3 class="subh">The note, with the recommended blocks</h3>
     <div class="stage cloth"><div class="fit" data-w="1000" data-h="842"><div class="fit-inner"><div id="blk-host"></div></div></div></div>
     <div class="blk-notes" id="blk-notes"></div>
   </div>
@@ -597,6 +629,8 @@ function bindBar() {
     th.setAttribute("aria-pressed", String(root.dataset.theme === "dark"));
     sl.setAttribute("aria-pressed", String(SET.slow > 1));
     rd.setAttribute("aria-pressed", String(!!SET.reduce));
+    root.style.setProperty("--slow", String(SET.slow)); // CSS stitch animations follow the same clock
+    root.classList.toggle("reduce", !!SET.reduce);
   };
   th.addEventListener("click", () => {
     root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
@@ -966,8 +1000,8 @@ function anchorSVG(A, c, k, op) {
 // ================================================================ tags
 const TAG_W = 296, CHIP_H = 32;
 const TAG_STYLES = {
+  drop: { name: "Drop", open: { k: 300, c: 25 }, close: { k: 700, c: 53 } },   // the pick: the app builds these numbers
   unfold: { name: "Unfold", open: { k: 520, c: 45.6 }, close: { k: 700, c: 53 } },
-  drop: { name: "Drop", open: { k: 300, c: 25 }, close: { k: 700, c: 53 } },
   unroll: { name: "Unroll", open: { ms: 320, ease: E.out }, close: { ms: 240, ease: E.inOut } },
   stitch: { name: "Stitch round", open: { ms: 240, ease: E.out }, close: { ms: 180, ease: E.inOut } },
 };
@@ -982,7 +1016,7 @@ function hDur(style, opening) { const m = TAG_STYLES[style][opening ? "open" : "
 
 class Tag {
   constructor(parent, o) {
-    this.o = o; this.style = o.style || "unfold"; this.state = "fold";
+    this.o = o; this.style = o.style || "drop"; this.state = "fold";
     this.x = o.x || 0; this.top = o.top || 0;
     const el = this.el = document.createElement("div");
     el.className = "tg";
@@ -1048,16 +1082,16 @@ class Tag {
   }
   /** The edge, as a function of the label's size and how far through its change it is. */
   deco(w, h, q, dt) {
-    const st = this.style, restFold = this.state === "fold", fromFold = this.from === "fold";
+    const st = this.style;
+    const moving = Math.abs(this.hTo - this.hFrom) > 1 && q > 0 && q < 1;
     if (st === "unfold") {
-      // folded-under cloth: 2.5 px shows at rest when folded, up to ~9 px while the crease travels
-      const b0 = fromFold ? 2.5 : 0, b1 = restFold ? 2.5 : 0;
-      const band = lerp(b0, b1, q) + 7 * Math.sin(Math.PI * q) * (Math.abs(this.hTo - this.hFrom) > 1 ? 1 : 0);
+      // folded-under cloth shows only while the crease travels (up to ~7 px); a label at rest has no strip
+      const band = moving ? 7 * Math.sin(Math.PI * q) : 0;
       this.crease.style.height = fx(Math.max(0, band)) + "px"; this.crease.style.setProperty("--b", fx(Math.max(0, band)));
     } else this.crease.style.height = "0px";
     if (st === "unroll") {
-      const d0 = fromFold ? 8 : 0, d1 = restFold ? 8 : 0;
-      const d = Math.max(0, lerp(d0, d1, q) + 3 * Math.sin(Math.PI * q) * (Math.abs(this.hTo - this.hFrom) > 1 ? 1 : 0));
+      // the roll exists only while the label unrolls or rolls up; at rest there is nothing under it
+      const d = moving ? 8 * Math.sin(Math.PI * Math.min(1, q * 1.15)) : 0;
       this.roll.style.display = d > 0.3 ? "block" : "none";
       this.roll.style.top = fx(h - d / 2 - 0.5) + "px"; this.roll.style.height = fx(d) + "px"; this.roll.style.width = fx(w + 2) + "px";
     }
@@ -1117,7 +1151,7 @@ class Margin {
   add(t) {
     // t: {id, span, c, kind, mind, num, text, reply, seed, gut:{x}, style}
     t.tag = new Tag(this.mg, { c: t.c, kind: t.kind, mind: t.mind || "Inkling", num: t.num, text: t.text, reply: t.reply, style: t.style || this.o.style, noReply: t.noReply });
-    t.tag.setStyle(t.style || this.o.style || "unfold");
+    t.tag.setStyle(t.style || this.o.style || "drop");
     t.ropeOp = 0.26; t.ropeTo = 0.26;
     this.threads.push(t);
     this.bind(t);
@@ -1171,7 +1205,7 @@ class Margin {
   // ---- interaction
   bind(t) {
     const box = t.tag.box;
-    const enter = () => { clearTimeout(t.leaveT); if (t.tag.state !== "fold") return; clearTimeout(t.enterT); t.enterT = setTimeout(() => { if (t.tag.state === "fold") this.set(t, "read"); }, 120); t.tag.el.classList.add("lift"); if (t.rope && !SET.reduce && !this.scrub) { t.rope.nudge([1, -0.45]); this.kick(); } };
+    const enter = () => { clearTimeout(t.leaveT); if (t.tag.state !== "fold") return; clearTimeout(t.enterT); t.enterT = setTimeout(() => { if (t.tag.state === "fold") this.set(t, "read"); }, 120); t.tag.el.classList.add("lift"); };
     const leave = () => { clearTimeout(t.enterT); t.tag.el.classList.remove("lift"); clearTimeout(t.leaveT); t.leaveT = setTimeout(() => { if (t.tag.state === "read" && !t.tag.el.matches(":hover") && !t.span.matches(":hover")) this.set(t, "fold"); }, 250); };
     box.addEventListener("pointerenter", enter); box.addEventListener("pointerleave", leave);
     t.span.addEventListener("pointerenter", enter); t.span.addEventListener("pointerleave", leave);
@@ -1274,7 +1308,7 @@ function bandSVG(width, items, slots, sewing) {
 }
 
 // ================================================================ 1.1 the headline
-const HL = { style: Q.get("style") && TAG_STYLES[Q.get("style")] ? Q.get("style") : "unfold" };
+const HL = { style: Q.get("style") && TAG_STYLES[Q.get("style")] ? Q.get("style") : "drop" };
 function buildHeadline() {
   const host = $("#hl-host");
   host.innerHTML = `<div class="sheet" id="hl" style="position:absolute;left:16px;top:14px;width:968px;height:446px">
@@ -1344,8 +1378,8 @@ function hlSequence() {
   return {
     dur: HL_AT.end,
     phases: [
-      { label: "Hover: unfold", spans: [[0, sOpen]] },
-      { label: "Click: open", spans: [[HL_AT.open, HL_AT.open + sOpen]] },
+      { label: "Hover: to read", spans: [[0, sOpen]] },
+      { label: "Click: to reply", spans: [[HL_AT.open, HL_AT.open + sOpen]] },
       { label: "Esc: fold", spans: [[HL_AT.fold, HL_AT.fold + sClose]] },
       { label: "Tag 2 steps aside", spans: [moveTill(0, sOpen), moveTill(HL_AT.open, sOpen), moveTill(HL_AT.fold, sClose)] },
       { label: "Thread brightens", spans: [[0, 210], [HL_AT.open, HL_AT.open + 210], [HL_AT.fold, HL_AT.fold + 210]] },
@@ -1407,7 +1441,7 @@ function miniSheet(host, o) {
 /** A tag that is only ever drawn at a given state and time (specimens). */
 function staticTag(sheet, o) {
   const tag = new Tag($(".mg", sheet), o);
-  tag.setStyle(o.style || "unfold"); tag.x = o.x; tag.top = o.top; tag.place(); tag.measure();
+  tag.setStyle(o.style || "drop"); tag.x = o.x; tag.top = o.top; tag.place(); tag.measure();
   tag.el.style.pointerEvents = "none";
   return tag;
 }
@@ -1625,7 +1659,7 @@ function tieDef() {
       };
       d.spec = new Spec({
         name: "Tie-off", ruler: $(".ruler", d.el),
-        timeline: () => ({ dur, rest: 0, phases: [{ label: "Pull taut", a: 0, b: T.pull }, { label: "Knot pops", a: T.knot, b: T.knot + 200 }, { label: "Tag folds", a: T.fold, b: T.fold + hDur("unfold", false) }, { label: "Thread quiets", a: T.quiet, b: T.quiet + 400 }, { label: "Motif, 8 legs", a: T.motif, b: T.motif + 40 * 7 + 130 }], frame: (t) => frame(t, false) }),
+        timeline: () => ({ dur, rest: 0, phases: [{ label: "Pull taut", a: 0, b: T.pull }, { label: "Knot pops", a: T.knot, b: T.knot + 200 }, { label: "Tag folds", a: T.fold, b: T.fold + hDur("drop", false) }, { label: "Thread quiets", a: T.quiet, b: T.quiet + 400 }, { label: "Motif, 8 legs", a: T.motif, b: T.motif + 40 * 7 + 130 }], frame: (t) => frame(t, false) }),
         reduced: () => ({ dur: 300, rest: 0, phases: [{ label: "Everything at once", a: 0, b: 120 }], frame: (t) => frame(t, true) }),
       });
       $(".replay", d.el).addEventListener("click", () => d.spec.play());
@@ -1716,7 +1750,7 @@ function dragDef() {
     init(d) {
       const sheet = miniSheet(d.host, { w: 760, h: 276, colX: 46, colW: 380, paras: [{ y: 26, html: paraHTML(NOTE.p2, NOTE.q1, 1) }, { y: 152, html: paraHTML(NOTE.p3, NOTE.q2, 2) }] });
       const spans = $$(".anc", sheet);
-      const m = new Margin(sheet, { mgX: 452, style: "unfold" });
+      const m = new Margin(sheet, { mgX: 452, style: "drop" });
       const a = m.add({ id: 1, num: 1, span: spans[0], c: "madder", kind: "correction", text: NOTE.t1, seed: 17, gut: 28, noReply: true });
       const b = m.add({ id: 2, num: 2, span: spans[1], c: "indigo", mind: "Skeptic", kind: "question", text: "You walked after 7 km last year. Is pace the problem, or the last 3 km?", seed: 29, gut: 28, noReply: true });
       $$(".tg", sheet).forEach((e) => { e.style.pointerEvents = "auto"; });
@@ -1907,13 +1941,13 @@ function toastDef() {
 const FILM_T = [0, 50, 100, 160, 240, 400];
 function buildFilm() {
   const notes = {
-    unfold: ["A crease travels down; up to 7 px of folded-under cloth shows below it, then none.", `Spring: stiffness 520, damping 45.6 (ζ 1.0), settled in ${settleMs(520, 45.6)} ms. Folds on 700 / 53 in ${settleMs(700, 53)} ms.`],
-    drop: ["The label drops open on its loop, overshoots 4% and settles. Nothing at the edge.", `Spring: stiffness 300, damping 25 (ζ 0.72), settled in ${settleMs(300, 25)} ms.`],
-    unroll: ["A roll travels down and thins as it unrolls; folded, the roll sits under the label.", "Ease-out 320 ms; rolls back up in 240 ms."],
+    drop: ["The label drops open from its loop, gives 4% past its length and settles. Nothing is drawn at the edge.", `Spring: stiffness 300, damping 25 (ζ 0.72), settled in ${settleMs(300, 25)} ms. Folds on 700 / 53 in ${settleMs(700, 53)} ms.`],
+    unfold: ["A crease travels down the edge with up to 7 px of folded-under cloth below it, gone when it stops.", `Spring: stiffness 520, damping 45.6 (ζ 1.0), settled in ${settleMs(520, 45.6)} ms.`],
+    unroll: ["A roll travels down the edge and thins as it unrolls, gone when it stops.", "Ease-out 320 ms; rolls back up in 240 ms."],
     stitch: ["The label grows, then its edge sews round the new size, 10 ms a stitch; the words fade in last.", "Grow 240 ms; stitches from 150 ms; about 1 s until the edge is done."],
   };
   const host = $("#film");
-  host.innerHTML = Object.keys(TAG_STYLES).map((s) => `<div class="film-row${s === "unfold" ? " rec" : ""}" data-style="${s}"><div><h4>${esc(TAG_STYLES[s].name)}${s === "unfold" ? "<small>recommended</small>" : ""}</h4><p>${esc(notes[s][0])}</p><p class="meta">${esc(notes[s][1])}</p></div>` +
+  host.innerHTML = Object.keys(TAG_STYLES).map((s) => `<div class="film-row${s === "drop" ? " rec" : ""}" data-style="${s}"><div><h4>${esc(TAG_STYLES[s].name)}${s === "drop" ? "<small>the pick</small>" : ""}</h4><p>${esc(notes[s][0])}</p><p class="meta">${esc(notes[s][1])}</p></div>` +
     `<div class="frames">${FILM_T.map((t) => `<figure class="fr-wrap"><div class="fr" data-t="${t}"><div class="fr-in"><svg class="fr-ov" viewBox="0 0 290 180" style="position:absolute;inset:0;width:290px;height:180px;overflow:visible" aria-hidden="true"></svg></div></div><figcaption>${t} ms</figcaption></figure>`).join("")}</div></div>`).join("");
   $$(".film-row", host).forEach((row) => {
     const s = row.dataset.style;
@@ -2274,7 +2308,7 @@ function buildCode() {
       <span class="gut" style="left:8px">1</span>
       <div class="mg" style="position:absolute;inset:0;pointer-events:none"></div><svg class="ov ov-st" aria-hidden="true"></svg><svg class="ov ov-th" aria-hidden="true"></svg></div>`;
     const sheet = $(".sheet", h), span = $(".anc", sheet), row = span.closest(".cl");
-    const m = new Margin(sheet, { mgX: 640, style: "unfold", onState: (t, st) => row.classList.toggle("on", st !== "fold") });
+    const m = new Margin(sheet, { mgX: 640, style: "drop", onState: (t, st) => row.classList.toggle("on", st !== "fold") });
     const t = m.add({ id: 1, num: 1, span, c: "madder", kind: "question", text: "4:55 a km comes to 49:10, 50 seconds under. Do you want a test at 5:00 exactly, the edge of your goal?", reply: "", seed: 41, gut: 28, colSel: ".cb", dy: 0.2 });
     t.gutNum = $(".gut", sheet);
     $$(".tg", sheet).forEach((e) => { e.style.pointerEvents = "auto"; });
@@ -2334,40 +2368,181 @@ function courseSVG() {
     <path d="M430 66 l10 -14 l10 14z" style="fill:var(--ochre)"/><text x="456" y="66" style="font:600 12px var(--ui);fill:var(--ink)">Hill, 6 km</text>
     ${[[140, 40, 2], [260, 44, 4], [420, 60, 6], [330, 160, 8]].map(([x, y, k]) => `<circle cx="${x}" cy="${y}" r="9" style="fill:var(--paper);stroke:var(--graphite)"/><text x="${x}" y="${y + 4}" text-anchor="middle" style="font:600 11px var(--ui);fill:var(--ink)">${k}</text>`).join("")}</svg>`;
 }
+// ---- sewing your blocks: overlays drawn from each element's measured size
+const SEW_KIND = { patch: 7, seam: 9, tacks: 11, rows: 13, head: 15, qseam: 17 };
+function rrPts(w, h, i, r) {
+  // a rounded rectangle inset by i, clockwise from the top left, as points
+  const x0 = i, y0 = i, x1 = w - i, y1 = h - i, pts = [];
+  const arc = (cx, cy, a0, a1) => { for (let j = 1; j <= 6; j++) { const a = lerp(a0, a1, j / 6); pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); } };
+  pts.push([x0 + r, y0]); pts.push([x1 - r, y0]); arc(x1 - r, y0 + r, -Math.PI / 2, 0);
+  pts.push([x1, y1 - r]); arc(x1 - r, y1 - r, 0, Math.PI / 2);
+  pts.push([x0 + r, y1]); arc(x0 + r, y1 - r, Math.PI / 2, Math.PI);
+  pts.push([x0, y0 + r]); arc(x0 + r, y0 + r, Math.PI, Math.PI * 1.5);
+  return pts;
+}
+function overlay(el) {
+  let svg = el.querySelector(":scope > svg.sew");
+  if (!svg) { svg = document.createElementNS(NS, "svg"); svg.setAttribute("class", "sew"); svg.setAttribute("aria-hidden", "true"); el.appendChild(svg); }
+  return svg;
+}
+const sts = (list, w, c, op) => list.map((st, i) => `<g class="st" style="--i:${i}">${stitchSVG(st, w, c, 1, op)}</g>`).join("");
+function sewEl(el, i) {
+  const kind = el.dataset.sew, w = el.offsetWidth, h = el.offsetHeight, seed = (SEW_KIND[kind] || 3) + (i || 0) * 7;
+  if (!w || !h) return;
+  const svg = overlay(el);
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  let s = "";
+  if (kind === "patch") s = sts(layAlong(rrPts(w, h, 5, 4.5), { len: 6, gap: 3.4, seed }), 1.75, "var(--kc)", 0.92);
+  if (kind === "seam") s = sts(layAlong([[6, 7], [6, h - 7]], { len: 5.2, gap: 0.8, seed }), 2.1, "var(--kc)");
+  if (kind === "qseam") s = sts(layAlong([[4, 6], [4, h - 6]], { len: 5.2, gap: 0.8, seed }), 2, "var(--tack)");
+  if (kind === "tacks") s = sts([{ x0: 3.5, y0: 3, x1: 3.5, y1: h - 3 }, { x0: w - 3.5, y0: 3, x1: w - 3.5, y1: h - 3 }], 1.6, "var(--kc)");
+  if (kind === "rows" || kind === "head") {
+    // the rules of a table: the header's always; with "rows", every row's as well
+    const tb = $("table", el), top = el.getBoundingClientRect().top, sc = el.getBoundingClientRect().height / h || 1;
+    const lines = [];
+    const hr = $("thead tr", tb).getBoundingClientRect();
+    lines.push({ y: (hr.bottom - top) / sc - 0.5, head: true });
+    if (kind === "rows") $$("tbody tr", tb).slice(0, -1).forEach((tr) => lines.push({ y: (tr.getBoundingClientRect().bottom - top) / sc - 0.5 }));
+    lines.forEach((l, j) => {
+      s += l.head ? sts(layRun(0, w, l.y, { len: 6, gap: 0.7, seed: seed + j, wob: 0.5 }), 1.7, "var(--graphite)")
+        : sts(layRun(0, w, l.y, { len: 5, gap: 3.4, seed: seed + j, wob: 0.6 }), 1.3, "var(--tack)");
+    });
+  }
+  svg.innerHTML = s;
+}
+// ---- checklists: the box is a stitched square; what "done" looks like is the option
+function boxSVG(style, done) {
+  const sq = [{ x0: 3, y0: 3, x1: 15, y1: 3 }, { x0: 15, y0: 3, x1: 15, y1: 15 }, { x0: 15, y0: 15, x1: 3, y1: 15 }, { x0: 3, y0: 15, x1: 3, y1: 3 }];
+  let edge = style === "c" ? `<rect x="2.25" y="2.25" width="13.5" height="13.5" rx="3" style="fill:var(--paper);stroke:var(--graphite);stroke-width:1.5"/>` : sq.map((st) => stitchSVG(st, 1.5, "var(--graphite)")).join("");
+  let mark = "";
+  if (done && style === "a") mark = `<g class="st" style="--i:0">${stitchSVG({ x0: 5.2, y0: 12.8, x1: 12.8, y1: 5.2 }, 2.3, "var(--ink)")}</g><g class="st" style="--i:1">${stitchSVG({ x0: 5.2, y0: 5.2, x1: 12.8, y1: 12.8 }, 2.3, "var(--ink)")}</g>`;
+  if (done && style === "b") mark = `<g class="st" style="--i:0">${knotSVG(9, 9, 4.4, "var(--ink)")}</g>`;
+  if (done && style === "c") mark = `<g class="st" style="--i:0">${stitchSVG({ x0: 5, y0: 9.2, x1: 7.8, y1: 12.2 }, 2.1, "var(--ink)")}</g><g class="st" style="--i:1">${stitchSVG({ x0: 7.8, y0: 12.2, x1: 13.4, y1: 5.6 }, 2.1, "var(--ink)")}</g>`;
+  return edge + `<g class="mark">${mark}</g>`;
+}
+function sewCheck(li, animate) {
+  const style = li.closest(".ck-list").dataset.ck, input = $("input", li), box = $(".box", li), tx = $(".tx", li), tt = $(".tt", li);
+  const done = input.checked;
+  box.innerHTML = boxSVG(style, done);
+  const mark = $(".mark", box);
+  // style A tacks the done line through the words: long tacking stitches at the middle of the x-height
+  const svg = overlay(tx);
+  const w = tx.offsetWidth, h = tx.offsetHeight;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  let line = "";
+  if (style === "a" && done) {
+    const base = tx.getBoundingClientRect(), sc = base.width / w || 1;
+    let all = [];
+    Array.from(tt.getClientRects()).filter((r) => r.width > 2).forEach((r, j) => {
+      const y = (r.top - base.top) / sc + (r.height / sc) * 0.6, x0 = (r.left - base.left) / sc - 2, x1 = (r.right - base.left) / sc + 2;
+      all = all.concat(layRun(x0, x1, y, { len: 10, gap: 3, seed: 5 + j, wob: 0.5 }));
+    });
+    line = `<g style="--n:${all.length}">` + sts(all, 1.3, "var(--tack)") + `</g>`;
+  }
+  svg.innerHTML = `<g class="thru">${line}</g>`;
+  if (animate && done) {
+    mark.classList.add("sewing"); mark.style.setProperty("--every", "90ms");
+    const thru = $(".thru", svg); thru.classList.add("sewing"); thru.style.setProperty("--every", "22ms");
+    thru.style.animationDelay = "0ms";
+    // the done line starts once the cross is in
+    $$(".st", thru).forEach((g) => { g.style.animationDelay = `calc((180ms + var(--i) * 22ms) * var(--slow, 1))`; });
+  }
+}
+function unpickCheck(li) {
+  // unchecking: the cross and the done line come out, last stitch first, then the item redraws plain
+  const marks = [$(".box .mark", li), $(".tx svg.sew .thru", li)].filter(Boolean);
+  marks.forEach((m) => { m.style.setProperty("--n", String($$(".st", m).length)); m.classList.add("unpick"); });
+  setTimeout(() => sewCheck(li, false), (SET.reduce ? 140 : 260) * SET.slow);
+}
+function bindChecks(root) {
+  $$(".ck-list li", root).forEach((li) => {
+    sewCheck(li, false);
+    $("input", li).addEventListener("change", (e) => { if (e.target.checked) sewCheck(li, true); else unpickCheck(li); });
+  });
+}
+function sewAll(root) {
+  $$("[data-sew]", root).forEach((el, i) => sewEl(el, i));
+  $$(".ck-list li", root).forEach((li) => sewCheck(li, false));
+}
+
+// ---- what each option looks like
+const CALLOUTS = [["note", "Note", "The course has one hill, at 6 km."], ["warn", "Warning", "Nothing new on race day."], ["tip", "Tip", "Go out 10 s a km slow."]];
+function calloutsHTML(style, list) {
+  return (list || CALLOUTS).map(([k, name, text]) => style === "label"
+    ? `<div class="callout co-label ${k}"><span class="k sew-host" data-sew="tacks">${esc(name)}</span><p>${esc(text)}</p></div>`
+    : `<div class="callout co-${style} ${k}" data-sew="${style}"><span class="k">${esc(name)}</span><p>${esc(text)}</p></div>`).join("");
+}
+const CHECKS = [["Pick up the bib on Friday", true], ["Easy 5 km on Thursday", false], ["Lay out the kit the night before", false]];
+function checksHTML(style, list) {
+  return `<ul class="ck-list ck-${style}" data-ck="${style}">` + (list || CHECKS).map(([t, on]) =>
+    `<li><label class="ck"><input type="checkbox"${on ? " checked" : ""}><svg class="box" viewBox="0 0 18 18" aria-hidden="true"></svg><span class="tx"><span class="tt">${esc(t)}</span></span></label></li>`).join("") + `</ul>`;
+}
+function tableHTML(style, anchor) {
+  const rows = [["4:45", "47:30", "Yes"], ["4:55", "49:10", "Yes"], ["5:00", "50:00", "Yes"], ["5:30", "55:00", "No"]];
+  return `<div class="sew-host" data-sew="${style === "rows" ? "rows" : "head"}" style="display:inline-block"><table class="nt ${style === "rows" ? "sewn-rows" : "sewn-head"}" aria-label="Pace and finish"><thead><tr><th class="r">Pace a km</th><th class="r">10 km</th><th>Under 50?</th></tr></thead><tbody>` +
+    rows.map(([a, b, c]) => `<tr><td class="r">${a}</td><td class="r">${anchor && b === "50:00" ? `<span class="anc" id="blk-anc">${b}</span>` : b}</td><td${c === "No" ? ' class="no"' : ""}>${c}</td></tr>`).join("") + `</tbody></table></div>`;
+}
+function quoteHTML(style) {
+  return `<blockquote class="nq ${style === "seam" ? "" : "q-bar"}"${style === "seam" ? ' data-sew="qseam"' : ""}><p>Run the mile you’re in.</p><cite>A coach’s saying</cite></blockquote>`;
+}
+const BLOCK_OPTS = [
+  { id: "og-callout", name: "Callouts", why: "Callouts are where colour means a kind: indigo for a note, ochre for a warning, sage for a tip. Each option sews the kind’s thread somewhere different; none of them uses madder, so none of them can be mistaken for Inkling.",
+    opts: [
+      { k: "Patch", rec: true, html: calloutsHTML("patch"), text: "A patch sewn onto the page: a 6% tint and a running-stitch edge in the kind’s thread, its name in the same thread. The object itself, and the kind reads before the words do.", gpui: "One rounded quad and <code>running_stitch</code> along its inset edge, the same call as a diagram’s patch. S." },
+      { k: "Seam", html: calloutsHTML("seam"), text: "The usual left bar, sewn: a back-stitched seam in the kind’s thread down the left edge. The quietest; it reads as a callout at once, and as cloth only up close.", gpui: "A quad and one vertical run of back stitch (<code>running_stitch</code> needs a vertical form). S." },
+      { k: "Tacked label", html: calloutsHTML("label"), text: "A plain tinted box with a small woven label tacked onto its top edge by two stitches. Charming, but the label is a second box on a box, and it crowds the line above.", gpui: "Two quads, a text run and two lenses. S." },
+    ] },
+  { id: "og-check", name: "Checklists", why: "The box is the one mark in a note that is entirely yours, so it is sewn in your ink. It stays a real checkbox underneath: Space toggles it, it takes focus, and a screen reader reads it as one. Try them.",
+    opts: [
+      { k: "Cross-stitched", rec: true, html: checksHTML("a"), text: "A stitched square in graphite; done is a cross-stitch in your ink, sewn leg by leg, and the line is tacked through in tacking thread. Unchecking unpicks both.", gpui: "<code>BlockKind::Check(bool)</code>: four lenses and <code>cross_stitch</code> for the box, a <code>running_stitch</code> at the x-height for the line, revealed by count. S." },
+      { k: "Knotted", html: checksHTML("b"), text: "The same square; done is a French knot. Pretty, but a filled dot reads as a radio button, and a knot is how Inkling ties off a thread, so even in your ink it borrows Inkling’s word.", gpui: "Four lenses and <code>french_knot</code>. S." },
+      { k: "Stitched tick", html: checksHTML("c"), text: "A plain box as today, with the tick made of two stitches and an ordinary strike. The least change, and the least of the language.", gpui: "A rounded quad and two lenses. S." },
+    ] },
+  { id: "og-table", name: "Tables", why: "A table’s rules are where stitching would go. The question is how much: Inkling’s running stitch already goes under any cell it asks about, and it has to stay findable.",
+    opts: [
+      { k: "Back-stitched header", rec: true, html: tableHTML("head"), text: "Only the header’s rule is sewn, in back stitch (a solid line of short stitches) in graphite; rows keep hairlines. One sewn line gives the table its cloth, and a madder stitch under a cell is never lost among others.", gpui: "One back-stitch run under the header; rows are 1 px quads. S, on top of the table block itself (M)." },
+      { k: "Running-stitch rules", html: tableHTML("rows"), text: "Every rule is a running stitch in tacking thread. The most sewn, and the busiest: a column of numbers sits on dashes, and Inkling’s stitch under a cell has to compete with them.", gpui: "A <code>running_stitch</code> per row boundary. S, on top of the table block (M)." },
+    ] },
+  { id: "og-quote", name: "Quotes", why: "The app draws a quote today with a 2 px bar. A quote is your words too, so its bar can be sewn.",
+    opts: [
+      { k: "Back-stitched seam", rec: true, html: quoteHTML("seam"), text: "The bar becomes a back-stitched seam in tacking thread. Same place, same weight, made of thread.", gpui: "Paint a vertical back-stitch run where the bar is painted now. S." },
+      { k: "Plain bar", html: quoteHTML("bar"), text: "As the app draws it today: a 2 px rule in the rule colour. Fine, and the only block left unsewn.", gpui: "Exists. Nothing to do." },
+    ] },
+];
+function buildBlockOptions() {
+  $("#opts").innerHTML = BLOCK_OPTS.map((g) => `<div class="og" id="${g.id}"><div class="og-head"><h3>${esc(g.name)}</h3><p>${esc(g.why)}</p></div><div class="og-cards">` +
+    g.opts.map((o, i) => `<figure class="opt${o.rec ? " rec" : ""}"><div class="opt-stage nb">${o.html}</div><figcaption><b>${String.fromCharCode(65 + i)} · ${esc(o.k)}</b>${o.rec ? "<small>recommended</small>" : ""}<p>${o.text}</p><i>GPUI: ${o.gpui}</i></figcaption></figure>`).join("") +
+    `</div></div>`).join("");
+  bindChecks($("#opts"));
+}
 function buildBlocks() {
+  buildBlockOptions();
   const host = $("#blk-host");
   host.innerHTML = `<div class="sheet" style="position:absolute;left:16px;top:14px;width:968px;height:814px">
     <div class="nb" style="position:absolute;left:56px;top:26px;width:560px">
       <h5>Race week</h5>
-      <table class="nt" aria-label="Pace and finish"><thead><tr><th class="r">Pace a km</th><th class="r">10 km</th><th>Under 50?</th></tr></thead><tbody>
-        <tr><td class="r">4:45</td><td class="r">47:30</td><td>Yes</td></tr><tr><td class="r">4:55</td><td class="r">49:10</td><td>Yes</td></tr>
-        <tr><td class="r">5:00</td><td class="r"><span class="anc" id="blk-anc">50:00</span></td><td>Yes</td></tr><tr><td class="r">5:30</td><td class="r">55:00</td><td class="no">No</td></tr></tbody></table>
-      <ul class="cklist" style="margin-top:16px">
-        <li><label><input type="checkbox" checked><span>Pick up the bib on Friday</span></label></li>
-        <li><label><input type="checkbox"><span>Easy 5 km on Thursday, nothing faster</span></label></li>
-        <li><label><input type="checkbox"><span>Lay out the kit the night before</span></label></li>
-        <li><label><input type="checkbox" checked><span>Check the start time (8:30)</span></label></li></ul>
-      <div class="callout note"><span class="k">Note</span><p>The course has one hill, at 6 km.</p></div>
-      <div class="callout warn"><span class="k">Warning</span><p>Nothing new on race day: not the shoes, not the gel.</p></div>
-      <div class="callout tip"><span class="k">Tip</span><p>Start 10 seconds a km slower than goal pace for the first kilometre.</p></div>
-      <blockquote class="nq"><p>Run the mile you’re in.</p><cite>A coach’s saying</cite></blockquote>
+      ${tableHTML("head", true)}
+      <div style="margin-top:16px">${checksHTML("a", [["Pick up the bib on Friday", true], ["Easy 5 km on Thursday, nothing faster", false], ["Lay out the kit the night before", false], ["Check the start time (8:30)", true]])}</div>
+      ${calloutsHTML("patch", [["note", "Note", "The course has one hill, at 6 km."], ["warn", "Warning", "Nothing new on race day: not the shoes, not the gel."], ["tip", "Tip", "Start 10 seconds a km slower than goal pace for the first kilometre."]])}
+      ${quoteHTML("seam")}
       <figure class="nfig"><div class="img">${courseSVG()}</div><figcaption><b>Figure 1</b> · The city 10k course. The hill is at 6 km.</figcaption></figure>
     </div>
     <span class="gut" style="left:8px">1</span>
     <div class="mg" style="position:absolute;inset:0;pointer-events:none"></div><svg class="ov ov-st" aria-hidden="true"></svg><svg class="ov ov-th" aria-hidden="true"></svg></div>`;
+  bindChecks(host);
   const sheet = $(".sheet", host), span = $("#blk-anc", sheet);
-  const m = new Margin(sheet, { mgX: 640, style: "unfold" });
+  const m = new Margin(sheet, { mgX: 640, style: "drop" });
   // the "Under 50?" cell for 5:00 says Yes; Inkling's question is about exactly that
   const t = m.add({ id: 1, num: 1, span, c: "madder", kind: "question", text: "Exactly 50:00 is not under 50. Is the goal under 50, or 50 or better? Either way, this row and the plan should say the same thing.", seed: 47, gut: 28, colSel: ".nb" });
   t.gutNum = $(".gut", sheet);
   $$(".tg", sheet).forEach((e) => { e.style.pointerEvents = "auto"; });
   BLK.m = m;
   $("#blk-notes").innerHTML = [
-    ["Table", "Figtree 14 px with tabular figures, numbers right-aligned, rules between rows only. Headers 12 px in faint. A thread on a cell stitches under the cell’s words like any other anchor.", "GPUI: a new block kind; cells are text runs in a grid, rules 1 px quads, <code>FontFeatures</code> <code>tnum</code>. M."],
-    ["Checklist", "A plain box: 1.5 px edge, ink fill and a paper tick when done, the tick drawn in 140 ms. Done items go graphite and struck through. No thread on the box: it is a control.", "GPUI: <code>BlockKind::Check(bool)</code>; the box is a quad and a two-segment path. S."],
-    ["Callouts", "Note, Warning, Tip: indigo, ochre, sage, each a 6 to 8% tint with an edge and its name. Your words stay in Fraunces. Never madder, which is Inkling’s.", "GPUI: <code>BlockKind::Callout(kind)</code>; one rounded quad and a label run. S."],
-    ["Quote", "As the app draws it today: 16 px indent, Fraunces italic in graphite, a 2 px rule. The source sits under it in Figtree 12 px.", "GPUI: exists (<code>BlockKind::Quote</code>); add the source line. S."],
-    ["Image", "Flat, 6 px corners, a hairline edge, the caption below with its figure number. Drawings Inkling makes become figures the same way and replay when clicked.", "GPUI: <code>img()</code> with rounded corners and a caption run; drawings as figures is UX core 7. M to L."],
+    ["Table", "Figtree 14 px with tabular figures, numbers right-aligned. The header’s rule is back-stitched in graphite; rows keep hairlines, so the madder stitch under “50:00” is the only running stitch in the table.", "GPUI: a back-stitch run under the header; the table block itself is new (M)."],
+    ["Checklist", "A stitched square in graphite; done is a cross-stitch in your ink, sewn leg by leg in about 180 ms, then the line is tacked through, left to right. Unchecking unpicks it. Still a real checkbox for the keyboard and screen readers.", "GPUI: <code>BlockKind::Check(bool)</code>; four lenses, <code>cross_stitch</code>, and a running stitch at the x-height. S."],
+    ["Callouts", "Patches sewn onto the page: a 6% tint and a running-stitch edge in the kind’s thread, indigo, ochre or sage, with the kind’s name in the same thread. Never madder.", "GPUI: <code>BlockKind::Callout(kind)</code>; a rounded quad and <code>running_stitch</code> along its inset edge. S."],
+    ["Quote", "Fraunces italic in graphite, with a back-stitched seam in tacking thread where the 2 px bar was. The source sits under it in Figtree 12 px.", "GPUI: <code>BlockKind::Quote</code> exists; paint a vertical back-stitch run instead of the bar. S."],
+    ["Image", "Not sewn: a photograph is not cloth. Flat, 6 px corners, a hairline edge, the caption below with its number. A question about it is stitched under the caption, like any words.", "GPUI: <code>img()</code> with rounded corners and a caption run; drawings as figures is UX core 7. M to L."],
   ].map(([h, p, g]) => `<div><b>${esc(h)}</b>${p}<i>${g}</i></div>`).join("");
 }
 const BLK = {};
@@ -2426,11 +2601,12 @@ function drive(name) {
     side: () => $("#m-panels .mw-bar [data-o=side]").click(),
     code: () => { CODE_M[0].threads[0].tag.box.click(); CODE_M[1].threads[0].tag.box.click(); },
     blocks: () => BLK.m.threads[0].tag.box.click(),
+    check: () => { $$("#og-check .ck-list li input").forEach((i) => i.click()); },
     typing: () => { const c = $("#m-arrive .typing"); c.checked = true; c.dispatchEvent(new Event("change")); $("#m-arrive .replay").click(); },
     ask: () => $('#m-needle .seg [data-k="ask"]').click(),
     undo: () => { $("#m-snip .replay").click(); setTimeout(() => $("#m-snip .undo").click(), 1700); },
     scrub: () => { const r = $("#hl-ruler"), tr = $(".rl-axis .rl-tr", r).getBoundingClientRect(); at(r, "pointerdown", tr.left + tr.width * 0.3, tr.top + 4); at(r, "pointerup", tr.left + tr.width * 0.3, tr.top + 4); },
-    styles: () => { ["drop", "unroll", "stitch", "unfold"].forEach((st, i) => setTimeout(() => $(`#hl-style [data-style="${st}"]`).click(), 200 * i)); },
+    styles: () => { ["unfold", "unroll", "stitch", "drop"].forEach((st, i) => setTimeout(() => $(`#hl-style [data-style="${st}"]`).click(), 200 * i)); },
   };
   setTimeout(() => { try { steps[name] && steps[name](); } catch (e) { root.dataset.errors = (root.dataset.errors || "") + " | drive: " + e.message; } }, 200);
 }
@@ -2462,6 +2638,12 @@ function boot() {
     setHooks.push(() => { HL.seq = null; HL.spec.ruler.setSpec(HL.spec.timeline()); paintFilm(); FIGS.forEach((F) => F.rest()); });
     paintFilm();
     CODE_M.forEach((m) => m.measure());
+    // your sewn blocks: drawn from their measured sizes, and again whenever a size changes
+    sewAll(document);
+    if (window.ResizeObserver) {
+      const ro2 = new ResizeObserver((es) => es.forEach((e) => { const el = e.target; if (el.dataset.sew) sewEl(el); else sewCheck(el, false); }));
+      $$("[data-sew], .ck-list li").forEach((el) => ro2.observe(el));
+    }
     // the blocks page is as tall as its blocks
     const bs = $("#blk-host .sheet"), nb = $("#blk-host .nb"), bh = Math.ceil(nb.offsetTop + nb.offsetHeight + 36);
     bs.style.height = bh + "px"; bs.closest(".fit").dataset.h = String(bh + 28); fitAll();

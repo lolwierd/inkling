@@ -158,6 +158,19 @@ fn panel_fit(right: bool, width: f32, room_left: f32, room_right: f32) -> (f32, 
     }
 }
 
+/// A tooltip for a key in the selection menu: what it makes, and its keys if it has
+/// any, as the keymap has them now (Settings › Shortcuts can change them).
+fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |window, cx| {
+        let tip = gpui_kit::component::tooltip::Tooltip::new(name);
+        match keys {
+            Some(a) => tip.action(a, Some(crate::editor::CONTEXT)),
+            None => tip,
+        }
+        .build(window, cx)
+    }
+}
+
 fn slowmo() -> f32 {
     static F: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *F.get_or_init(|| std::env::var("INKLING_SLOWMO").ok().and_then(|v| v.parse::<f32>().ok()).filter(|f| *f >= 1.).unwrap_or(1.))
@@ -3720,18 +3733,21 @@ impl NotePage {
                 .when(!on, |d| d.text_color(p.graphite).hover(move |s| s.bg(p.hover).text_color(p.ink)))
                 .active(|s| s.opacity(0.7))
         };
-        let block = |id: &'static str, label: &'static str, k: BlockKind, cx: &mut Context<Self>| {
+        let block = |id: &'static str, label: &'static str, name: &'static str, k: BlockKind, cx: &mut Context<Self>| {
             let glyph = matches!(k, BlockKind::Quote | BlockKind::Bullet | BlockKind::Check(_));
-            key(id, kind.same_kind(k)).text_size(px(if glyph { ts::BODY } else { ts::META })).child(label).on_click(cx.listener(move |this, _, _, cx| {
+            // ⌘L makes a line a checklist item, so that key says so
+            let keys: Option<&'static dyn Action> = matches!(k, BlockKind::Check(_)).then_some(&crate::editor::ToggleCheck);
+            key(id, kind.same_kind(k)).text_size(px(if glyph { ts::BODY } else { ts::META })).tooltip(key_tip(name, keys)).child(label).on_click(cx.listener(move |this, _, _, cx| {
                 this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));
                 this.show_toolbar = true;
                 cx.notify();
             }))
         };
         // Each mark's button wears the mark itself: B is bold, I italic, and so on.
-        let mark = |id: &'static str, label: &'static str, m: Mark, cx: &mut Context<Self>| {
+        let mark = |id: &'static str, label: &'static str, name: &'static str, keys: &'static dyn Action, m: Mark, cx: &mut Context<Self>| {
             let on = self.editor.read(cx).has_mark(m);
             key(id, on)
+                .tooltip(key_tip(name, Some(keys)))
                 .text_size(px(ts::UI))
                 .map(|d| match m {
                     Mark::Bold => d.font_weight(FontWeight::BOLD),
@@ -3802,14 +3818,14 @@ impl NotePage {
                     .px(px(5.))
                     .flex()
                     .gap(px(2.))
-                    .child(block("tb-p", "T", BlockKind::Paragraph, cx))
-                    .child(block("tb-h1", "H1", BlockKind::H1, cx))
-                    .child(block("tb-h2", "H2", BlockKind::H2, cx))
-                    .child(block("tb-h3", "H3", BlockKind::H3, cx))
-                    .child(block("tb-q", "\u{201c}", BlockKind::Quote, cx))
-                    .child(block("tb-ul", "\u{2022}", BlockKind::Bullet, cx))
-                    .child(block("tb-ol", "1.", BlockKind::Numbered, cx))
-                    .child(block("tb-check", "\u{2610}", BlockKind::Check(false), cx)),
+                    .child(block("tb-p", "T", "Text", BlockKind::Paragraph, cx))
+                    .child(block("tb-h1", "H1", "Heading 1", BlockKind::H1, cx))
+                    .child(block("tb-h2", "H2", "Heading 2", BlockKind::H2, cx))
+                    .child(block("tb-h3", "H3", "Heading 3", BlockKind::H3, cx))
+                    .child(block("tb-q", "\u{201c}", "Quote", BlockKind::Quote, cx))
+                    .child(block("tb-ul", "\u{2022}", "Bulleted list", BlockKind::Bullet, cx))
+                    .child(block("tb-ol", "1.", "Numbered list", BlockKind::Numbered, cx))
+                    .child(block("tb-check", "\u{2610}", "Checklist", BlockKind::Check(false), cx)),
             )
             .child(self.sewn_keys(kind, cx))
             .child(
@@ -3818,11 +3834,11 @@ impl NotePage {
                     .pt(px(2.))
                     .flex()
                     .gap(px(2.))
-                    .child(mark("tb-b", "B", Mark::Bold, cx))
-                    .child(mark("tb-i", "I", Mark::Italic, cx))
-                    .child(mark("tb-u", "U", Mark::Underline, cx))
-                    .child(mark("tb-s", "S", Mark::Strike, cx))
-                    .child(mark("tb-c", "</>", Mark::Code, cx)),
+                    .child(mark("tb-b", "B", "Bold", &crate::editor::ToggleBold, Mark::Bold, cx))
+                    .child(mark("tb-i", "I", "Italic", &crate::editor::ToggleItalic, Mark::Italic, cx))
+                    .child(mark("tb-u", "U", "Underline", &crate::editor::ToggleUnderline, Mark::Underline, cx))
+                    .child(mark("tb-s", "S", "Strikethrough", &crate::editor::ToggleStrike, Mark::Strike, cx))
+                    .child(mark("tb-c", "</>", "Inline code", &crate::editor::ToggleCode, Mark::Code, cx)),
             )
             .child(div().px(px(5.)).pt(px(2.)).child(colors))
             .child(div().mx(px(9.)).my(px(5.)).border_t_1().border_color(p.rule))
@@ -3848,6 +3864,8 @@ impl NotePage {
             .map(|(c, k)| (c.label(), k, crate::sewn::callout_thread(c, &p), crate::theme::SANS))
             .chain(std::iter::once(("Code", BlockKind::Code(Lang::default()), p.graphite, crate::theme::MONO)));
         for (label, k, color, family) in keys {
+            // "Code" here is a block of code; </> beside B and I is code in a line
+            let name = if k.is_code() { "Code block" } else { "Callout" };
             let on = kind.same_kind(k);
             row = row.child(
                 div()
@@ -3865,6 +3883,7 @@ impl NotePage {
                     .when(on, |d| d.bg(color).text_color(p.paper))
                     .when(!on, |d| d.text_color(color).hover(move |s| s.bg(p.hover)))
                     .active(|s| s.opacity(0.7))
+                    .tooltip(key_tip(name, None))
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));

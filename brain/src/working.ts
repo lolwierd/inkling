@@ -5,6 +5,7 @@
 // pure: the brain, the fake brain and the tests all go through `withWorking`.
 
 import { findQuote } from "./output.ts";
+import type { Source } from "./web.ts";
 
 export interface SumLine {
   sum: string;
@@ -21,7 +22,12 @@ export interface Check {
   sum: SumLine[];
   givens: Given[];
   words: string[];
+  /** A page that says so, made sure of (web.ts `verifySource`); only with the web on. */
+  source?: Source;
 }
+
+/** What became of the source a correction cited: made sure of, or why not. */
+export type Cited = { source: Source } | { why: string } | null;
 
 /** The writer's own text a check may draw on, and what the correction is about. */
 export interface Writer {
@@ -309,14 +315,16 @@ function inWriter(words: string, w: Writer): string | null {
  * number in it is the writer's, an earlier result or a unit, and every passage is the
  * writer's own, from elsewhere in the note. Returns why not, otherwise.
  */
-export function backCorrection(raw: unknown, text: string, w: Writer): { check: Check } | { why: string } {
+export function backCorrection(raw: unknown, text: string, w: Writer, cited: Cited = null): { check: Check } | { why: string } {
   if (!isObject(raw)) return { why: "it came without a check" };
   const lines = list(raw.sum).filter(isObject);
   const passages = list(raw.words).map(str).filter(Boolean);
-  if (!lines.length && !passages.length) return { why: "its check was empty" };
+  const source = cited && "source" in cited ? cited.source : null;
+  if (!lines.length && !passages.length && !source) return { why: cited && "why" in cited ? cited.why : "its check was empty" };
   const check: Check = { sum: [], givens: [], words: [] };
-  // numbers the correction's text may use: the writer's, and the check's
-  const shownValues: number[] = mentions([w.title, w.note, w.brief ?? "", w.target].join("\n")).flatMap((m) => m.values);
+  // numbers the correction's text may use: the writer's, the check's, and the source's
+  const shownValues: number[] = mentions([w.title, w.note, w.brief ?? "", w.target, source?.passage ?? ""].join("\n")).flatMap((m) => m.values);
+  if (source) check.source = source;
 
   if (lines.length) {
     if (lines.length > MAX_LINES) return { why: `its sum has ${lines.length} lines` };
@@ -414,10 +422,11 @@ function formatMention(m: Mention): string {
  * model sent). A correction goes out with its check, or comes back as its fallback
  * question, or `null` when it has neither: a read then stays silent and a probe fails.
  */
-export function withWorking(thought: Thought, answer: Json, w: Writer, log: (why: string) => void = () => {}): Thought | null {
+export function withWorking(thought: Thought, answer: Json, w: Writer, log: (why: string) => void = () => {}, cited: Cited = null): Thought | null {
   const { check: _ignored, ...plain } = thought;
   if (thought.kind !== "correction") return plain;
-  const backed = backCorrection(answer.check, thought.text, w);
+  if (cited && "why" in cited) log(`a source was dropped: ${cited.why}`);
+  const backed = backCorrection(answer.check, thought.text, w, cited);
   if ("check" in backed) return { ...plain, check: backed.check };
   log(`correction became a question: ${backed.why}`);
   const question = str(answer.question);

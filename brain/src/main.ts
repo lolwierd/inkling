@@ -4,7 +4,7 @@
 // `done` or `error` event; after a cancel it is never `done`.
 
 import { createInterface } from "node:readline";
-import { accountStatus, ProviderError, runStructured, runText, type LimitInfo } from "./claude.ts";
+import { accountStatus, ProviderError, runStructured, runText, WebSpent, type LimitInfo } from "./claude.ts";
 import { cleanSvg, clip, findQuote, snapQuote } from "./output.ts";
 import {
   answerPrompt,
@@ -29,6 +29,7 @@ import {
 } from "./prompts.ts";
 import type { Context, ElsewhereEnd, Event, Frequency, LetStandPoint, Passage, Relation, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
 import { withWorking } from "./working.ts";
+import { keepFoundLinks, verifySource, WEB_TASKS, type Found } from "./web.ts";
 
 const VERSION = "0.1.0";
 const running = new Map<string, AbortController>();
@@ -212,6 +213,7 @@ function settings(v: unknown): RunSettings {
   return {
     model: typeof s.model === "string" && s.model.trim() ? s.model : undefined,
     effort: EFFORTS.has(s.effort as string) ? (s.effort as RunSettings["effort"]) : undefined,
+    web: s.web === true,
   };
 }
 
@@ -230,7 +232,24 @@ function nonEmpty(v: unknown, what: string): string {
 
 // ----- running tasks ------------------------------------------------------------
 
+/**
+ * A task that may look things up runs with the web; if that spends its cap or its turns,
+ * it runs again without it (one turn, no tools), so it still ends as an answer: a question,
+ * for a correction it could not back. The usage then counts both.
+ */
 async function run(id: string, settings: RunSettings, input: Task, signal: AbortController): Promise<{ data: unknown; usage: Usage }> {
+  const web = settings.web === true && WEB_TASKS.has(input.task);
+  try {
+    return await runOnce(id, settings, input, signal, web);
+  } catch (e) {
+    if (!web || !(e instanceof WebSpent) || signal.signal.aborted) throw e;
+    log(`${input.task} ${id}: ${e.message}; answering without the web`);
+    const again = await runOnce(id, settings, input, signal, false);
+    return { data: again.data, usage: { ...again.usage, costUsd: (again.usage.costUsd ?? 0) + e.spentUsd } };
+  }
+}
+
+async function runOnce(id: string, settings: RunSettings, input: Task, signal: AbortController, web: boolean): Promise<{ data: unknown; usage: Usage }> {
   if (input.task === "relate" && input.passages.length === 0) {
     // Nothing to compare with: no model call.
     return { data: { speak: false }, usage: { ms: 0 } };
@@ -242,6 +261,8 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
     return { data: { update: aboutMe.length > 0, aboutMe }, usage };
   }
   const sys = systemPrompt(input.ctx);
+  // With the web on, a link no search returned is taken out; off, the words are as before.
+  const links = (t: string, found: Found[]) => (web ? keepFoundLinks(t, found) : t);
   // Nothing streams to the app once a request is cancelled.
   const delta = (t: string) => {
     if (t && !signal.signal.aborted) emit({ ev: "delta", id, text: t });
@@ -255,8 +276,8 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
       const [system, prompt, schema] =
         input.task === "read"
           ? [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through), THOUGHT_SCHEMA]
-          : [sys, probePrompt(input.ctx, input.target), PROBE_SCHEMA];
-      const { data, usage } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit);
+          : [sys, probePrompt(input.ctx, input.target, web), PROBE_SCHEMA];
+      const { data, usage, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, web);
       const d = structured(data);
       // A point the writer let stand is not raised again, in any words: the model says
       // which one its note repeats, and then the note is held back.
@@ -268,11 +289,16 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
       // Read may stay silent; a probe was asked for, so it always says something.
       if (input.task === "read" && !(d.speak === true && text(d.text).trim())) return { data: { speak: false }, usage };
       const quote = snapQuote(text(d.quote), input.target);
+      // A page a correction cites counts only if this call's searches returned it and the
+      // passage is on it.
+      const cites = web && d.kind === "correction" && isObject(d.check) && isObject(d.check.source);
+      const cited = cites ? await verifySource((d.check as Json).source, found) : null;
       const thought = withWorking(
-        { speak: true, kind: d.kind === "correction" ? "correction" : "question", quote, text: nonEmpty(d.text, "an empty note"), sketch: d.sketch === true },
+        { speak: true, kind: d.kind === "correction" ? "correction" : "question", quote, text: links(nonEmpty(d.text, "an empty note"), found), sketch: d.sketch === true },
         d,
         { title: input.ctx.noteTitle, note: input.ctx.noteText, brief: input.ctx.brief, target: input.target, quote },
         log,
+        cited,
       );
       // A correction with neither a check nor a question to fall back on is never shown.
       if (!thought && input.task === "read") return { data: { speak: false }, usage };
@@ -291,21 +317,21 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
     case "relate":
       return relate(input, sys, settings, signal);
     case "reply": {
-      const { data, usage } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere), REPLY_SCHEMA, settings, signal, onLimit);
+      const { data, usage, found } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere, web), REPLY_SCHEMA, settings, signal, onLimit, web);
       const d = structured(data);
-      return { data: { text: nonEmpty(d.text, "an empty reply"), resolved: d.resolved === true, redraw: d.redraw === true }, usage };
+      return { data: { text: links(nonEmpty(d.text, "an empty reply"), found), resolved: d.resolved === true, redraw: d.redraw === true }, usage };
     }
     case "ask": {
-      const { text: out, usage } = await runText(sys, askPrompt(input.ctx, input.target, input.question), settings, signal, delta, onLimit);
-      return { data: { text: out }, usage };
+      const { text: out, usage, found } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web), settings, signal, delta, onLimit, web);
+      return { data: { text: links(out, found) }, usage };
     }
     case "answer": {
-      const { text: out, usage } = await runText(sys, answerPrompt(input.ctx, input.target), settings, signal, delta, onLimit);
-      return { data: { text: out }, usage };
+      const { text: out, usage, found } = await runText(sys, answerPrompt(input.ctx, input.target, web), settings, signal, delta, onLimit, web);
+      return { data: { text: links(out, found) }, usage };
     }
     case "chat": {
-      const { text: out, usage } = await runText(sys, chatPrompt(input.ctx, input.history, input.message, input.near), settings, signal, delta, onLimit);
-      return { data: { text: out }, usage };
+      const { text: out, usage, found } = await runText(sys, chatPrompt(input.ctx, input.history, input.message, input.near, web), settings, signal, delta, onLimit, web);
+      return { data: { text: links(out, found) }, usage };
     }
   }
 }

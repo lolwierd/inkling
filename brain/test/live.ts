@@ -260,6 +260,35 @@ const scenarios: Record<string, () => Promise<unknown>> = {
     const a = e.data?.account ?? {};
     return { ms: Date.now() - t0, ev: e.ev, account: { hasEmail: Boolean(a.email), subscriptionType: a.subscriptionType, tokenSource: a.tokenSource, apiKeySource: a.apiKeySource, apiProvider: a.apiProvider }, models: Array.isArray(e.data?.models) ? e.data.models.map((m: any) => m.value) : e.data?.models };
   },
+  // Sources from the web, which only what the writer asks for may look up (here a probe):
+  // one fact a page settles, with the web on and off; a point the note settles, which
+  // should need no search; and a figure whose pages are hard to quote.
+  async web_source() {
+    const paras = ["The Eiffel Tower is 450 metres tall, so from the top you can see about 90 km on a clear day."];
+    const r = await call({ ...HEAVY, web: true }, { task: "probe", ctx: ctx(paras, { noteTitle: "Paris trip" }), target: paras[0] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") check(Boolean(r.e.data.check?.source), `no source came through (${r.e.data.kind})`);
+    return { ...r, log: stderr.split("\n").filter((l) => /source|correction became/.test(l)) };
+  },
+  async web_source_off() {
+    const paras = ["The Eiffel Tower is 450 metres tall, so from the top you can see about 90 km on a clear day."];
+    const r = await call(LIGHT, { task: "read", ctx: ctx(paras, { noteTitle: "Paris trip" }), target: paras[0] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") check(!r.e.data.check?.source, "a source with the web off");
+    return r;
+  },
+  async web_quiet() {
+    const r = await call({ ...HEAVY, web: true }, { task: "probe", ctx: ctx(WEEK, { noteTitle: "Training week" }), target: WEEK[1] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    check(!r.e.usage?.searches, `searched ${r.e.usage?.searches} time(s) for a point the note settles`);
+    return r;
+  },
+  async web_hard() {
+    const paras = ["Global average sea level rose 30 cm between 1993 and 2023, so the rise is about 1 cm a year."];
+    const r = await call({ ...HEAVY, web: true }, { task: "probe", ctx: ctx(paras, { noteTitle: "Coast notes" }), target: paras[0] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    return { ...r, log: stderr.split("\n").filter((l) => /source|correction became/.test(l)) };
+  },
   async working_sum() {
     const target = WORKING_PLAN[1];
     const r = await call(LIGHT, { task: "read", ctx: ctx(WORKING_PLAN, { noteTitle: "Sub-50 10k by March" }), target });

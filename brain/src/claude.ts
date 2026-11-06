@@ -7,10 +7,22 @@ import { mkdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ErrorKind, RunSettings, Usage } from "./protocol.ts";
+import { foundIn, type Found } from "./web.ts";
 
 export class ProviderError extends Error {
   constructor(public kind: ErrorKind, message: string) {
     super(message);
+  }
+}
+
+/**
+ * A call that could look things up spent its cap (`WEB_BUDGET_USD`) or its turns before
+ * answering. The brain answers again without the web, so it ends as an answer (a question,
+ * for a correction it could not back), never as an error. `spentUsd` is what it cost.
+ */
+export class WebSpent extends ProviderError {
+  constructor(message: string, public spentUsd: number) {
+    super("other", message);
   }
 }
 
@@ -58,13 +70,25 @@ export function childEnv(source: Record<string, string | undefined> = process.en
 }
 
 const STRUCTURED_TURNS = 3;
+/** With the web: a search or two, a page read, the answer, and its retries. */
+const WEB_TURNS = 8;
+/** The SDK's own tools for looking things up; nothing else is ever turned on. */
+export const WEB_TOOLS = ["WebSearch", "WebFetch"];
+/**
+ * The most a call that can look things up may spend, in USD at API prices: one search with
+ * its answer measured about $1.55 on 7 Nov 2026 (Opus 5.5), so this leaves room for one.
+ */
+export const WEB_BUDGET_USD = 2.5;
 
-function baseOptions(system: string, settings: RunSettings, signal: AbortController): Options {
+function baseOptions(system: string, settings: RunSettings, signal: AbortController, web = false): Options {
   const opts: Options = {
     systemPrompt: system,
-    tools: [],
+    tools: web ? WEB_TOOLS : [],
+    // Allowed without asking: there is nobody to ask, and these two only read the web.
+    allowedTools: web ? WEB_TOOLS : [],
+    ...(web ? { maxBudgetUsd: WEB_BUDGET_USD } : {}),
     settingSources: [],
-    maxTurns: 1,
+    maxTurns: web ? WEB_TURNS : 1,
     persistSession: false,
     model: settings.model,
     effort: settings.effort,
@@ -107,6 +131,8 @@ interface Drained {
   text: string;
   structured: unknown;
   usage: Usage;
+  /** What the call's searches returned: the only URLs a source may cite. */
+  found: Found[];
 }
 
 async function drain(
@@ -115,13 +141,23 @@ async function drain(
   structured: boolean,
   onDelta?: (t: string) => void,
   onLimit?: (l: LimitInfo) => void,
+  web = false,
 ): Promise<Drained> {
   let model: string | undefined;
   let streamed = "";
   let assistantError: string | undefined;
   let limitRejected = false;
+  const found: Found[] = [];
+  let searches = 0;
   for await (const m of q) {
     switch (m.type) {
+      case "user": {
+        // a tool's result: a search's hits are what a source may cite
+        const hits = foundIn((m as any).tool_use_result);
+        if (Array.isArray((m as any).tool_use_result?.results)) searches += 1;
+        found.push(...hits);
+        break;
+      }
       case "system":
         if ((m as any).subtype === "init") model = (m as any).model;
         break;
@@ -151,13 +187,24 @@ async function drain(
       }
       case "result": {
         const r = m as any;
-        const usage: Usage = { ms: Date.now() - started, model, costUsd: r.total_cost_usd, ...tokens(r.usage) };
+        const usage: Usage = { ms: Date.now() - started, model, costUsd: r.total_cost_usd, ...tokens(r.usage), ...(searches ? { searches } : {}) };
+        // Where a call that looked things up spent its tokens, per model, for the log.
+        if (searches && r.modelUsage) {
+          const per = Object.entries(r.modelUsage as Record<string, any>).map(
+            ([name, u]) => `${name}: in ${u.inputTokens}, out ${u.outputTokens}, cache read ${u.cacheReadInputTokens}, cache write ${u.cacheCreationInputTokens}, $${Number(u.costUSD ?? 0).toFixed(4)}`,
+          );
+          process.stderr.write(`[brain] web call: ${searches} search(es); ${per.join("; ")}` + "\n");
+        }
         if (r.subtype !== "success" || r.is_error) {
           const errors = Array.isArray(r.errors) ? r.errors.filter(Boolean).join("; ") : "";
           const msg = String(errors || r.result || r.subtype || "the model returned an error");
+          // looking things up ran past its cap or its turns: answer again without the web
+          if (web && (r.subtype === "error_max_budget_usd" || r.subtype === "error_max_turns")) {
+            throw new WebSpent(`looking it up stopped (${r.subtype}, $${Number(r.total_cost_usd ?? 0).toFixed(2)})`, Number(r.total_cost_usd ?? 0));
+          }
           throw new ProviderError(resultKind(r.subtype, assistantError, limitRejected, structured, msg), msg);
         }
-        return { text: r.result ?? streamed, structured: r.structured_output, usage };
+        return { text: r.result ?? streamed, structured: r.structured_output, usage, found };
       }
     }
   }
@@ -201,13 +248,14 @@ export async function runText(
   signal: AbortController,
   onDelta?: (t: string) => void,
   onLimit?: (l: LimitInfo) => void,
-): Promise<{ text: string; usage: Usage }> {
+  web = false,
+): Promise<{ text: string; usage: Usage; found: Found[] }> {
   const started = Date.now();
   try {
-    const opts = baseOptions(system, settings, signal);
+    const opts = baseOptions(system, settings, signal, web);
     opts.includePartialMessages = Boolean(onDelta);
-    const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit);
-    return { text: out.text.trim(), usage: out.usage };
+    const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit, web);
+    return { text: out.text.trim(), usage: out.usage, found: out.found };
   } catch (e) {
     throw asProviderError(e, signal);
   }
@@ -221,23 +269,25 @@ export async function runStructured<T>(
   settings: RunSettings,
   signal: AbortController,
   onLimit?: (l: LimitInfo) => void,
-): Promise<{ data: T; usage: Usage }> {
+  web = false,
+): Promise<{ data: T; usage: Usage; found: Found[] }> {
   const started = Date.now();
   try {
-    const opts = baseOptions(system, settings, signal);
+    const opts = baseOptions(system, settings, signal, web);
     opts.outputFormat = { type: "json_schema", schema: schema as Record<string, unknown> };
     // The answer comes back as a StructuredOutput tool call, and when it is missing
     // or fails the schema the runtime asks again in another turn. With one turn that
     // retry is impossible and the call fails with "Reached maximum number of turns".
-    // There are no other tools, so extra turns can only be those retries.
-    opts.maxTurns = STRUCTURED_TURNS;
-    const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit);
+    // Without the web there are no other tools, so extra turns can only be those
+    // retries; with it, searches and page reads take turns too.
+    opts.maxTurns = web ? WEB_TURNS : STRUCTURED_TURNS;
+    const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit, web);
     let data = out.structured as T | undefined;
     if (data === undefined || data === null) {
       // Fall back to parsing the text, in case the runtime returned it there.
       data = parseLooseJson<T>(out.text);
     }
-    return { data, usage: out.usage };
+    return { data, usage: out.usage, found: out.found };
   } catch (e) {
     throw asProviderError(e, signal);
   }

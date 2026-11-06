@@ -1,0 +1,63 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000e1",
+ "title": "Paris trip",
+ "folder": null,
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Paris trip"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The Eiffel Tower is 450 metres tall, so from the top you can see about 90 km on a clear day."
+  },
+  {
+   "kind": "paragraph",
+   "text": "We go up on the Saturday morning, before the queues, and have lunch on the second floor."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "s1",
+   "start": 11,
+   "end": 46,
+   "quote": "The Eiffel Tower is 450 metres tall",
+   "kind": "correction",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-07T03:20:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "It's 330 metres, antennas included. The 90 km horizon figure came from 450, so it needs redoing too. Does that change what you were planning around the view?",
+     "at": "2026-11-07T03:20:00Z",
+     "check": {
+      "sum": [],
+      "givens": [],
+      "words": [],
+      "taken_back": false,
+      "source": {
+       "url": "https://www.wtvr.com/news/national/the-eiffel-tower-just-got-20-feet-taller",
+       "title": "The Eiffel Tower just got 20 feet taller",
+       "domain": "wtvr.com",
+       "passage": "The Eiffel Tower grew from 324 meters (1,063 feet) tall to 330 meters (1,083 feet) now."
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "created_at": "2026-11-07T03:20:00Z",
+ "updated_at": "2026-11-07T03:20:00Z"
+}

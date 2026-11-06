@@ -1,0 +1,56 @@
+# Sources from the web, only when real and only when asked. Find a loose thread (a probe)
+# may look things up: a correction citing a page a search returned, with the quoted words
+# on it, shows that page under it; a made-up URL, or a page without the words, falls back
+# to the question. Reading along never looks anything up, and with the setting off nothing
+# is searched. Copy and Export carry the source.
+# tags: working
+note: Paris
+type: [[read>silent]][[probe>correction]][[probe>quote:450 metres tall]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.]][[probe>source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[probe>question:Where did 450 metres come from?]] The Eiffel Tower is 450 metres tall.
+settle
+select: [[probe>correction]][[probe>quote:450 metres tall]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.]][[probe>source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[probe>question:Where did 450 metres come from?]] The Eiffel Tower is 450 metres tall.
+probe
+settle
+dump: sourced
+expect: d.threads.length === 1 && d.threads[0].kind === "Correction" && d.threads[0].check === "source:1"
+escape
+type: [[read>silent]][[probe>correction]][[probe>quote:built in 1899]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|It was built from 1887 to 1889 as the entrance arch to the 1889 World's Fair.]][[probe>source:https://eiffel-facts.example/history|It was built from 1887 to 1889 as the entrance arch]][[probe>question:When was it finished?]] It was built in 1899.
+settle
+select: [[probe>correction]][[probe>quote:built in 1899]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|It was built from 1887 to 1889 as the entrance arch to the 1889 World's Fair.]][[probe>source:https://eiffel-facts.example/history|It was built from 1887 to 1889 as the entrance arch]][[probe>question:When was it finished?]] It was built in 1899.
+probe
+settle
+dump: made-up
+expect: d.threads.length === 2 && d.threads[1].kind === "Question" && d.threads[1].check === null
+escape
+type: [[read>silent]][[probe>correction]][[probe>quote:330 tonnes]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The whole tower weighs about 10,100 tonnes.]][[probe>source:https://en.wikipedia.org/wiki/Eiffel_Tower|The iron structure alone weighs 7,300 tonnes]][[probe>question:Where does 330 tonnes come from?]] Its iron weighs 330 tonnes.
+settle
+select: [[probe>correction]][[probe>quote:330 tonnes]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The whole tower weighs about 10,100 tonnes.]][[probe>source:https://en.wikipedia.org/wiki/Eiffel_Tower|The iron structure alone weighs 7,300 tonnes]][[probe>question:Where does 330 tonnes come from?]] Its iron weighs 330 tonnes.
+probe
+settle
+dump: miss
+expect: d.threads.length === 3 && d.threads[2].kind === "Question" && d.threads[2].check === null
+escape
+type: [[correction]][[quote:1,083 feet]][[found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.]][[source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[question:Where did 1,083 feet come from?]] At the top it is 1,083 feet, the same as in 1889.
+settle
+dump: read
+expect: d.threads.length === 4 && d.threads[3].kind === "Question"   // reading along: no search, so no page counts
+set: appearance=light
+hover: 1
+wait: 900
+shot: source
+hover: 0
+set: web=off
+type: [[read>silent]][[probe>correction]][[probe>quote:324 metres]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.]][[probe>source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[probe>question:How tall is it now?]] It is still 324 metres.
+settle
+select: [[probe>correction]][[probe>quote:324 metres]][[probe>found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.]][[probe>source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[probe>question:How tall is it now?]] It is still 324 metres.
+probe
+settle
+dump: web-off
+expect: d.threads.length === 5 && d.threads[4].kind === "Question"
+copy: 1
+export: md
+quit
+expect: requests.filter(r => r.input.task === "probe").slice(0, 3).every(r => r.settings.web === true) && requests.filter(r => r.input.task === "probe").at(-1).settings.web === false
+expect: note("Paris").threads[0].messages[0].check.source.domain === "en.wikipedia.org" && note("Paris").threads[0].messages[0].check.source.title === "Eiffel Tower - Wikipedia"
+expect: log.some(r => r.msg.startsWith("script copy:") && r.msg.includes("Source: “The tower is 330 metres (1,083 ft) tall” (Eiffel Tower - Wikipedia, en.wikipedia.org: https://en.wikipedia.org/wiki/Eiffel_Tower)"))
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> *Source:* “The tower is 330 metres (1,083 ft) tall”"))
+expect: settings.look_up === false

@@ -281,6 +281,21 @@ pub struct Check {
     pub words: Vec<Passage>,
     /// The mind agreed the check was wrong and took the correction back.
     pub taken_back: bool,
+    /// A page that says so: a search in the same call returned it and the quoted words
+    /// are on it (`brain/src/web.ts`). Only with "Look things up on the web" on.
+    pub source: Option<Source>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Source {
+    pub url: String,
+    /// The page's title, as the search gave it.
+    pub title: String,
+    /// The site, without "www.".
+    pub domain: String,
+    /// The words quoted from the page, as they are on it.
+    pub passage: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -975,6 +990,8 @@ pub struct Settings {
     pub models: Vec<ModelChoice>,
     /// Shortcuts you changed: action name to keys ("cmd-shift-k"); an empty list is none.
     pub shortcuts: BTreeMap<String, Vec<String>>,
+    /// Look things up on the web: the minds may search, and a correction may cite a page.
+    pub look_up: bool,
 }
 
 impl Default for Settings {
@@ -996,6 +1013,7 @@ impl Default for Settings {
             last_note: None,
             models: vec![],
             shortcuts: BTreeMap::new(),
+            look_up: true,
         }
     }
 }
@@ -1358,6 +1376,7 @@ mod tests {
             givens: vec![Given { value: "5:30".into(), words: "hold 5:30".into() }],
             words: vec![Passage { words: "run four days a week".into(), note: None }],
             taken_back: true,
+            source: Some(Source { url: "https://en.wikipedia.org/wiki/10K_run".into(), title: "10K run".into(), domain: "en.wikipedia.org".into(), passage: "a 10 km race".into() }),
         });
         let back: Message = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert_eq!(back.check, m.check);
@@ -1489,6 +1508,7 @@ mod tests {
         assert!(!d.ink_from_pointer && d.learns_about_me && d.about_me.is_empty() && d.last_note.is_none());
         assert_eq!((d.model.as_str(), d.effort_read.as_str(), d.effort.as_str()), ("", "low", "medium"), "Claude Code picks the model");
         assert!(d.models.is_empty() && d.shortcuts.is_empty());
+        assert!(d.look_up, "a new notebook looks things up on the web");
         assert_eq!(serde_json::from_str::<Settings>("{}").unwrap(), d);
 
         let tmp = TempDir::new();
@@ -1519,6 +1539,7 @@ mod tests {
                 },
             ],
             shortcuts: BTreeMap::from([("app::NewNote".to_string(), vec!["alt-cmd-n".to_string()]), ("app::Quit".to_string(), vec![])]),
+            look_up: false,
         };
         store.save_settings();
         let reopened = Store::open_at(tmp.0.clone()).unwrap();

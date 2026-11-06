@@ -4,7 +4,7 @@
 //! the check off the wire, the words it is written in for Copy, exports and the minds, and
 //! where the words it rests on are now. The tag draws it in `note_page/show_working.rs`.
 
-use crate::store::{Check, Given, Message, Passage, SumLine};
+use crate::store::{Check, Given, Message, Passage, Source, SumLine};
 use serde_json::Value;
 use std::ops::Range;
 
@@ -19,7 +19,14 @@ pub fn from_wire(v: &Value) -> Option<Check> {
         .collect();
     let givens: Vec<Given> = items("givens").iter().filter_map(|g| Some(Given { value: text(&g["value"])?, words: text(&g["words"])? })).collect();
     let words: Vec<Passage> = items("words").iter().filter_map(text).map(|words| Passage { words, note: None }).collect();
-    (!sum.is_empty() || !words.is_empty()).then(|| Check { sum, givens, words, taken_back: false })
+    // a page the brain made sure of: its URL came back from a search, its words are on it
+    let source = obj.get("source").filter(|s| s.is_object()).and_then(|s| {
+        let url = text(&s["url"]).filter(|u| u.starts_with("https://") || u.starts_with("http://"))?;
+        let passage = text(&s["passage"])?;
+        let domain = text(&s["domain"]).unwrap_or_default();
+        Some(Source { title: text(&s["title"]).unwrap_or_else(|| domain.clone()), url, domain, passage })
+    });
+    (!sum.is_empty() || !words.is_empty() || source.is_some()).then(|| Check { sum, givens, words, taken_back: false, source })
 }
 
 /// `=`, or `≈` when the result is rounded.
@@ -46,6 +53,9 @@ pub fn parts(c: &Check) -> Vec<(String, String)> {
     if !c.words.is_empty() {
         let words: Vec<String> = c.words.iter().map(|p| quoted(&p.words)).collect();
         out.push((format!("In your note{back}"), words.join(", ")));
+    }
+    if let Some(s) = &c.source {
+        out.push((format!("Source{back}"), format!("{} ({}, {}: {})", quoted(&s.passage), s.title, s.domain, s.url)));
     }
     out
 }
@@ -95,9 +105,15 @@ pub fn words_of(c: &Check) -> Vec<(String, Option<String>)> {
     c.givens.iter().map(|g| (g.words.clone(), None)).chain(c.words.iter().map(|p| (p.words.clone(), p.note.clone()))).collect()
 }
 
-/// A short form for a page dump: `sum:2`, `words:1`, `sum:2:taken back`.
+/// A short form for a page dump: `sum:2`, `words:1`, `source:1`, `sum:2:taken back`.
 pub fn summary(c: &Check) -> String {
-    let kind = if c.sum.is_empty() { format!("words:{}", c.words.len()) } else { format!("sum:{}", c.sum.len()) };
+    let kind = if !c.sum.is_empty() {
+        format!("sum:{}", c.sum.len())
+    } else if !c.words.is_empty() {
+        format!("words:{}", c.words.len())
+    } else {
+        format!("source:{}", c.source.is_some() as usize)
+    };
     if c.taken_back { format!("{kind}:taken back") } else { kind }
 }
 
@@ -143,6 +159,25 @@ mod tests {
         assert!(lines[0].starts_with("Working, taken back: 5:30"));
         assert_eq!(lines[1], "In your note, taken back: \u{201c}four days\u{201d}");
         assert_eq!(summary(&c), "sum:2:taken back");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_page_the_brain_made_sure_of_comes_with_its_words_and_site() {
+        let c = from_wire(&json!({
+            "sum": [], "givens": [], "words": [],
+            "source": {"url": "https://en.wikipedia.org/wiki/Eiffel_Tower", "title": "Eiffel Tower - Wikipedia", "domain": "en.wikipedia.org", "passage": "The tower is 330 metres (1,083 ft) tall"},
+        }))
+        .expect("a source alone is a check");
+        let s = c.source.clone().unwrap();
+        assert_eq!((s.title.as_str(), s.domain.as_str()), ("Eiffel Tower - Wikipedia", "en.wikipedia.org"));
+        assert_eq!(summary(&c), "source:1");
+        assert_eq!(
+            text_lines(&c),
+            vec!["Source: \u{201c}The tower is 330 metres (1,083 ft) tall\u{201d} (Eiffel Tower - Wikipedia, en.wikipedia.org: https://en.wikipedia.org/wiki/Eiffel_Tower)"]
+        );
+        // a source that is not a web page, or has no words, is no check
+        assert_eq!(from_wire(&json!({"source": {"url": "file:///etc/passwd", "passage": "root"}})), None);
+        assert_eq!(from_wire(&json!({"source": {"url": "https://example.org", "passage": ""}})), None);
     }
 
     #[std::prelude::v1::test]

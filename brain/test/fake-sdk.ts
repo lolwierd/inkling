@@ -15,7 +15,16 @@ export interface Directive {
   endEarly?: boolean; // the iterator ends without a result
   limit?: { status: string; resetsAt?: number; utilization?: number; rateLimitType?: string };
   echo?: "options" | "env"; // result text describes what the brain passed in
+  // web searches the model ran before answering: each yields a WebSearch tool result
+  searches?: { query: string; results: { title: string; url: string }[] }[];
+  // pages the brain's own page fetch finds (url -> page text); any other URL cannot be opened
+  pages?: Record<string, string>;
+  // resultError only for a call that can look things up (it has a budget); others succeed
+  budgetOnce?: boolean;
 }
+
+/** Pages the fake web serves, filled from the directives played so far (test/fake-brain.ts). */
+export const fakePages = new Map<string, string>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -26,6 +35,7 @@ function directiveOf(prompt: unknown): Directive {
 
 export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any }) {
   const d = directiveOf(prompt);
+  for (const [url, text] of Object.entries(d.pages ?? {})) fakePages.set(url, text);
   const signal: AbortSignal | undefined = options?.abortController?.signal;
   const aborted = () => Boolean(signal?.aborted) && !d.ignoreAbort;
   const abortError = () => new Error("Claude Code process aborted by user");
@@ -49,6 +59,15 @@ export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any 
       });
       throw abortError();
     }
+    for (const [i, s] of (d.searches ?? []).entries()) {
+      await step();
+      yield {
+        type: "user",
+        parent_tool_use_id: null,
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: `search-${i}`, content: "results" }] },
+        tool_use_result: { query: s.query, results: [{ tool_use_id: `search-${i}`, content: s.results }], durationSeconds: 0.1 },
+      };
+    }
     let streamed = "";
     for (const t of d.deltas ?? []) {
       await step();
@@ -67,14 +86,14 @@ export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any 
       yield { type: "assistant", error: d.assistantError, message: { content: [{ type: "text", text: d.resultError?.result ?? "API Error" }] } };
     }
     await step();
-    if (d.resultError) {
+    if (d.resultError && (!d.budgetOnce || options?.maxBudgetUsd !== undefined)) {
       yield {
         type: "result",
         subtype: d.resultError.subtype,
         is_error: d.resultError.isError ?? true,
         errors: d.resultError.errors ?? [],
         result: d.resultError.result,
-        total_cost_usd: 0,
+        total_cost_usd: d.budgetOnce ? options?.maxBudgetUsd ?? 0 : 0,
       };
       return;
     }
@@ -84,6 +103,8 @@ export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any 
         model: options?.model ?? null,
         effort: options?.effort ?? null,
         tools: options?.tools,
+        allowedTools: options?.allowedTools,
+        maxBudgetUsd: options?.maxBudgetUsd ?? null,
         maxTurns: options?.maxTurns,
         persistSession: options?.persistSession,
         settingSources: options?.settingSources,

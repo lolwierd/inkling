@@ -78,18 +78,34 @@ function noteBlock(ctx: Context): string {
 
 // Show its working: a correction carries a check the writer can do themselves, and the
 // brain re-checks it (working.ts); one it cannot back becomes the fallback question.
-const CHECK_RULES = [
+const checkRules = (web: boolean) => [
   "- kind: \"correction\" only when something is plainly wrong and check shows how you know; otherwise \"question\".",
   "- check (corrections only): how the writer can check it themselves. Either",
   "  sum: the arithmetic, 1 to 4 lines, each {\"sum\": \"5:30 × 10\", \"is\": \"55:00\"}: numbers, durations (5:30, 1:05:00) and percentages with + − × ÷ and brackets, no units or words. Every number in a sum is one of givens, an earlier line's \"is\", or 1, 2, 7, 12, 24, 52, 60, 100, 365 or 1000; with",
   "  givens: each number you took from the writer, {\"value\": \"5:30\", \"words\": \"hold 5:30\"}, words being their exact words that contain it (1 to 6 words);",
   "  or words: 1 or 2 passages copied exactly from elsewhere in the note that this paragraph contradicts.",
-  "  Every number in text is the writer's or is in your sum: a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}.",
+  ...(web ? [SOURCE_RULE] : []),
+  web
+    ? "  Every number in text is the writer's, in your sum, or in your source's passage: leave out any other figure, and a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}."
+    : "  Every number in text is the writer's or is in your sum: a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}.",
   "- question (corrections only): what to ask instead if your check does not hold up, at most 45 words.",
 ];
 
 const NO_SOURCES =
   "You cannot open any source from here: no web, no books, no files. A fact that rests only on what you remember is a question, not a correction; say what you remember inside the question.";
+
+// Look things up on the web (Settings › Model): the model may search, and a correction may
+// cite a page; the brain keeps the citation only if a search in this call returned its URL
+// and the passage is on the page (web.ts).
+const SOURCE_RULE =
+  "  or source: a page that settles it, {\"url\": \"…\", \"passage\": \"…\"}: the url exactly as your WebSearch returned it in this answer, and 5 to 30 words copied word for word from that page. To get them, WebFetch the page with a prompt like \"Quote word for word the sentence that gives the height\". Inkling opens the page to find the passage, and drops a source it cannot find.";
+
+const WEB_SOURCES =
+  "You can search the web (WebSearch) and read a page (WebFetch). Before you correct or doubt a fact that the note itself cannot settle, search for it and read the best page, so the correction can cite it as its source. Do not search when the note settles the point, or when you have nothing to say about the paragraph. A fact you could not find a page for is a question, not a correction; say what you remember inside the question.";
+
+/** For answers in prose: when to search, and links only to pages a search returned. */
+const WEB_PROSE =
+  "You can search the web (WebSearch) and read a page (WebFetch) when a factual point cannot be settled from the note itself; never search for what the note already decides. Do not describe your searching. Link only to a page your search returned; Inkling takes out any other link.";
 
 /** The system prompt for the reads of a Read it through pass: the note and its margin
  *  ride at its end. Every read of the pass sends the same note, and the runtime caches the
@@ -115,7 +131,7 @@ export function readPrompt(ctx: Context, target: string, through = false): strin
     "If you speak:",
     "- quote: copy the exact words from the paragraph that your note is about, the shortest span that makes sense (often 3 to 15 words). It must match the paragraph character for character.",
     "- text: your margin note, at most 45 words, usually ending in one question.",
-    ...CHECK_RULES,
+    ...checkRules(false),
     "- sketch: true only when a small step-by-step drawing would make it click (a process, a structure, a flow, a comparison) and they seem to be struggling to picture it.",
     REPEATS,
     "If you stay silent, set quote and text to empty strings and repeats to 0.",
@@ -123,7 +139,7 @@ export function readPrompt(ctx: Context, target: string, through = false): strin
   ].join("\n");
 }
 
-export function probePrompt(ctx: Context, target: string): string {
+export function probePrompt(ctx: Context, target: string, web = false): string {
   return [
     noteBlock(ctx),
     "",
@@ -133,14 +149,14 @@ export function probePrompt(ctx: Context, target: string): string {
     "Find the single most useful thing to ask or point out about it: a hidden assumption, a claim that needs evidence, a step that does not follow, an edge case, a fact that is wrong. If it is genuinely solid, ask the question that would take it one level deeper. If the most useful point is one the writer let stand, find the next most useful one.",
     "- quote: the exact words from the selection your note is about (the whole selection is fine).",
     "- text: at most 50 words, usually ending in one question.",
-    ...CHECK_RULES,
+    ...checkRules(web),
     "- sketch: true only when a small drawing would make it click.",
     REPEATS,
-    NO_SOURCES,
+    web ? WEB_SOURCES : NO_SOURCES,
   ].join("\n");
 }
 
-export function askPrompt(ctx: Context, target: string, question: string): string {
+export function askPrompt(ctx: Context, target: string, question: string, web = false): string {
   return [
     noteBlock(ctx),
     "",
@@ -148,10 +164,13 @@ export function askPrompt(ctx: Context, target: string, question: string): strin
     `<question>${question}</question>`,
     "",
     "They asked directly, so answer directly and concretely, grounded in their note. Under 120 words, plain prose (two short paragraphs at most). If it helps, end with one question that pushes their thinking further.",
-  ].join("\n");
+    web ? WEB_PROSE : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-export function answerPrompt(ctx: Context, target: string): string {
+export function answerPrompt(ctx: Context, target: string, web = false): string {
   return [
     noteBlock(ctx),
     "",
@@ -159,7 +178,10 @@ export function answerPrompt(ctx: Context, target: string): string {
     `<paragraph>${target}</paragraph>`,
     "",
     "Respond to what they asked, in under 90 words of plain prose. Answer if they asked a question; ask back if the question rests on something shaky.",
-  ].join("\n");
+    web ? WEB_PROSE : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function sketchPrompt(ctx: Context, target: string): string {
@@ -212,7 +234,7 @@ function elsewhereBlock(e: ElsewhereEnd): string {
   return [`This thread also quotes the writer's other note «${e.noteTitle}»${edited}: «${e.quote}», in this passage:`, `<passage>${e.text}</passage>`].join("\n");
 }
 
-export function replyPrompt(ctx: Context, quote: string, messages: ThreadMessage[], message: string, elsewhere?: ElsewhereEnd): string {
+export function replyPrompt(ctx: Context, quote: string, messages: ThreadMessage[], message: string, elsewhere?: ElsewhereEnd, web = false): string {
   const history = messages.map((m) => `${m.role === "you" ? "Writer" : "You"}: ${m.text}`).join("\n");
   return [
     noteBlock(ctx),
@@ -227,6 +249,7 @@ export function replyPrompt(ctx: Context, quote: string, messages: ThreadMessage
     "- resolved: true when their reply settles this thread's point (they fixed the mistake, or answered the question soundly). Other questions about the note belong in other threads." +
       (elsewhere ? " For a thread between two notes, resolved is true when the two no longer disagree, because either was changed, or when the writer explains why both can stand." : ""),
     "- redraw: true only when they asked to see a drawing (again or differently). The drawing is made separately from your text, so then keep the text to one or two sentences on what it should show, and never draw with characters.",
+    ...(web ? [WEB_PROSE] : []),
   ]
     .filter((l, i, a) => !(l === "" && a[i - 1] === ""))
     .join("\n");
@@ -300,7 +323,7 @@ export const RELATE_SCHEMA = {
   },
 } as const;
 
-export function chatPrompt(ctx: Context, history: ThreadMessage[], message: string, near: string | null): string {
+export function chatPrompt(ctx: Context, history: ThreadMessage[], message: string, near: string | null, web = false): string {
   const h = history.map((m) => `${m.role === "you" ? "Writer" : "You"}: ${m.text}`).join("\n");
   return [
     noteBlock(ctx),
@@ -310,12 +333,13 @@ export function chatPrompt(ctx: Context, history: ThreadMessage[], message: stri
     `Writer: ${message}`,
     "",
     "You have read the whole note and its margin threads. Answer about this note, specifically. Point at their own sentences when it helps. Under 150 words unless they ask for more. Plain prose; a short list only if they ask for one.",
+    web ? WEB_PROSE : "",
   ]
     .filter((l) => l !== "")
     .join("\n");
 }
 
-// A correction's check (see CHECK_RULES). Optional, so a question or a silence spends no
+// A correction's check (see checkRules). Optional, so a question or a silence spends no
 // tokens on it.
 const CHECK_SCHEMA = {
   type: "object",
@@ -330,6 +354,12 @@ const CHECK_SCHEMA = {
       items: { type: "object", additionalProperties: false, required: ["value", "words"], properties: { value: { type: "string" }, words: { type: "string" } } },
     },
     words: { type: "array", items: { type: "string" } },
+    source: {
+      type: "object",
+      additionalProperties: false,
+      required: ["url", "passage"],
+      properties: { url: { type: "string" }, title: { type: "string" }, passage: { type: "string" } },
+    },
   },
 } as const;
 

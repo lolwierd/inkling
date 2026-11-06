@@ -346,9 +346,51 @@ Size: M.
   working, and `design/capabilities.md` now lists the capability the tour and the film
   should show.
 
-## Open question for the owner
+## Web sources (built 7 Nov, after the owner's call)
 
-1. **Web sources.** Should Inkling ever look things up? My recommendation: not in reads.
+The owner decided Inkling should search, on by default. Built on branch `web-sources`:
+
+- **Who may search (decided 7 Nov after the measurements below): only what you ask.**
+  Probes (Find a loose thread), asks, a mind called by name, replies and chat get the SDK's
+  `WebSearch` and `WebFetch` (allowed without asking, 8 turns, capped at $2.50 a call).
+  Reading along at your pause never does: one turn, no tools, and a fact it cannot settle
+  becomes a question. Sketches, drawings, learning and relating notes never search. A call
+  that hits the cap or its turns answers again without the web, so it ends as an answer
+  (a question, for a correction), not an error. Settings > Model > "Look things up on the
+  web" (on); off, every call is the single turn with no tools it was before.
+- **When:** the prompt says to search before correcting or doubting a fact the note
+  cannot settle, and never for a point the note decides.
+- **Only when real:** a correction may cite `{url, passage}`. The brain keeps it only if
+  that URL came back from a search in the same call (read off the SDK's tool results) and
+  the passage is on the page, which the brain opens itself (`brain/src/web.ts`). The tag
+  shows the passage, then the page's own title, its site and a link. Otherwise the
+  correction stands on its sum or your words, or becomes its question. Links in prose that
+  no search returned are taken out.
+- **Measured** (Opus 5.5, low effort, SDK estimates at API prices):
+
+| Read | Searches | Cost | Time |
+|---|---|---|---|
+| "The Eiffel Tower is 450 metres tall…", web off | 0 | $0.030 | 5.5 s |
+| the same, web on (four tries) | 1 each | $1.54 to $1.58 | 22 to 26 s |
+| a point the note settles, web on | 0 | $0.021 | 4.4 s |
+
+  A search costs about $1.55 because its results go into the model's context: about
+  184,000 tokens written to the cache and 378,000 read, against $0.013 for WebFetch's
+  reading of the page (on Haiku). The first three tries with the web on came back as
+  questions, the gate working: one cited no page, two said a number that neither the page
+  nor the note showed. The fourth cited wtvr.com ("The Eiffel Tower grew from 324 meters
+  (1,063 feet) tall to 330 meters (1,083 feet) now."), which the brain found on the page;
+  a made-up passage on the same page was refused.
+- Screenshots: `design/features/shots/web-sources-{open,open-dark,hover,hover-dark,settings,settings-dark}.jpg`.
+- **Next (not built):** run the searching in a Haiku subagent (the SDK's `agents` option),
+  so the search results land in Haiku's context, not Opus's. The subagent would hand back
+  only URLs and word-for-word passages; its tool results still reach the stream (with a
+  `parent_tool_use_id`), so the gate keeps working. Search results are the cost, so this
+  could bring a searched call close to an ordinary one. Unmeasured.
+
+## Open question for the owner (answered 7 Nov: yes, on by default; see Web sources)
+
+1. **Web sources.** Should Inkling ever look things up? My recommendation was: not in reads.
    Later, and only if you want it, a `Look it up` control on a question that runs one
    search when you click it, shows a source only if the brain found the URL in that
    search and the quoted passage on the page, and says plainly that the query leaves the

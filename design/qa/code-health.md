@@ -1,6 +1,11 @@
 # Code health pass, 7 November 2026
 
-Branch `code-health`. The ask: find the performance problems, bugs, implicit state
+Branch `code-health`, rebased onto master `1a64810` (Let it stand, Show its working, the UI
+polish with `panel_fit`, Loose ends, Turn it over, Threads between notes, Read it through and
+the app icon merged) with every side's changes kept: the features' new page state (`goto`,
+`disputes`, `unanswered`, `read_through`, the visitors of threads between notes) sits beside
+`Tag` and `ChatReply` and needed no folding, since none of it read the old tag maps or the
+chat's two Options. The ask: find the performance problems, bugs, implicit state
 machines, code smells and complexity in the app (`src/`) and the brain (`brain/src`), and
 fix them, with the behaviour the owner designed left exactly as it is. This page is the
 record: each finding, what changed, and the evidence; the measurements before and after;
@@ -301,7 +306,7 @@ ran without the jiggle while the window was visible.
 | The same, after the rope fix | debug | long note 63 ms a frame | long note 0.2–3.3 ms a second (one 63 ms frame when the 20 threads are first hung); small note 100–118 → 0.03–2.2 ms a second |
 | Hottest user-space frames (`sample`), idle and typing | debug | `memchr` under `line_range_in`: the gutter scanning the whole note once per line | GPUI's own `paint_line` and `BoundsTree::insert` |
 | The brain: start to `ready` (no model call) | — | 50 ms | 50 ms; nothing to fix |
-| Compiler warnings (`cargo build`) | — | 13 | 1 of them (`welcome_note`, the film agent's file) plus 3 that arrived with master's merges |
+| Compiler warnings (`cargo build`) | — | 13 | 0 of them; on the rebased head 2 remain, both from master's new features (`Note::elsewhere_of_mut`, one choice's `ALL`) |
 | Tests | — | 189 Rust, 101 brain | 218 Rust, 136 brain (master added some; this branch adds 9 Rust tests and scenario `u12`) |
 
 ## Left, and why
@@ -318,10 +323,9 @@ ran without the jiggle while the window was visible.
   on the baseline binary as well). `u12` checks its own tag the same way; `u06`'s later
   lines (`rested`, `moved-on`, `typed`, `escaped`) still assert the exact set and would
   fail with the pointer parked there, so they are left for a quiet pointer.
-- Three warnings that arrived with master's merges after this pass began (`src/store.rs`:
-  `label`, `words_before`, and one choice's `ALL`), in code the feature agents are mid-way
-  through; theirs to settle. `welcome::welcome_note` is used by tests only and wants
-  `#[cfg(test)]`, but `src/welcome.rs` is the film agent's.
+- Two warnings on the rebased head, both from master's new features (`src/store.rs`:
+  `Note::elsewhere_of_mut` and one choice's `ALL`), in code the feature agents are mid-way
+  through; theirs to settle.
 - The six `BrainMsg::Error` arms that do the same four things (take the request out of
   `pending`, drop an empty thread, report unless cancelled, notify): two of them now also
   call the retry feature's `fail_thread`, which is still moving, so the helper waits.

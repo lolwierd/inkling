@@ -189,12 +189,13 @@ const helpers = {
     return n;
   },
   /** Whether a thread's tab sits on the paper you can see, 8 px in from its edges, where a
-   *  drag keeps it. */
+   *  drag keeps it; less the pixel the jiggle's nudge moves the paper's bottom edge by
+   *  between the drag and the dump. */
   onPaper: (d: any, id: string): boolean => {
     const [l, t, r, b] = d.paper ?? [];
     const [x, y, w, h] = d.tabs?.[id] ?? [];
     if (![l, t, r, b, x, y, w, h].every((v) => typeof v === "number")) return false;
-    return x >= l + 7.5 && y >= t + 7.5 && x + w <= r - 7.5 && y + h <= b - 7.5;
+    return x >= l + 7 && y >= t + 7 && x + w <= r - 7 && y + h <= b - 7;
   },
 };
 

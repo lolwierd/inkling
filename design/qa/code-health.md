@@ -1,8 +1,9 @@
 # Code health pass, 7 November 2026
 
-Branch `code-health`, rebased onto master `8cd16d4` (Let it stand, Show its working, the UI
-polish with `panel_fit`, Loose ends, Turn it over, Threads between notes, Read it through,
-web sources, Threads of your own and the app icon merged) with every side's changes kept: the features' new page state (`goto`,
+Branch `code-health`, rebased onto master `0839bc9` (all nine features merged: Let it stand,
+Show its working, Loose ends, Turn it over, Threads between notes, Read it through, web
+sources, Threads of your own, Answer in the note and Write it in, with the UI polish and
+the app icon) with every side's changes kept: the features' new page state (`goto`,
 `disputes`, `unanswered`, `read_through`, the visitors of threads between notes) sits beside
 `Tag` and `ChatReply` and needed no folding, since none of it read the old tag maps or the
 chat's two Options. The ask: find the performance problems, bugs, implicit state
@@ -60,7 +61,7 @@ held button) of 36 steps of 6 px on the running-plan note, debug build, frame lo
 Before: 1 of 36 moves reached the handler; the tag moved once, by 42 px, in the whole drag,
 and its hover flapped on and off at every step as the panel appeared over the tab. After:
 36 of 36 moves reached it; the tag's offset tracks the pointer step by step (6, 12, 18 …
-px) and the release ends the drag at once. Scenario `u12-pointer-drag` pins it.
+px) and the release ends the drag at once. Scenario `u17-pointer-drag` pins it.
 
 Seen on the way, left for the polish branch's `panel_fit` (see "Left"): the open panel
 flips sides at one fixed x with no hysteresis, so a tag dragged back and forth across that
@@ -133,7 +134,7 @@ the width that side allows. Undragged tags keep the plain `panel_fit`, so the ne
 rule is as it was (`no_tag_opens_across_the_words`, scenario `u13-tags-clear-the-words`).
 
 Evidence: unit test `a_held_tag_keeps_its_side_through_the_band_round_the_floor` walks
-the room down and up through the band from both sides; `u13` and `u12` pass.
+the room down and up through the band from both sides; `u13` and `u17` pass.
 
 ### 5. Every thread re-solved from scratch whenever its ends moved
 
@@ -211,7 +212,7 @@ Where: `src/note_page.rs` `open`, `read_line`, `send_task`, `flush`, `note_reche
   and `flush` puts it in the toasts ("Couldn't save this note: …"); the other saves keep
   logging, as before.
 
-Evidence: 218 unit tests pass; `t05-switch`, `r02-switch`, `t03-chat`, `u12` pass; the
+Evidence: 218 unit tests pass; `t05-switch`, `r02-switch`, `t03-chat`, `u17` pass; the
 Undo case by hand. These are behaviour changes only where the old behaviour was wrong.
 
 ### 9. The tag's hover, rest and spring: five maps that had to agree
@@ -235,7 +236,7 @@ one map.
 Evidence: `a_tag_opens_after_the_pointer_rests_and_lingers_after_it_leaves` (headless,
 explicit instants: the rest, a key during it, moving from the tab onto the panel, leaving
 an open tag and coming back, leaving before it opened) and
-`the_drop_spring_overshoots_a_little_and_the_fold_does_not_bounce`; `u06` and `u12` pass.
+`the_drop_spring_overshoots_a_little_and_the_fold_does_not_bounce`; `u06` and `u17` pass.
 
 ### 10. The chat's answer: two Options that had to agree
 
@@ -307,7 +308,7 @@ ran without the jiggle while the window was visible.
 | Hottest user-space frames (`sample`), idle and typing | debug | `memchr` under `line_range_in`: the gutter scanning the whole note once per line | GPUI's own `paint_line` and `BoundsTree::insert` |
 | The brain: start to `ready` (no model call) | — | 50 ms | 50 ms; nothing to fix |
 | Compiler warnings (`cargo build`) | — | 13 | 0 of them (the last, `Lettering::ALL`, by Settings listing the lettering choices from it, as the other rows do); on the rebased head 2 remain, both from master's new features (`answers::kind_wire`, `Note::elsewhere_of_mut`) |
-| Tests | — | 189 Rust, 101 brain | 218 Rust, 136 brain (master added some; this branch adds 9 Rust tests and scenario `u12`) |
+| Tests | — | 189 Rust, 101 brain | 218 Rust, 136 brain (master added some; this branch adds 9 Rust tests and scenario `u17`) |
 
 ## Left, and why
 
@@ -326,7 +327,7 @@ ran without the jiggle while the window was visible.
   it points at rather than "nothing is open". That second part names a hazard for every
   scenario that asserts the exact set of open tags: the owner's own pointer, resting over a
   tab's spot on the covered test window, opens that tag (GPUI tracks the real mouse; seen
-  on the baseline binary as well). `u12` checks its own tag the same way; `u06`'s later
+  on the baseline binary as well). `u17` checks its own tag the same way; `u06`'s later
   lines (`rested`, `moved-on`, `typed`, `escaped`) still assert the exact set and would
   fail with the pointer parked there, so they are left for a quiet pointer.
 - Two warnings on the rebased head, both from master's new features (`answers::kind_wire`,
@@ -344,11 +345,11 @@ ran without the jiggle while the window was visible.
   (one `done` or `error` per request, cancel never `done`, junk lines ignored), and its
   tests cover them (136, one with no `expect`: "junk lines are ignored and later requests
   still work", which passes by not timing out, which is what it checks).
-- The jiggle (`INKLING_JIGGLE`) wobbles the window's width, which lays the whole note out
-  again every tick and re-places every tag, so every number measured under it carries that
-  cost; wobbling the height instead would keep the layout key matched and the dumps'
-  viewport width exact. A tooling change the scenarios' authors should make with eyes on
-  `r13-width` and the shots.
+- The jiggle (`INKLING_JIGGLE`) now wobbles the window's height instead of its width (a
+  width change laid the whole note out again every tick and re-placed every tag, so every
+  number measured under it carried that cost, and the dumps' viewport width was off by
+  one). The price: anything measured against the window's bottom edge moves by a pixel
+  between frames, so `onPaper` and `u08-toasts`' bottom check allow that pixel.
 - The reading loop's own state (`last_edited`, `waiting`, `lines_seen`, `reading`) stays
   in the page; its line-shifting in `note_edit` has no headless test. Listed under the
   splits as `ReadLoop`.

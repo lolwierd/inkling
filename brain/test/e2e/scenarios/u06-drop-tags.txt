@@ -1,0 +1,27 @@
+# Tags drop open: a tag unfolds only after the pointer rests on it, one at a time, and a
+# key in the note or Esc folds it again. Starts on the running plan (two open threads).
+# fixture: running-plan
+wait: 1500
+hover: 1
+dump: just-pointed
+expect: d.unfolded.length === 0
+wait: 900
+dump: rested
+expect: d.unfolded.length === 1 && d.unfolded[0] === "t1"
+hover: 2
+wait: 900
+dump: moved-on
+expect: d.unfolded.length === 1 && d.unfolded[0] === "t2"
+caret: end
+keys: A key folds it.
+wait: 900
+dump: typed
+expect: d.unfolded.length === 0
+hover: 0
+hover: 1
+wait: 900
+escape
+wait: 900
+dump: escaped
+expect: d.unfolded.length === 0
+quit

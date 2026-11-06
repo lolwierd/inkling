@@ -45,12 +45,15 @@ const ROOM_MAX: usize = 3;
 const TAB_W: f32 = 54.;
 const TAB_H: f32 = 26.;
 /// After the pointer leaves a tag, it stays open this long (moving onto its panel).
-const FOLD_DELAY: Duration = Duration::from_millis(220);
+const FOLD_DELAY: Duration = Duration::from_millis(250);
+/// How long the pointer rests on a tag before it unfolds, so passing over the margin
+/// opens nothing.
+const HOVER_REST: Duration = Duration::from_millis(120);
+/// Drop: a tag opens on a spring that overshoots about 4% and settles (stiffness,
+/// damping), and folds on a stiffer one that does not bounce.
+const DROP_OPEN: (f32, f32) = (300., 25.);
+const DROP_CLOSE: (f32, f32) = (700., 53.);
 
-fn ease_out_cubic(t: f32) -> f32 {
-    let t = t.clamp(0., 1.);
-    1. - (1. - t).powi(3)
-}
 
 /// A tag being moved around the margin.
 #[derive(Clone, Debug)]
@@ -389,6 +392,10 @@ pub struct NotePage {
     /// Which parts of which tags the pointer is over: "<id>:tab" or "<id>:panel".
     hover_tag: HashSet<String>,
     hover_left: HashMap<String, std::time::Instant>,
+    /// When the pointer came onto each tag it is over (any part of it).
+    hover_at: HashMap<String, std::time::Instant>,
+    /// Each tag's unfold speed, for its spring.
+    unfold_v: HashMap<String, f32>,
     /// A tag being dragged, and when the last drag ended (so its click is ignored).
     drag: Option<TagDrag>,
     last_drag_end: Option<std::time::Instant>,
@@ -471,6 +478,8 @@ impl NotePage {
             unfold: HashMap::new(),
             hover_tag: HashSet::new(),
             hover_left: HashMap::new(),
+            hover_at: HashMap::new(),
+            unfold_v: HashMap::new(),
             drag: None,
             last_drag_end: None,
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
@@ -665,6 +674,11 @@ impl NotePage {
     }
 
     fn on_escape(&mut self, cx: &mut Context<Self>) {
+        if !self.hover_at.is_empty() || !self.hover_left.is_empty() {
+            self.hover_at.clear();
+            self.hover_left.clear();
+            cx.notify();
+        }
         if self.asking.take().is_some() || self.active.take().is_some() || self.show_toolbar {
             self.show_toolbar = false;
             self.editor.update(cx, |e, _| e.active_anchor = None);
@@ -2759,7 +2773,9 @@ impl NotePage {
         let right = side == Side::Right;
         let width = self.m.margin;
         let natural = self.panel_heights.borrow().get(&id).copied().unwrap_or(px(120.));
-        let e = ease_out_cubic(unfold);
+        // the spring's own position: it passes 1 by about 4% as the tag drops open
+        let e = unfold.max(0.);
+        let ec = e.min(1.);
 
         // A tag opens away from the words, unless that runs off the window: then it opens
         // the other way, and it slides up when it would hang below the bottom edge.
@@ -2954,12 +2970,12 @@ impl NotePage {
                 .w(px(w))
                 .h(h)
                 .overflow_hidden()
-                .rounded(px(8. + 2. * e))
+                .rounded(px(8. + 2. * ec))
                 .bg(p.card)
                 .shadow(vec![BoxShadow {
-                    color: p.shadow.opacity(0.6 + 0.4 * e),
-                    offset: point(px(0.), px(1. + 3. * e)),
-                    blur_radius: px(4. + 10. * e),
+                    color: p.shadow.opacity(0.6 + 0.4 * ec),
+                    offset: point(px(0.), px(1. + 3. * ec)),
+                    blur_radius: px(4. + 10. * ec),
                     spread_radius: px(0.),
                     inset: false,
                 }])
@@ -2980,7 +2996,7 @@ impl NotePage {
                         .left(px(4.))
                         .right(px(4.))
                         .bottom(px(4.))
-                        .rounded(px(6. + e))
+                        .rounded(px(6. + ec))
                         .border_1()
                         .border_dashed()
                         .border_color(thread_color.opacity(0.42)),
@@ -3018,10 +3034,15 @@ impl NotePage {
         let key = format!("{id}:{part}");
         if hovered {
             self.hover_tag.insert(key);
+            self.hover_at.entry(id.to_string()).or_insert_with(std::time::Instant::now);
         } else {
+            let was_open = self.tag_rested(id);
             self.hover_tag.remove(&key);
             if !self.tag_pointed(id) {
-                self.hover_left.insert(id.to_string(), std::time::Instant::now());
+                self.hover_at.remove(id);
+                if was_open {
+                    self.hover_left.insert(id.to_string(), std::time::Instant::now());
+                }
             }
         }
         cx.notify();
@@ -3029,6 +3050,13 @@ impl NotePage {
 
     fn tag_pointed(&self, id: &str) -> bool {
         self.hover_tag.contains(&format!("{id}:tab")) || self.hover_tag.contains(&format!("{id}:panel"))
+    }
+
+    /// The pointer has rested on this tag long enough to unfold it, and you have not
+    /// typed since it came to rest (a key in the note folds it).
+    fn tag_rested(&self, id: &str) -> bool {
+        let Some(at) = self.hover_at.get(id) else { return false };
+        self.tag_pointed(id) && at.elapsed() >= HOVER_REST && self.last_typed.is_none_or(|k| k < *at)
     }
 
     /// Click a tab: open it (and its reply box), or close it if it is the open one.
@@ -3089,8 +3117,14 @@ impl NotePage {
         if th.status == ThreadStatus::Resolved {
             return 0.;
         }
-        let pointed = self.tag_pointed(id) || self.hover_left.get(id).is_some_and(|t| t.elapsed() < FOLD_DELAY);
-        if pointed { 1. } else { 0. }
+        if self.tag_rested(id) {
+            return 1.;
+        }
+        // a tag the pointer just left stays open a moment, unless another one has opened:
+        // one tag unfolded at a time
+        let lingering = self.hover_left.get(id).is_some_and(|t| t.elapsed() < FOLD_DELAY);
+        let other = self.hover_at.keys().any(|o| o != id && self.tag_rested(o));
+        if lingering && !other && self.last_typed.is_none_or(|k| k.elapsed() > FOLD_DELAY) { 1. } else { 0. }
     }
 
     fn toolbar(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -3662,23 +3696,32 @@ impl Render for NotePage {
             e.placeholder_hint = hint;
         });
 
-        // Margin tags: folded tabs that unfold toward their target, eased each frame.
+        // Margin tags: folded tabs that drop open on a spring toward their target.
         let (threads, slots, anchor_boxes) = self.margin_layout(placement, m, cx);
-        let ease = 1. - (-dt * 15.).exp();
         let mut unfolding = false;
         for th in &threads {
             let target = self.unfold_target(th);
-            let u = self.unfold.entry(th.id.clone()).or_insert(0.);
-            if (*u - target).abs() < 0.004 {
-                *u = target;
-            } else {
-                *u += (target - *u) * ease;
-                unfolding = true;
+            let x = self.unfold.entry(th.id.clone()).or_insert(0.);
+            let v = self.unfold_v.entry(th.id.clone()).or_insert(0.);
+            if (*x - target).abs() < 0.002 && v.abs() < 0.02 {
+                *x = target;
+                *v = 0.;
+                continue;
             }
+            let (k, c) = if target > 0.5 { DROP_OPEN } else { DROP_CLOSE };
+            // small steps, so a slow frame does not throw the spring
+            let steps = (dt * 240.).ceil().max(1.);
+            let h = dt / steps;
+            for _ in 0..steps as usize {
+                *v += (k * (target - *x) - c * *v) * h;
+                *x += *v * h;
+            }
+            unfolding = true;
         }
         self.unfold.retain(|id, _| threads.iter().any(|t| &t.id == id));
-        // tags the pointer just left stay open a moment, then fold
-        if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) {
+        self.unfold_v.retain(|id, _| threads.iter().any(|t| &t.id == id));
+        // a pointer resting on a tag, or one that just left, changes it without an event
+        if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) || self.hover_at.values().any(|t| t.elapsed() < HOVER_REST) {
             unfolding = true;
         }
         self.hover_left.retain(|_, t| t.elapsed() < FOLD_DELAY * 4);

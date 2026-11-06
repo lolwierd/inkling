@@ -306,7 +306,7 @@ ran without the jiggle while the window was visible.
 | The same, after the rope fix | debug | long note 63 ms a frame | long note 0.2–3.3 ms a second (one 63 ms frame when the 20 threads are first hung); small note 100–118 → 0.03–2.2 ms a second |
 | Hottest user-space frames (`sample`), idle and typing | debug | `memchr` under `line_range_in`: the gutter scanning the whole note once per line | GPUI's own `paint_line` and `BoundsTree::insert` |
 | The brain: start to `ready` (no model call) | — | 50 ms | 50 ms; nothing to fix |
-| Compiler warnings (`cargo build`) | — | 13 | 0 of them; on the rebased head 2 remain, both from master's new features (`Note::elsewhere_of_mut`, one choice's `ALL`) |
+| Compiler warnings (`cargo build`) | — | 13 | 0 of them (the last, `Lettering::ALL`, by Settings listing the lettering choices from it, as the other rows do); on the rebased head 2 remain, both from master's new features (`answers::kind_wire`, `Note::elsewhere_of_mut`) |
 | Tests | — | 189 Rust, 101 brain | 218 Rust, 136 brain (master added some; this branch adds 9 Rust tests and scenario `u12`) |
 
 ## Left, and why
@@ -329,9 +329,9 @@ ran without the jiggle while the window was visible.
   on the baseline binary as well). `u12` checks its own tag the same way; `u06`'s later
   lines (`rested`, `moved-on`, `typed`, `escaped`) still assert the exact set and would
   fail with the pointer parked there, so they are left for a quiet pointer.
-- Two warnings on the rebased head, both from master's new features (`src/store.rs`:
-  `Note::elsewhere_of_mut` and one choice's `ALL`), in code the feature agents are mid-way
-  through; theirs to settle.
+- Two warnings on the rebased head, both from master's new features (`answers::kind_wire`,
+  `Note::elsewhere_of_mut`), in code the feature agents are mid-way through; theirs to
+  settle.
 - The six `BrainMsg::Error` arms that do the same four things (take the request out of
   `pending`, drop an empty thread, report unless cancelled, notify): two of them now also
   call the retry feature's `fail_thread`, which is still moving, so the helper waits.

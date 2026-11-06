@@ -277,8 +277,8 @@ fn export_file_name(title: &str, ext: &str) -> String {
     format!("{base}.{ext}")
 }
 
-/// Script steps that act on the window itself, as the platform would: keystrokes,
-/// the pointer, and snapshots of what was last drawn.
+/// Script steps that act on the window itself, as the platform would: keystrokes and
+/// the pointer.
 fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
     use crate::script::Step;
     let none = Modifiers::default();
@@ -304,27 +304,8 @@ fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
         Step::Pointer(x, y) => {
             window.dispatch_event(move_to(point(px(*x), px(*y))), cx);
         }
-        Step::Snap(name) => snap(name, window),
         _ => {}
     }
-}
-
-/// Write the window, as it was last drawn, to `$INKLING_SNAP_DIR/<name>.png` (the
-/// notebook folder when unset). Needs GPUI's offscreen render: `--features qa`.
-#[cfg(feature = "qa")]
-fn snap(name: &str, window: &mut Window) {
-    let dir = std::env::var_os("INKLING_SNAP_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| Store::data_dir().join("shots"));
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join(format!("{name}.png"));
-    match window.render_to_image().and_then(|img| img.save(&path).map_err(Into::into)) {
-        Ok(()) => log::info!("script snap: {}", path.display()),
-        Err(e) => log::error!("script snap {name}: {e:#}"),
-    }
-}
-
-#[cfg(not(feature = "qa"))]
-fn snap(name: &str, _: &mut Window) {
-    log::warn!("script: snap {name} needs a qa build (cargo build --features qa)");
 }
 
 /// Folder names match ignoring case, in any script ("été" is "ÉTÉ").
@@ -549,7 +530,7 @@ impl AppView {
                     }
                     // Input goes to the window as the platform would send it, outside any
                     // view's update, so the views it reaches can update themselves.
-                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) | Step::Snap(_) => {
+                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) => {
                         cx.update(|window, cx| window_step(&step, window, cx)).is_ok()
                     }
                     _ => this.update_in(cx, |app, window, cx| app.script_step(step, window, cx)).is_ok(),

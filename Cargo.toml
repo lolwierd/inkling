@@ -27,11 +27,6 @@ async-channel = "2"
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_macos = { package = "gpui-pre-macos", version = "=0.3.11", features = ["runtime_shaders"] }
 
-[features]
-# QA builds (`cargo build --features qa`): the `snap:` script step writes the window to
-# a PNG through GPUI's offscreen render, which only its test support compiles in.
-qa = ["gpui_macos/test-support"]
-
 [profile.dev]
 opt-level = 1
 

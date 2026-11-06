@@ -82,9 +82,6 @@
 //! click: 640, 300           # click at a point in the window (logical pixels)
 //! point: 640, 300           # move the pointer there (`hover: n` rests it on thread n's tag)
 //! size: 900x620             # resize the window to this width and height
-//! snap: name                # write the window as drawn to $INKLING_SNAP_DIR/name.png, else
-//!                           # <notebook>/shots/name.png, with no Screen Recording permission
-//!                           # needed (a `qa` build: cargo build --features qa)
 //! set: appearance=dark      # also size=small|default|large, ink=madder|indigo|…,
 //!                           # lettering=own|notes, pointer=on|off
 //! ```
@@ -155,8 +152,6 @@ pub enum Step {
     Click(f32, f32),
     /// The pointer moves to a point in the window.
     Pointer(f32, f32),
-    /// Write the window as it was last drawn to `<name>.png`, from inside the app.
-    Snap(String),
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -267,7 +262,6 @@ pub fn parse(src: &str) -> Vec<Step> {
                         return None;
                     }
                 },
-                "snap" => Step::Snap(if arg.is_empty() { "snap".into() } else { arg }),
                 _ => {
                     log::warn!("script: unknown step {l:?}");
                     return None;
@@ -332,8 +326,6 @@ mod tests {
              key: cmd-k  alt-cmd-down\n\
              click: 640, 300\n\
              point: 12 40\n\
-             snap: sidebar-open\n\
-             snap\n\
              click: 1\n\
              size: wide\n",
         );
@@ -344,8 +336,6 @@ mod tests {
                 Step::Key(vec!["cmd-k".into(), "alt-cmd-down".into()]),
                 Step::Click(640., 300.),
                 Step::Pointer(12., 40.),
-                Step::Snap("sidebar-open".into()),
-                Step::Snap("snap".into()),
             ]
         );
     }

@@ -1170,8 +1170,13 @@ impl NotePage {
     /// Tell the writer a request failed, in words that fit the kind of failure
     /// (the brain classifies it; see brain/src/protocol.ts `ErrorKind`).
     fn report(&mut self, kind: &str, message: &str, cx: &mut Context<Self>) {
-        let short = self.describe_failure(kind, message, cx);
-        self.notice(short, cx);
+        // After this update: a failure can arrive from inside the brain's own update (a
+        // brain that stops fails every waiting request), and describing it reads the brain.
+        let (kind, message) = (kind.to_string(), message.to_string());
+        self.later(cx, move |page, cx| {
+            let short = page.describe_failure(&kind, &message, cx);
+            page.notice(short, cx);
+        });
     }
 
     /// One plain sentence for a failed request (see [`Self::report`]).
@@ -2018,10 +2023,14 @@ impl NotePage {
             }
             BrainMsg::Error { kind, message } => {
                 page.chat_pending = None;
-                // Said in the chat, under the question it failed on, with Try again.
+                // Said in the chat, under the question it failed on, with Try again (after
+                // this update, as `report` does).
                 if kind != "cancelled" {
-                    page.chat_error = Some(page.describe_failure(&kind, &message, cx));
-                    page.chat_scroll.scroll_to_bottom();
+                    page.later(cx, move |page, cx| {
+                        page.chat_error = Some(page.describe_failure(&kind, &message, cx));
+                        page.chat_scroll.scroll_to_bottom();
+                        cx.notify();
+                    });
                 }
                 cx.notify();
             }
@@ -2290,6 +2299,7 @@ impl NotePage {
             "enlarged": self.enlarged.as_deref().map(short),
             "brief_editing": self.brief_input.is_some(),
             "chat_open": self.chat_open,
+            "chat_error": self.chat_error,
             "hidden": self.just_my_words,
             "asking": self.asking.is_some(),
             "last_edited": self.last_edited,

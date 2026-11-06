@@ -820,10 +820,13 @@ impl AppView {
                 .into_any_element();
         }
         let partial = if self.partial.is_empty() { "Listening…".to_string() } else { self.partial.clone() };
+        // where the corner hint sits, on the paper, not across the sheet's corner and the
+        // weave; beside the chat when it is open
+        let right = self.page.read(cx).sheet_inner_right() + if chat_open { crate::note_page::CHAT_WIDTH } else { 0. };
         div()
             .absolute()
-            .bottom(px(14.))
-            .right(px(14.))
+            .bottom(px(24.))
+            .right(px(right))
             .max_w(px(360.))
             .px(px(12.))
             .py(px(8.))
@@ -831,6 +834,8 @@ impl AppView {
             .bg(p.card)
             .border_1()
             .border_color(p.rule)
+            // lifted off the page as the toasts and menus are
+            .shadow(ui::popover_shadow(&p))
             .flex()
             .items_center()
             .gap(px(8.))

@@ -564,6 +564,31 @@ struct Asking {
     _sub: Subscription,
 }
 
+/// The chat's answer: none on its way, one streaming in, or why the last one never came
+/// (shown under the question, with Try again). An answer on its way and a reason none
+/// came never show at once.
+#[derive(Clone, Debug, PartialEq)]
+enum ChatReply {
+    None,
+    Streaming { req: String, partial: String },
+    Failed(String),
+}
+
+impl ChatReply {
+    fn streaming(&self) -> bool {
+        matches!(self, ChatReply::Streaming { .. })
+    }
+
+    /// Stop waiting for an answer, and forget a failure: the request to cancel, if one was
+    /// on its way.
+    fn take_request(&mut self) -> Option<String> {
+        match std::mem::replace(self, ChatReply::None) {
+            ChatReply::Streaming { req, .. } => Some(req),
+            _ => None,
+        }
+    }
+}
+
 /// The read in flight: its request, the line it reads, and that line's hash.
 struct Reading {
     req: String,
@@ -606,12 +631,10 @@ pub struct NotePage {
     chat_input: Entity<InputState>,
     /// The chat's scroll position: it follows the conversation to its newest line.
     chat_scroll: ScrollHandle,
-    /// Why the last chat question got no answer, shown under it with Try again.
-    chat_error: Option<String>,
     /// Threads whose question or reply got no answer: the request to send again, and why,
     /// shown in the tag under your words with Try again, as the chat does.
     unanswered: HashMap<String, (Value, String)>,
-    chat_pending: Option<(String, String)>,
+    chat_reply: ChatReply,
     pub just_my_words: bool,
     /// How present the window's controls are, 0..1: the app fades them while you type
     /// and brings them back when the pointer moves. The page's header row follows it.
@@ -750,9 +773,8 @@ impl NotePage {
             chat_open: false,
             chat_input,
             chat_scroll: ScrollHandle::new(),
-            chat_error: None,
             unanswered: HashMap::new(),
-            chat_pending: None,
+            chat_reply: ChatReply::None,
             just_my_words: false,
             enlarged: None,
             back: crate::back::Back::new(cx),
@@ -861,14 +883,13 @@ impl NotePage {
         }
         self.own_calls.clear();
         self.flush(cx);
-        if let Some((req, _)) = self.chat_pending.take() {
+        if let Some(req) = self.chat_reply.take_request() {
             self.cancel_request(&req, cx);
         }
         // A pause timer started on this note must not read the next one.
         self.pause_task = None;
         self.last_edited = None;
         self.waiting.clear();
-        self.chat_error = None;
         // as the chat's failure line, a tag's goes with the note it was on
         self.unanswered.clear();
         self.mind = cx.global::<Store>().mind(&note.mind_id);
@@ -1284,7 +1305,7 @@ impl NotePage {
     /// waits for this. Learning about the writer runs untracked, and saves wait 600 ms
     /// (quitting flushes them); neither shows on the page.
     pub(crate) fn settled(&self) -> bool {
-        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
+        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && !self.chat_reply.streaming() && !self.typing_recently() && self.goto.is_none()
             && self.relating.is_none() && self.relate_next.is_none()
             && self.read_through.is_none()
     }
@@ -1603,7 +1624,7 @@ impl NotePage {
         self.reading.as_ref().is_some_and(|r| r.req == req)
             || self.relating.as_ref().is_some_and(|r| r.req == req)
             || self.pending.values().any(|(r, _)| r == req)
-            || self.chat_pending.as_ref().is_some_and(|(r, _)| r == req)
+            || matches!(&self.chat_reply, ChatReply::Streaming { req: r, .. } if r == req)
     }
 
     fn cancel_request(&self, req: &str, cx: &mut Context<Self>) {
@@ -2549,27 +2570,26 @@ impl NotePage {
 
     fn clear_chat(&mut self, cx: &mut Context<Self>) {
         // An answer still on its way belongs to the conversation being cleared.
-        if let Some((req, _)) = self.chat_pending.take() {
+        if let Some(req) = self.chat_reply.take_request() {
             self.cancel_request(&req, cx);
         }
         self.note.chat.clear();
-        self.chat_error = None;
         self.schedule_save(cx);
         cx.notify();
     }
 
     /// Send the question the chat failed on again.
     fn retry_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.chat_pending.is_some() || self.note.chat.last().is_none_or(|m| m.role != Role::You) {
+        if self.chat_reply.streaming() || self.note.chat.last().is_none_or(|m| m.role != Role::You) {
             return;
         }
         let Some(last) = self.note.chat.pop() else { return };
-        self.chat_error = None;
+        self.chat_reply = ChatReply::None;
         self.send_chat(Some(last.text), window, cx);
     }
 
     fn send_chat(&mut self, preset: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
-        if self.chat_pending.is_some() {
+        if self.chat_reply.streaming() {
             return;
         }
         let text = match preset {
@@ -2600,18 +2620,18 @@ impl NotePage {
         });
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Delta(d) => {
-                if let Some((_, s)) = page.chat_pending.as_mut() {
-                    s.push_str(&d);
+                if let ChatReply::Streaming { partial, .. } = &mut page.chat_reply {
+                    partial.push_str(&d);
                 }
                 page.chat_scroll.scroll_to_bottom();
                 cx.notify();
             }
             BrainMsg::Done(v) => {
-                page.chat_pending = None;
+                page.chat_reply = ChatReply::None;
                 page.chat_scroll.scroll_to_bottom();
                 let text = v["text"].as_str().unwrap_or("").trim().to_string();
                 if text.is_empty() {
-                    page.chat_error = Some("Inkling came back with nothing to say.".into());
+                    page.chat_reply = ChatReply::Failed("Inkling came back with nothing to say.".into());
                 } else {
                     page.note.chat.push(ChatMessage { role: Role::Mind, text, at: Utc::now() });
                     page.schedule_save(cx);
@@ -2619,12 +2639,12 @@ impl NotePage {
                 cx.notify();
             }
             BrainMsg::Error { kind, message } => {
-                page.chat_pending = None;
+                page.chat_reply = ChatReply::None;
                 // Said in the chat, under the question it failed on, with Try again (after
                 // this update, as `report` does).
                 if kind != "cancelled" {
                     page.later(cx, move |page, cx| {
-                        page.chat_error = Some(page.describe_failure(&kind, &message, cx));
+                        page.chat_reply = ChatReply::Failed(page.describe_failure(&kind, &message, cx));
                         page.chat_scroll.scroll_to_bottom();
                         cx.notify();
                     });
@@ -2632,8 +2652,7 @@ impl NotePage {
                 cx.notify();
             }
         });
-        self.chat_error = None;
-        self.chat_pending = Some((req, String::new()));
+        self.chat_reply = ChatReply::Streaming { req, partial: String::new() };
         self.schedule_save(cx);
         cx.notify();
     }
@@ -2953,7 +2972,10 @@ impl NotePage {
                 "req": req,
                 "state": match p { Pending::Thinking => "thinking".to_string(), Pending::Streaming(s) => format!("streaming:{s}"), Pending::Sketching => "sketching".to_string() },
             })).collect::<Vec<_>>(),
-            "chat_pending": self.chat_pending.as_ref().map(|(req, s)| json!({"req": req, "partial": s})),
+            "chat_pending": match &self.chat_reply {
+                ChatReply::Streaming { req, partial } => json!({"req": req, "partial": partial}),
+                _ => Value::Null,
+            },
             "chat": self.note.chat.len(),
             "active": self.active.as_deref().map(short),
             "error": error,
@@ -2981,7 +3003,10 @@ impl NotePage {
             "copied": self.copied.as_ref().filter(|(_, at)| at.elapsed() < COPIED_FOR).map(|(id, _)| short(id)),
             "brief_editing": self.brief_input.is_some(),
             "chat_open": self.chat_open,
-            "chat_error": self.chat_error,
+            "chat_error": match &self.chat_reply {
+                ChatReply::Failed(why) => Value::String(why.clone()),
+                _ => Value::Null,
+            },
             "hidden": self.just_my_words,
             "asking": self.asking.is_some(),
             "last_edited": self.last_edited,
@@ -4568,8 +4593,8 @@ impl NotePage {
         let title = self.editor.read(cx).title();
         let visible = self.note.visible_threads();
         let open = self.note.open_threads();
-        let empty = self.note.chat.is_empty() && self.chat_pending.is_none();
-        let busy = self.chat_pending.is_some();
+        let busy = self.chat_reply.streaming();
+        let empty = self.note.chat.is_empty() && !busy;
         let can_send = !busy && !self.chat_input.read(cx).value().trim().is_empty();
         let mut messages = div().flex().flex_col().gap(px(14.)).px(px(16.)).py(px(12.));
         if empty {
@@ -4631,7 +4656,7 @@ impl NotePage {
                     .into_any_element(),
             });
         }
-        if let Some((_, partial)) = &self.chat_pending {
+        if let ChatReply::Streaming { partial, .. } = &self.chat_reply {
             if partial.is_empty() {
                 messages = messages.child(div().flex().child(Self::thinking_dot(&t, "chat-thinking")));
             } else {
@@ -4645,7 +4670,7 @@ impl NotePage {
                 );
             }
         }
-        if let Some(err) = self.chat_error.clone() {
+        if let ChatReply::Failed(err) = self.chat_reply.clone() {
             messages = messages.child(
                 div()
                     .flex()
@@ -5362,6 +5387,18 @@ mod tests {
             assert!(tag.unfold > -0.005, "the fold bounced to {}", tag.unfold);
         }
         assert_eq!(tag.unfold, 0.);
+    }
+
+    #[std::prelude::v1::test]
+    fn the_chat_waits_for_one_answer_or_says_why_none_came_never_both() {
+        let mut reply = ChatReply::Streaming { req: "r1".into(), partial: String::new() };
+        assert!(reply.streaming());
+        assert_eq!(reply.take_request().as_deref(), Some("r1"), "stopping waiting names the request to cancel");
+        assert_eq!(reply, ChatReply::None);
+        reply = ChatReply::Failed("the model took too long to answer".into());
+        assert!(!reply.streaming());
+        assert_eq!(reply.take_request(), None, "a failure has nothing to cancel, and clearing forgets it");
+        assert_eq!(reply, ChatReply::None);
     }
 
     #[std::prelude::v1::test]

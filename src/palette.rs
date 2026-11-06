@@ -221,7 +221,8 @@ impl Render for Palette {
                     .mx(px(6.))
                     .px(px(10.))
                     .py(px(7.))
-                    .rounded(px(7.))
+                    // a row's corner, as the sidebar's and the menus' rows have it
+                    .rounded(px(6.))
                     .when(on, |d| d.bg(p.hover))
                     .when(!on, |d| d.hover(move |s| s.bg(p.hover.opacity(0.5))))
                     .cursor_pointer()

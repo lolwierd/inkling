@@ -1535,7 +1535,8 @@ impl AppView {
                         .w(px(440.))
                         .p(px(18.))
                         .rounded(px(12.))
-                        .bg(p.paper)
+                        // the dialogs' card, as ⌘K and the sketch seen larger have it
+                        .bg(p.card)
                         .border_1()
                         .border_color(p.rule)
                         .shadow(ui::modal_shadow(&p))

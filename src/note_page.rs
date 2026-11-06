@@ -4232,7 +4232,8 @@ impl NotePage {
                             .px(px(30.))
                             .pt(px(14.))
                             .pb(px(24.))
-                            .rounded(px(14.))
+                            // a dialog's corner, as ⌘K and Export have it
+                            .rounded(px(12.))
                             .bg(p.card)
                             .border_1()
                             .border_color(p.rule)

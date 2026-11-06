@@ -1,0 +1,37 @@
+# Toasts share one stack, centred under the page: a dismissed thread and a problem each
+# get a label and never overlap; a second dismiss takes the first one's label; ⌥⌘Z
+# still undoes; a click on the problem closes it. (The pointer holding a toast is a unit
+# test in toast.rs: a `point:` hover does not outlast the window's jiggle, which puts the
+# real pointer back.)
+# fixture: running-plan
+# tags: smoke
+wait: 1500
+size: 1000x700
+dismiss: 2
+caret: end
+keys: Limit test paragraph [[error:rate_limit]]
+select: Limit test paragraph [[error:rate_limit]]
+probe
+wait: 900
+dump: stack
+expect: d.toasts.length === 2 && d.toasts.every(t => t.live)
+expect: d.toasts[0].kind === "thread_dismissed" && d.toasts[1].kind === "problem" && d.error.includes("usage limit")
+expect: d.toasts[1].bottom <= d.toasts[0].top   // the newer label sits above the older, clear of it
+expect: d.toasts.every(t => Math.abs((t.left + t.right) / 2 - 500) < 2)   // centred under the page
+shot: toasts
+set: appearance=dark
+wait: 300
+shot: toasts-dark
+set: appearance=light
+dismiss: 1
+dump: replaced
+expect: d.toasts.filter(t => t.live).length === 2 && d.undo === "t1"   // the second dismiss took the first one's label
+key: alt-cmd-z
+wait: 400
+dump: undone
+expect: d.undo === null && d.statuses.includes("t1:Open:Inkling") && !d.toasts.some(t => t.kind === "thread_dismissed")
+click: 500, 664
+wait: 400
+dump: closed
+expect: d.error === null && d.toasts.length === 0
+quit

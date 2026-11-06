@@ -1,0 +1,24 @@
+# Marks only: each thread is a small ? after its words (a × for a correction, as on its
+# tab), and the mark opens its thread and closes it again. Starts on the running plan:
+# t1 is a correction, t2 a question.
+# fixture: running-plan
+wait: 1500
+set: placement=marks
+wait: 300
+dump: marks
+expect: d.marks.length === 2 && d.marks.includes("t1:×") && d.marks.includes("t2:?")
+expect: d.slots.length === 0   // no tags in the margin until a mark is opened
+shot: marks
+set: appearance=dark
+wait: 300
+shot: marks-dark
+set: appearance=light
+mark: 2
+wait: 400
+dump: opened
+expect: d.active === "t2" && d.slots.length === 1
+mark: 2
+wait: 300
+dump: closed
+expect: d.active === null && d.slots.length === 0
+quit

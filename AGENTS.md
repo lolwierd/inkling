@@ -99,6 +99,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/import.rs` | File > Import from Obsidian…: a vault's Markdown as notes and folders, as Obsidian shows it; every imported paragraph goes in `Note.left_alone`; the vault is only read | `convert` (one note), `read_vault`, `add_to_store` |
 | `src/welcome.rs` | the first-run note "Start here": a tour with real threads, whose own paragraphs are never read (`Note.left_alone`); the writer's first sentence is probed | `first_run_note` |
 | `src/theme.rs`, `src/ui.rs`, `src/palette.rs` | colours and fonts, small widgets, ⌘K | |
+| `src/toast.rs` | every toast, in one stack at the bottom centre: a note deleted, a thread dismissed (Undo, ⌥⌘Z), a problem (ochre, closable), anything done | `show`, `Kind`, `stack`; the dump's `toasts` |
 | `src/settings.rs`, `src/settings/parts.rs` | the Settings window (its own window, ⌘,): sidebar of panes, the glass, grouped rows, the shortcut recorder, the model list from the brain's `status` | `open_window`, `Glass`, `INKLING_SETTINGS_*` |
 | `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |

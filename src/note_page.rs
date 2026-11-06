@@ -2527,6 +2527,8 @@ impl NotePage {
                         .child(
                             div()
                                 .flex_1()
+                                // let the caption wrap, so the step controls keep their room
+                                .min_w(px(0.))
                                 .font_family(t.voice_font.clone())
                                 .text_size(px(11.5))
                                 .line_height(px(15.))
@@ -3620,7 +3622,9 @@ impl Render for NotePage {
                     }
                 }
             }
-            open.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+            // reading order; threads on the same words keep the order they were made in,
+            // which is also how their tags stack in the margin
+            open.sort_by_key(|a| a.0);
             let numbers: HashMap<String, usize> = open.iter().enumerate().map(|(i, (_, id, _))| (id.clone(), i + 1)).collect();
             let mut gutter = vec![];
             for line in 1..ed.line_count() {

@@ -11,6 +11,11 @@ Scripts that made the directions board. Run from this folder.
 - `index.src.html` + `build_index.py`: the overview page; the build inlines the three
   wordmarks so they follow the page's theme toggle. Edit the source, then
   `python3 build_index.py`.
+- `logo_directions.py`: thirteen logo directions in the Loose Threads language, drawn from
+  the app's own stitch geometry and palettes, with letters outlined from
+  `assets/fonts/FrauncesDisplay-Medium.ttf`. `uv run logo_directions.py` writes
+  `../logo/<nn-name>/{wordmark,mark,icon,icon-dark}.svg`, then the review page
+  `../logo/index.html` through `logo_page.py` and its template `logo_page.src.html`.
 - `phone.html`: headless Chrome will not make a window narrower than 500 px, so phone
   checks load a page in a 390 px iframe:
   `phone.html?src=<url-encoded file url>&h=844`, run with

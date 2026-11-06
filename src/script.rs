@@ -18,7 +18,8 @@
 //! ```
 //!
 //! `wait: ms` waits on the clock. `settle` waits until the page has nothing scheduled
-//! or in flight (no pause pending, no read, no thread or chat request, not typing), up
+//! or in flight (no pause pending, no read, no thread or chat request, not typing, no
+//! `import:` still reading its vault), up
 //! to `settle: ms` (default 20000); prefer it after typing or asking, so a run does not
 //! depend on how busy the machine is.
 //!
@@ -62,6 +63,8 @@
 //! ```text
 //! clear                     # Clear in the chat panel
 //! switch: Other note title  # open another note, as the sidebar does
+//! import: ../fixtures/vault # File > Import from Obsidian… with this folder; a relative
+//!                           # path starts at the script's own folder
 //! set: pace=slow            # pace=regular|slow, placement=both|right|marks,
 //!                           # learn=on|off, mode=thinks|ask (new notes)
 //! width: 900                # resize the window to this width
@@ -113,6 +116,8 @@ pub enum Step {
     MakeNote(usize),
     ClearChat,
     Switch(String),
+    /// Import a vault, as File > Import from Obsidian… does once a folder is picked.
+    Import(String),
     Set(String, String),
     Width(f32),
     Dump(String),
@@ -183,6 +188,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "makenote" => Step::MakeNote(n()),
                 "clear" => Step::ClearChat,
                 "switch" => Step::Switch(arg),
+                "import" => Step::Import(arg),
                 "set" => {
                     let Some((k, v)) = arg.split_once('=') else {
                         log::warn!("script: set needs `key=value`: {l:?}");
@@ -230,6 +236,21 @@ pub fn parse(src: &str) -> Vec<Step> {
         .collect()
 }
 
+/// A path a step names, such as `import:`'s folder, for the script now playing.
+pub fn path(arg: &str) -> std::path::PathBuf {
+    path_from(arg, std::env::var_os("INKLING_SCRIPT").as_deref().map(std::path::Path::new))
+}
+
+/// A relative path starts at the script's own folder, so a scenario can name a fixture
+/// beside it, wherever it is run from.
+fn path_from(arg: &str, script: Option<&std::path::Path>) -> std::path::PathBuf {
+    let path = std::path::Path::new(arg);
+    match script.and_then(std::path::Path::parent) {
+        Some(dir) if path.is_relative() => dir.join(path),
+        _ => path.to_path_buf(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,5 +293,15 @@ mod tests {
                 Step::Settle(500),
             ]
         );
+    }
+
+    #[std::prelude::v1::test]
+    fn import_names_a_folder_beside_the_script() {
+        assert_eq!(parse("import: ../fixtures/my vault\n"), vec![Step::Import("../fixtures/my vault".into())]);
+        let script = std::path::Path::new("brain/test/e2e/scenarios/u04.txt");
+        assert_eq!(path_from("../fixtures/v", Some(script)), std::path::Path::new("brain/test/e2e/scenarios/../fixtures/v"));
+        assert_eq!(path_from("/abs/v", Some(script)), std::path::Path::new("/abs/v"));
+        assert_eq!(path_from("v", None), std::path::Path::new("v"));
+        assert_eq!(path_from("v", Some(std::path::Path::new("bare.txt"))), std::path::Path::new("v"));
     }
 }

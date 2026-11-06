@@ -41,7 +41,7 @@ launch. Notes are JSON files in `~/Library/Application Support/Inkling/`.
 | First run | A new notebook asks for one sentence about something you are working on; the first question is about your own words. |
 | Tell Inkling | A per-note brief it keeps in mind. |
 | About you | A short profile every note starts with; optionally learned from what you say. |
-| Notes | Sidebar, folders, ⌘K find or start, ⌘⌫ delete, copy as Markdown (⌘⇧C), export Markdown / Word / HTML with the threads under their paragraphs (⌘⇧E), hide threads (⌘⇧.). |
+| Notes | Sidebar, folders, ⌘K find or start, ⌘⌫ delete, copy as Markdown (⌘⇧C), export Markdown / Word / HTML with the threads under their paragraphs (⌘⇧E), hide threads (⌘⇧.), File > Import from Obsidian… (a vault's notes and folders, left unread). |
 | Voice | Hold ⌥ to dictate (macOS speech recognition). |
 | Settings | ⌘, opens a Settings window: Reading, Appearance, Minds, About you, Model, Shortcuts, Help. Changes show in the note as you make them. |
 | Shortcuts | Every key is yours to change, the editor's included: click keys to record new ones, add or remove keys, clashes are flagged on both rows, reset one or all. New keys work at once, in the note and the menu bar. |
@@ -88,7 +88,7 @@ commands (checks, scenarios with expectations, the page state as JSON, screensho
 | `INKLING_SETTINGS_SEARCH=<text>` | Fill the shortcut search. |
 | `FAKE_MODELS=none` | The fake brain reports no model list (by default it reports the list the real SDK gave, `brain/test/fixtures/supported-models.json`). |
 
-`cargo test` covers the editor, margin placement, the rope, drawings, export, the store and the page's reading rules; `cd brain && bun test test/` covers the sidecar.
+`cargo test` covers the editor, margin placement, the rope, drawings, export, the store, Obsidian import and the page's reading rules; `cd brain && bun test test/` covers the sidecar.
 
 ## Notes
 

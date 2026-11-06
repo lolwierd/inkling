@@ -35,6 +35,7 @@ gpui_kit::actions!(
         UndoDismiss,
         CloseOverlay,
         ShowWelcome,
+        ImportObsidian,
     ]
 );
 
@@ -60,6 +61,8 @@ pub fn init(cx: &mut App) {
                 MenuItem::separator(),
                 MenuItem::action("Copy This Note", CopyNote),
                 MenuItem::action("Export This Note…", ExportNote),
+                MenuItem::separator(),
+                MenuItem::action("Import from Obsidian…", ImportObsidian),
             ],
             disabled: false,
         },
@@ -445,7 +448,7 @@ impl AppView {
                     let started = std::time::Instant::now();
                     loop {
                         cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
-                        let Ok(settled) = this.update_in(cx, |app, _, cx| app.page.read(cx).settled()) else { return };
+                        let Ok(settled) = this.update_in(cx, |app, _, cx| app.page.read(cx).settled() && !crate::import::importing()) else { return };
                         if settled {
                             log::info!("script: settled after {} ms", started.elapsed().as_millis());
                             break;
@@ -491,6 +494,7 @@ impl AppView {
                 self.export = None;
             }
             Step::Quit => cx.quit(),
+            Step::Import(dir) => self.import_vault(crate::script::path(dir), cx),
             _ => self.page.update(cx, |p, cx| p.script_step(&step, window, cx)),
         }
         cx.notify();
@@ -828,6 +832,27 @@ impl AppView {
         })
         .detach();
         cx.notify();
+    }
+
+    /// File > Import from Obsidian…: pick a vault folder and bring its notes in.
+    fn choose_vault(&mut self, cx: &mut Context<Self>) {
+        let options = PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some("Import".into()) };
+        let rx = cx.prompt_for_paths(options);
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = rx.await else { return };
+            let Some(vault) = paths.into_iter().next() else { return };
+            let _ = this.update(cx, |this, cx| this.import_vault(vault, cx));
+        })
+        .detach();
+    }
+
+    fn import_vault(&mut self, vault: std::path::PathBuf, cx: &mut Context<Self>) {
+        let import = crate::import::import(vault, cx);
+        cx.spawn(async move |this, cx| {
+            let message = import.await;
+            let _ = this.update(cx, |this, cx| this.toast(&message, cx));
+        })
+        .detach();
     }
 
     /// The export dialog takes the keyboard, so typing does not go into the note behind it.
@@ -1424,6 +1449,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &DismissThread, _, cx| this.page.update(cx, |p, cx| p.dismiss_active(cx))))
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
+            .on_action(cx.listener(|this, _: &ImportObsidian, _, cx| this.choose_vault(cx)))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_mouse_move(cx.listener(Self::on_pointer))
             .child(div().flex_1().min_h(px(0.)).child(self.page.clone()))

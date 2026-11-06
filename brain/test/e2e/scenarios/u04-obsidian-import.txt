@@ -1,0 +1,34 @@
+# File > Import from Obsidian…, without the folder picker: a vault's notes and folders come
+# in as Obsidian shows them, and none of their words are read; only what is written after
+# the import is. The vault also holds what must stay behind: .obsidian/, .trash/, an
+# Excalidraw drawing, a canvas and an image.
+wait: 1500
+import: ../fixtures/obsidian-vault
+settle
+switch: Inkling design
+settle
+dump: opened
+expect: log.some(r => r.msg === "import: Imported 4 notes from obsidian-vault")
+expect: d.note.title === "Inkling design" && d.left_alone > 20 && d.read_hashes === 0 && d.threads.length === 0
+# Enter leaves the imported item above as it was: the pause looks at it too, and skips it
+caret: end
+keys: \nThe import must never cost a model call for words that were already there.
+settle
+dump: written
+expect: d.threads.length === 1 && d.threads[0].quote === "The import must"   // the fake brain quotes the first three words
+expect: tasks.join() === "read" && requests[0].input.target === "The import must never cost a model call for words that were already there."
+# again: the note just written in comes in beside the old one; the rest are already here
+import: ../fixtures/obsidian-vault
+settle
+switch: 2026-11-06
+settle
+dump: daily
+expect: log.some(r => r.msg === "import: Imported 1 note from obsidian-vault; 3 already here")
+expect: d.note.title === "2026-11-06" && d.left_alone === 4 && d.read_hashes === 0   // no # heading: the file name
+expect: textOf(note("2026-11-06")) === "2026-11-06\n#daily\nMet Sam about the import.\nNext: try it on a real vault.\n[ ] Ask about tags"   // a line each, as Obsidian shows them
+expect: folders.map(f => f.name).join() === "Daily,Projects,Projects / Archive" && folders.every(f => f.collapsed)   // a folder before the ones inside it
+expect: note("Old plan").folder === folders.find(f => f.name === "Projects / Archive").id && note("Rate limiter").folder === folders.find(f => f.name === "Projects").id
+expect: notes.length === 6 && !notes.some(n => /must never be imported|A drawing, not a note/.test(textOf(n)))   // the tour, four notes, one again
+expect: notes.filter(n => n.title !== "Start here" && !textOf(n).includes("must never cost")).every(n => n.read_hashes.length === 0 && n.left_alone.length === new Set(n.blocks.slice(1).map(b => b.text.trim()).filter(Boolean)).size)
+expect: notes.filter(n => n.title === "Inkling design").every(n => textOf(n).includes("\nThe look is Loose Threads; the data lives in the store, one JSON file per note.\n") && !textOf(n).includes("margin sketch") && textOf(n).includes('\n    println!("**not bold**, [[not a link]]");\n'))
+quit

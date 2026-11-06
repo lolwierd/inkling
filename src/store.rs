@@ -293,6 +293,105 @@ pub struct Thread {
     pub tag_offset: (f32, f32),
     #[serde(default)]
     pub created_at: DateTime<Utc>,
+    /// Why you let it stand, in your words: one line, at most [`REASON_MAX`] characters,
+    /// from the tag's box when you chose Let stand, or written later on the back of the
+    /// note. Only a mind's point that was let stand has one; it goes when the thread opens
+    /// again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// When it was tied off or dismissed; cleared when it opens again. Threads that ended
+    /// before this field existed have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<DateTime<Utc>>,
+    /// The words the thread was opened on, kept the first time its words change (you edit
+    /// them; Fix the words reads them again). `quote` is always the words now. None while
+    /// the words never changed, and for threads whose words changed before this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_quote: Option<String>,
+}
+
+/// The most characters a reason for letting a point stand keeps.
+pub const REASON_MAX: usize = 200;
+
+/// How a thread ended, as the back of the note and the minds see it. Worked out from the
+/// status and the kind, never stored, so it can grow without breaking older builds (a
+/// status value an older build does not know would drop the whole note there).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Ending {
+    Open,
+    TiedOff,
+    LetStand,
+    Snipped,
+}
+
+impl Ending {
+    /// The ending as the back of the note writes it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Ending::Open => "Still open",
+            Ending::TiedOff => "Tied off",
+            Ending::LetStand => "Let stand",
+            Ending::Snipped => "Snipped",
+        }
+    }
+}
+
+impl Thread {
+    /// A point a mind raised on its own: a question or a correction (reading along, Find a
+    /// loose thread). Only these are let stand; dismissing anything else snips it.
+    pub fn is_point(&self) -> bool {
+        matches!(self.kind, ThoughtKind::Question | ThoughtKind::Correction)
+    }
+
+    /// Open is still open, Resolved is tied off, and Dismissed is let stand on a point and
+    /// snipped on anything else.
+    pub fn ending(&self) -> Ending {
+        match self.status {
+            ThreadStatus::Open => Ending::Open,
+            ThreadStatus::Resolved => Ending::TiedOff,
+            ThreadStatus::Dismissed if self.is_point() => Ending::LetStand,
+            ThreadStatus::Dismissed => Ending::Snipped,
+        }
+    }
+
+    /// Change the status: tied off or dismissed stamps when it ended; open again clears
+    /// that and the reason. Setting the status it already has changes nothing.
+    pub fn set_status(&mut self, status: ThreadStatus) {
+        if status == self.status {
+            return;
+        }
+        self.status = status;
+        if status == ThreadStatus::Open {
+            self.ended_at = None;
+            self.reason = None;
+        } else {
+            self.ended_at = Some(Utc::now());
+        }
+    }
+
+    /// The words the thread is on now. The first time they change, the words it was
+    /// opened on are kept in `first_quote`.
+    pub fn set_quote(&mut self, words: &str) {
+        if words == self.quote {
+            return;
+        }
+        if self.first_quote.is_none() {
+            self.first_quote = Some(std::mem::take(&mut self.quote));
+        }
+        self.quote = words.to_string();
+    }
+
+    /// The words it was opened on.
+    pub fn words_before(&self) -> &str {
+        self.first_quote.as_deref().unwrap_or(&self.quote)
+    }
+
+    /// Your reason as one line: line breaks and runs of spaces fold to single spaces, and
+    /// it is cut to [`REASON_MAX`] characters. Nothing but spaces clears it.
+    pub fn set_reason(&mut self, text: &str) {
+        let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        self.reason = (!line.is_empty()).then(|| line.chars().take(REASON_MAX).collect());
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -1444,5 +1543,108 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
         assert!(md.contains("}\n```\n\n[under 11]\n\nAfter."), "{md}");
         // a block with no words is left out
         assert_eq!(plain_text_of(&[block(BlockKind::Title, "T"), block(rust, " "), block(BlockKind::Callout(Callout::Tip), "")]), "");
+    }
+
+    /// A thread on `quote` as it would be saved, of `kind` and `status`.
+    fn a_thread(quote: &str, kind: ThoughtKind, status: ThreadStatus) -> Thread {
+        Thread {
+            id: new_id(),
+            start: 0,
+            end: quote.len(),
+            quote: quote.into(),
+            kind,
+            messages: vec![Message::new(Role::Mind, "Why?")],
+            drawing: None,
+            status,
+            side: Side::Right,
+            mind_name: "Inkling".into(),
+            tag_offset: (0., 0.),
+            created_at: Utc::now(),
+            reason: None,
+            ended_at: None,
+            first_quote: None,
+        }
+    }
+
+    #[std::prelude::v1::test]
+    fn old_threads_load_without_the_new_fields() {
+        let old = r#"{"id": "a", "quote": "four days a week", "kind": "question", "status": "dismissed"}"#;
+        let t: Thread = serde_json::from_str(old).unwrap();
+        assert_eq!((t.reason.as_deref(), t.ended_at, t.first_quote.as_deref()), (None, None, None));
+        assert_eq!(t.ending(), Ending::LetStand);
+        // saved again, it gains no nulls: an older build reads the same file it wrote
+        let saved = serde_json::to_value(&t).unwrap();
+        for field in ["reason", "ended_at", "first_quote"] {
+            assert!(saved.get(field).is_none(), "{field} was written as {saved}");
+        }
+        // and the fields come back once they are set
+        let mut t = t;
+        t.set_reason("Pace is the problem.");
+        t.ended_at = Some(Utc::now());
+        t.set_quote("five days a week");
+        let back: Thread = serde_json::from_value(serde_json::to_value(&t).unwrap()).unwrap();
+        assert_eq!(back.reason.as_deref(), Some("Pace is the problem."));
+        assert_eq!(back.ended_at, t.ended_at);
+        assert_eq!((back.first_quote.as_deref(), back.quote.as_str()), (Some("four days a week"), "five days a week"));
+    }
+
+    #[std::prelude::v1::test]
+    fn endings_follow_status_and_kind() {
+        use ThoughtKind::*;
+        for kind in [Question, Correction] {
+            assert_eq!(a_thread("q", kind, ThreadStatus::Dismissed).ending(), Ending::LetStand);
+            assert!(a_thread("q", kind, ThreadStatus::Open).is_point());
+        }
+        for kind in [Ask, Sketch, Answer] {
+            assert_eq!(a_thread("q", kind, ThreadStatus::Dismissed).ending(), Ending::Snipped);
+            assert!(!a_thread("q", kind, ThreadStatus::Open).is_point());
+        }
+        assert_eq!(a_thread("q", Ask, ThreadStatus::Resolved).ending(), Ending::TiedOff);
+        assert_eq!(a_thread("q", Question, ThreadStatus::Open).ending(), Ending::Open);
+        assert_eq!(
+            [Ending::Open, Ending::TiedOff, Ending::LetStand, Ending::Snipped].map(Ending::label),
+            ["Still open", "Tied off", "Let stand", "Snipped"]
+        );
+    }
+
+    #[std::prelude::v1::test]
+    fn set_status_stamps_and_clears() {
+        let mut t = a_thread("q", ThoughtKind::Question, ThreadStatus::Open);
+        t.set_status(ThreadStatus::Dismissed);
+        t.set_reason("Deliberate.");
+        let stamped = t.ended_at.expect("dismissing stamps when it ended");
+        // the same status again keeps the stamp
+        t.set_status(ThreadStatus::Dismissed);
+        assert_eq!(t.ended_at, Some(stamped));
+        // open again: no date, no reason
+        t.set_status(ThreadStatus::Open);
+        assert_eq!((t.ended_at, t.reason.as_deref()), (None, None));
+        t.set_status(ThreadStatus::Resolved);
+        assert!(t.ended_at.is_some(), "tying off stamps it too");
+        assert_eq!(t.status, ThreadStatus::Resolved);
+    }
+
+    #[std::prelude::v1::test]
+    fn set_quote_keeps_the_first_words() {
+        let mut t = a_thread("hold 5:30", ThoughtKind::Correction, ThreadStatus::Open);
+        t.set_quote("hold 5:30");
+        assert_eq!(t.first_quote, None, "the same words are no change");
+        assert_eq!(t.words_before(), "hold 5:30");
+        t.set_quote("hold 5:00");
+        t.set_quote("hold 4:55");
+        assert_eq!((t.words_before(), t.quote.as_str()), ("hold 5:30", "hold 4:55"));
+        assert_eq!(t.first_quote.as_deref(), Some("hold 5:30"), "later changes keep the first words");
+    }
+
+    #[std::prelude::v1::test]
+    fn set_reason_is_one_line() {
+        let mut t = a_thread("q", ThoughtKind::Question, ThreadStatus::Dismissed);
+        t.set_reason("  Pace is\nthe   problem.\t ");
+        assert_eq!(t.reason.as_deref(), Some("Pace is the problem."));
+        // cut by characters, never inside one
+        t.set_reason(&"é".repeat(REASON_MAX + 40));
+        assert_eq!(t.reason.as_ref().map(|r| r.chars().count()), Some(REASON_MAX));
+        t.set_reason(" \n ");
+        assert_eq!(t.reason, None);
     }
 }

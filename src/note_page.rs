@@ -688,7 +688,7 @@ impl NotePage {
                 t.start = a.range.start;
                 t.end = a.range.end;
                 if !a.range.is_empty() && a.range.end <= text.len() {
-                    t.quote = text[a.range.clone()].to_string();
+                    t.set_quote(&text[a.range.clone()]);
                 }
             }
         }
@@ -1005,7 +1005,7 @@ impl NotePage {
                 page.rechecking.remove(&tid);
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
                 if let Some(t) = page.thread_mut(&tid) {
-                    t.quote = now_text.clone();
+                    t.set_quote(&now_text);
                 }
                 if !body.is_empty() {
                     page.push_message(&tid, Role::Mind, body, cx);
@@ -1445,6 +1445,9 @@ impl NotePage {
             mind_name: self.mind.name.clone(),
             tag_offset: (0., 0.),
             created_at: Utc::now(),
+            reason: None,
+            ended_at: None,
+            first_quote: None,
         });
         self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.clone(), range, open: true }, cx));
         self.schedule_save(cx);
@@ -1733,7 +1736,7 @@ impl NotePage {
         }
         crate::toast::close(cx, crate::toast::Kind::ThreadDismissed);
         if let Some(t) = self.thread_mut(&id) {
-            t.status = ThreadStatus::Open;
+            t.set_status(ThreadStatus::Open);
         }
         self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.clone(), range, open: true }, cx));
         self.snipped.clear();
@@ -1858,7 +1861,7 @@ impl NotePage {
                 }
                 if v["resolved"].as_bool() == Some(true) {
                     if let Some(t) = page.thread_mut(&tid) {
-                        t.status = ThreadStatus::Resolved;
+                        t.set_status(ThreadStatus::Resolved);
                     }
                     let id = tid.clone();
                     page.editor.update(cx, |e, cx| e.set_anchor_open(&id, false, cx));
@@ -1884,7 +1887,7 @@ impl NotePage {
 
     fn set_status(&mut self, id: &str, status: ThreadStatus, cx: &mut Context<Self>) {
         if let Some(t) = self.thread_mut(id) {
-            t.status = status;
+            t.set_status(status);
         }
         // A dismissed thread will never show its answer: stop asking for it.
         if status == ThreadStatus::Dismissed {
@@ -2473,6 +2476,7 @@ impl NotePage {
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
                 "quote": t.quote, "msgs": t.messages.len(), "drawing": t.drawing.is_some(),
+                "ending": format!("{:?}", t.ending()), "reason": t.reason, "before": t.first_quote,
             })).collect::<Vec<_>>(),
             "anchors": ed.anchors().iter().map(|a| json!({"id": short(&a.id), "range": [a.range.start, a.range.end], "open": a.open})).collect::<Vec<_>>(),
             "read_hashes": self.note.read_hashes.len(),

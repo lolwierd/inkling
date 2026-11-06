@@ -30,6 +30,7 @@ pub enum Token {
     Punct,
 }
 
+#[cfg(test)]
 impl Token {
     pub const ALL: [Token; 7] = [Token::Keyword, Token::String, Token::Number, Token::Comment, Token::Type, Token::Macro, Token::Punct];
 }
@@ -278,11 +279,6 @@ fn syntax(lang: Lang) -> Option<&'static Syntax> {
         "lua" => &LUA,
         _ => return None,
     })
-}
-
-/// Whether the lexer knows `lang` (anything else is set in plain ink).
-pub fn knows(lang: Lang) -> bool {
-    syntax(lang).is_some()
 }
 
 // ----- the lexer -----------------------------------------------------------------------
@@ -629,7 +625,7 @@ mod tests {
         // languages it does not know are plain, and so is no language at all
         assert!(toks("brainfuck", &["+++."])[0].is_empty());
         assert!(toks("", &["fn main() {}"])[0].is_empty());
-        assert!(knows(Lang::new("RS")) && !knows(Lang::new("")));
+        assert!(syntax(Lang::new("RS")).is_some() && syntax(Lang::new("")).is_none());
         // never a panic on odd text: unclosed things, multibyte characters
         for line in ["'", "r#\"", "\"\\", "/*", "#[", "${", "é'à'", "0x", ".5", "@", "$", "'\\u{2019"] {
             for lang in ["rust", "python", "js", "go", "sql", "bash", "json", "css", "c"] {

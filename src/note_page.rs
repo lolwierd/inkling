@@ -4058,27 +4058,36 @@ impl NotePage {
                             .keyed_as("tag:dismiss", 4., thread_color, cx, move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx)),
                     )
                     .children((thread.own && !tied).then(|| self.own_ask_button(&id, thread_color, cx)))
-                    .child(div().flex_1())
-                    .child(
-                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
-                            .keyed_as("tag:note", 4., thread_color, cx, move |this, _, cx| this.make_note_from_thread(&id_note, cx)),
-                    )
-                    // Copy is the least used of the four: an icon, so the row fits a margin
+                    // Make a note and Copy go together, at the row's right end: on its first
+                    // line when they fit (they do in a 250 px margin, Let stand and all), else
+                    // together on a second line, still at the right; never the icon alone
                     .child(
                         div()
-                            .id(SharedString::from(format!("copy-{id_copy}")))
-                            .cursor_pointer()
-                            .p(px(2.))
-                            .rounded(px(4.))
-                            .hover(move |s| s.bg(p.hover))
-                            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
-                            // a tick where the pointer is, the words in the toasts (the row has no room)
-                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
-                            .keyed_as("tag:copy", 4., thread_color, cx, move |this, _, cx| {
-                                let text = this.copy_text(&id_copy, cx);
-                                cx.write_to_clipboard(ClipboardItem::new_string(text));
-                                this.show_copied(&id_copy, cx);
-                            }),
+                            .ml_auto()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
+                                    .keyed_as("tag:note", 4., thread_color, cx, move |this, _, cx| this.make_note_from_thread(&id_note, cx)),
+                            )
+                            // Copy is the least used of the four: an icon, so the row fits a margin
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("copy-{id_copy}")))
+                                    .cursor_pointer()
+                                    .p(px(2.))
+                                    .rounded(px(4.))
+                                    .hover(move |s| s.bg(p.hover))
+                                    .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
+                                    // a tick where the pointer is, the words in the toasts (the row has no room)
+                                    .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
+                                    .keyed_as("tag:copy", 4., thread_color, cx, move |this, _, cx| {
+                                        let text = this.copy_text(&id_copy, cx);
+                                        cx.write_to_clipboard(ClipboardItem::new_string(text));
+                                        this.show_copied(&id_copy, cx);
+                                    }),
+                            ),
                     ),
             );
         }

@@ -836,7 +836,8 @@ impl SettingsView {
                         .child(div().text_size(px(ts::UI)).text_color(p.ink).child(label))
                         .child(div().text_size(px(ts::META)).text_color(p.faint).child(hint)),
                 )
-                .child(div().mt(px(6.)).px(px(if pads_itself { 0. } else { 12. })).py(px(6.)).rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(ts::UI)).child(input))
+                // the text area pads itself by 10 px: 2 more lines its words up with the fields'
+                .child(div().mt(px(6.)).px(px(if pads_itself { 2. } else { 12. })).py(px(6.)).rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(ts::UI)).child(input))
                 .into_any_element()
         };
         let mut voices = segmented(&t);
@@ -950,8 +951,15 @@ impl SettingsView {
             }
         });
         let account_detail = std::iter::once(status).chain(limit_line).chain(last_error.map(|e| format!("Last error: {e}"))).collect::<Vec<_>>().join("\n");
+        // The dot says how Claude is, with the words beside it: sage once it answers,
+        // ochre (as a problem's toast) when the brain is not running, quiet while it starts.
+        let state_dot = match (&state, &account) {
+            (BrainState::Failed(_), _) => ink_color(InkColor::Orange, &t.p),
+            (_, Some(_)) | (BrainState::Ready, _) => ink_color(InkColor::Green, &t.p),
+            (BrainState::Starting, None) => t.p.faint,
+        };
         let claude = row(
-            div().flex().items_center().gap(px(7.)).child(ui::small_dot(t.voice_ink, 6.)).child("Claude"),
+            div().flex().items_center().gap(px(7.)).child(ui::small_dot(state_dot, 6.)).child("Claude"),
             Some(account_detail.into()),
             parts::push_button("check-status", "Check again", &t).keyed_as("settings:check-status", 7., t.voice_ink, cx, |_, _, cx| {
                 Brain::global(cx).update(cx, |b, cx| b.check_status(cx));

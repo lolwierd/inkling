@@ -124,7 +124,7 @@ fn mark_glyph(th: &Thread) -> &'static str {
 }
 
 /// `text` as a title of at most `max` characters: whole words, then an ellipsis.
-fn short_title(text: &str, max: usize) -> String {
+pub(crate) fn short_title(text: &str, max: usize) -> String {
     let text = text.trim();
     if text.chars().count() <= max {
         return text.to_string();
@@ -4312,24 +4312,26 @@ impl Render for NotePage {
                 let id = th.id.clone();
                 let color = color_of(&th.mind_name);
                 let glyph = if th.status == ThreadStatus::Resolved {
-                    div().size(px(6.)).rounded_full().bg(color).into_any_element()
+                    div().size(px(5.)).rounded_full().bg(color).into_any_element()
                 } else {
                     mark_glyph(th).into_any_element()
                 };
+                // Set as a superscript: small, raised above the x-height, in the space
+                // after the words, so it never sits on the next word's letters.
                 marks.push(
                     div()
                         .id(SharedString::from(format!("mark-{id}")))
                         .absolute()
-                        .top(last.origin.y + px(1.))
-                        .left(px(m.column_left()) + last.origin.x + last.size.width + px(1.))
-                        .h(px(18.))
-                        .px(px(3.))
+                        .top(last.origin.y - px(1.))
+                        .left(px(m.column_left()) + last.origin.x + last.size.width - px(1.))
+                        .h(px(14.))
+                        .px(px(2.))
                         .flex()
                         .items_center()
-                        .rounded(px(4.))
+                        .rounded(px(3.))
                         .font_family(SANS)
-                        .text_size(px(ts::UI))
-                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_size(px(ts::META))
+                        .font_weight(FontWeight::BOLD)
                         .text_color(color)
                         .cursor_pointer()
                         .hover(move |s| s.bg(p.hover))

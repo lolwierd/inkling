@@ -1505,9 +1505,10 @@ impl AppView {
                         .shadow(ui::modal_shadow(&p))
                         .font_family(SANS)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        // a long title is cut at a word inside its quotation marks, which both stay
                         .child(div().text_size(px(ts::TITLE)).text_color(p.ink).truncate().child(format!(
                             "Export \u{201c}{}\u{201d}",
-                            if title.trim().is_empty() { "Untitled".to_string() } else { title }
+                            if title.trim().is_empty() { "Untitled".to_string() } else { crate::note_page::short_title(&title, 42) }
                         )))
                         .child(
                             div()

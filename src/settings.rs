@@ -119,9 +119,9 @@ fn over_limit(text: &str) -> Option<String> {
 
 /// Effort levels offered when Claude Code has not said which a model takes.
 /// Under Look things up on the web: what leaves the Mac, and roughly what it costs.
-/// Measured 7 Nov 2026 (Opus 5.5, low effort): about $1.55 a read that searched, $0.03 one
-/// that did not; the search results fill the model's context.
-const LOOK_UP_NOTE: &str = "Searches built from your note go out through Claude, and Inkling opens any page it cites to check the quote. A read that searches uses about 50 times what one that doesn\u{2019}t (about $1.60 against $0.03 at API prices) and takes about 25 seconds; most reads don\u{2019}t search.";
+/// Measured 7 Nov 2026 (Opus 5.5, low effort): about $1.55 a call that searched, $0.03 one
+/// that did not; the search results fill the model's context. Only what you ask searches.
+const LOOK_UP_NOTE: &str = "Inkling can look things up on the web for what you ask it; reading along never does. Searches built from your note go out through Claude, and Inkling opens any page it cites to check the quote. A question that searches takes longer, about 25 seconds, and uses much more of your plan, about as much as fifty that don\u{2019}t.";
 
 const USUAL_EFFORTS: [&str; 3] = ["low", "medium", "high"];
 

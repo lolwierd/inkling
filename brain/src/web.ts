@@ -7,8 +7,12 @@
 
 import { findQuote } from "./output.ts";
 
-/** The tasks that may look things up when the web is on; sketches, drawings and learning never do. */
-export const WEB_TASKS: ReadonlySet<string> = new Set(["read", "probe", "ask", "answer", "reply", "chat"]);
+/**
+ * The tasks that may look things up when the web is on: only what the writer asked for (a
+ * probe, an ask, a mind called by name, a reply, chat). Reading along at a pause never
+ * does, nor do sketches, drawings, learning or relating notes.
+ */
+export const WEB_TASKS: ReadonlySet<string> = new Set(["probe", "ask", "answer", "reply", "chat"]);
 
 /** A search result the model saw in this call. */
 export interface Found {

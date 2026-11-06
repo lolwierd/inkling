@@ -15,6 +15,17 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * A call that could look things up spent its cap (`WEB_BUDGET_USD`) or its turns before
+ * answering. The brain answers again without the web, so it ends as an answer (a question,
+ * for a correction it could not back), never as an error. `spentUsd` is what it cost.
+ */
+export class WebSpent extends ProviderError {
+  constructor(message: string, public spentUsd: number) {
+    super("other", message);
+  }
+}
+
 export interface LimitInfo {
   status: string;
   resetsAt?: number;
@@ -63,6 +74,11 @@ const STRUCTURED_TURNS = 3;
 const WEB_TURNS = 8;
 /** The SDK's own tools for looking things up; nothing else is ever turned on. */
 export const WEB_TOOLS = ["WebSearch", "WebFetch"];
+/**
+ * The most a call that can look things up may spend, in USD at API prices: one search with
+ * its answer measured about $1.55 on 7 Nov 2026 (Opus 5.5), so this leaves room for one.
+ */
+export const WEB_BUDGET_USD = 2.5;
 
 function baseOptions(system: string, settings: RunSettings, signal: AbortController, web = false): Options {
   const opts: Options = {
@@ -70,6 +86,7 @@ function baseOptions(system: string, settings: RunSettings, signal: AbortControl
     tools: web ? WEB_TOOLS : [],
     // Allowed without asking: there is nobody to ask, and these two only read the web.
     allowedTools: web ? WEB_TOOLS : [],
+    ...(web ? { maxBudgetUsd: WEB_BUDGET_USD } : {}),
     settingSources: [],
     maxTurns: web ? WEB_TURNS : 1,
     persistSession: false,
@@ -124,6 +141,7 @@ async function drain(
   structured: boolean,
   onDelta?: (t: string) => void,
   onLimit?: (l: LimitInfo) => void,
+  web = false,
 ): Promise<Drained> {
   let model: string | undefined;
   let streamed = "";
@@ -180,6 +198,10 @@ async function drain(
         if (r.subtype !== "success" || r.is_error) {
           const errors = Array.isArray(r.errors) ? r.errors.filter(Boolean).join("; ") : "";
           const msg = String(errors || r.result || r.subtype || "the model returned an error");
+          // looking things up ran past its cap or its turns: answer again without the web
+          if (web && (r.subtype === "error_max_budget_usd" || r.subtype === "error_max_turns")) {
+            throw new WebSpent(`looking it up stopped (${r.subtype}, $${Number(r.total_cost_usd ?? 0).toFixed(2)})`, Number(r.total_cost_usd ?? 0));
+          }
           throw new ProviderError(resultKind(r.subtype, assistantError, limitRejected, structured, msg), msg);
         }
         return { text: r.result ?? streamed, structured: r.structured_output, usage, found };
@@ -232,7 +254,7 @@ export async function runText(
   try {
     const opts = baseOptions(system, settings, signal, web);
     opts.includePartialMessages = Boolean(onDelta);
-    const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit);
+    const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit, web);
     return { text: out.text.trim(), usage: out.usage, found: out.found };
   } catch (e) {
     throw asProviderError(e, signal);
@@ -259,7 +281,7 @@ export async function runStructured<T>(
     // Without the web there are no other tools, so extra turns can only be those
     // retries; with it, searches and page reads take turns too.
     opts.maxTurns = web ? WEB_TURNS : STRUCTURED_TURNS;
-    const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit);
+    const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit, web);
     let data = out.structured as T | undefined;
     if (data === undefined || data === null) {
       // Fall back to parsing the text, in case the runtime returned it there.

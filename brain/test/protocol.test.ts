@@ -403,7 +403,7 @@ describe("what each task sends back", () => {
 
     test("a page a search returned, with the passage on it, backs the correction", async () => {
       const b = brain();
-      b.send(run("r", { task: "read", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: page } }) + "\n" + target), target }, web));
+      b.send(run("r", { task: "probe", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: page } }) + "\n" + target), target }, web));
       const done = await b.end("r");
       expect(done.data.kind).toBe("correction");
       expect(done.data.check.source).toEqual({ url: TOWER, title: "Eiffel Tower - Wikipedia", domain: "en.wikipedia.org", passage: "The tower is 330 metres (1,083 ft) tall" });
@@ -413,9 +413,9 @@ describe("what each task sends back", () => {
     test("a made-up URL, or a passage the page does not have, falls back to the question", async () => {
       const b = brain();
       const madeUp = "https://eiffel-facts.example/height";
-      b.send(run("r1", { task: "read", ctx: ctx(fake({ ...cite(madeUp), searches: [hit], pages: { [madeUp]: page } }) + "\n" + target), target }, web));
+      b.send(run("r1", { task: "probe", ctx: ctx(fake({ ...cite(madeUp), searches: [hit], pages: { [madeUp]: page } }) + "\n" + target), target }, web));
       expect((await b.end("r1")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
-      b.send(run("r2", { task: "read", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: "<p>Nothing about its height.</p>" } }) + "\n" + target), target }, web));
+      b.send(run("r2", { task: "probe", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: "<p>Nothing about its height.</p>" } }) + "\n" + target), target }, web));
       expect((await b.end("r2")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
       expect(b.stderr).toContain(`a source was dropped: ${madeUp} did not come back from a search in this answer`);
       expect(b.stderr).toContain(`a source was dropped: the passage is not on ${TOWER}`);
@@ -423,8 +423,23 @@ describe("what each task sends back", () => {
 
     test("with the web off, nothing was searched, so no page counts", async () => {
       const b = brain();
-      b.send(run("r", { task: "read", ctx: ctx(fake({ ...cite(TOWER), pages: { [TOWER]: page } }) + "\n" + target), target }));
+      b.send(run("r", { task: "probe", ctx: ctx(fake({ ...cite(TOWER), pages: { [TOWER]: page } }) + "\n" + target), target }));
       expect((await b.end("r")).data).toMatchObject({ kind: "question" });
+    });
+
+    test("reading along never looks things up, even with the web on", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...cite(TOWER), searches: [hit], pages: { [TOWER]: page } }) + "\n" + target), target }, web));
+      expect((await b.end("r")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
+    });
+
+    test("a call that spends its cap answers again without the web, and counts both", async () => {
+      const b = brain();
+      // the first call stops on the budget; the second (no tools) answers as a question
+      b.send(run("p", { task: "probe", ctx: ctx(fake({ resultError: { subtype: "error_max_budget_usd", isError: true }, budgetOnce: true, structured: { kind: "question", quote: "450 metres tall", text: "Where did 450 come from?", sketch: false } }) + "\n" + target), target }, web));
+      const done = await b.end("p");
+      expect(done.data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
+      expect(b.stderr).toContain("answering without the web");
     });
 
     test("in prose, a link no search returned is taken out", async () => {
@@ -440,10 +455,10 @@ describe("what each task sends back", () => {
         return b.end(id).then((e) => JSON.parse(e.data.text ?? "{}"));
       };
       const chat = await echo("c", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, web);
-      expect(chat).toMatchObject({ tools: ["WebSearch", "WebFetch"], allowedTools: ["WebSearch", "WebFetch"], maxTurns: 8 });
+      expect(chat).toMatchObject({ tools: ["WebSearch", "WebFetch"], allowedTools: ["WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: 2.5 });
       expect(chat.prompt).toContain("Link only to a page your search returned");
       const off = await echo("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, settings);
-      expect(off).toMatchObject({ tools: [], maxTurns: 1 });
+      expect(off).toMatchObject({ tools: [], maxTurns: 1, maxBudgetUsd: null });
       expect(off.prompt).not.toContain("WebSearch");
     });
   });

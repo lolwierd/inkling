@@ -45,7 +45,8 @@
 //                         quoted there (snapped onto the passage; default its first three
 //                         words), [[quote:TEXT]] the words here, [[depends]] the relation
 //   Sources from the web (only with "Look things up on the web" on, as the request's
-//   settings say), checked by the real brain's rules (src/web.ts), with no network:
+//   settings say, and only for what the writer asked for: a probe, never a read),
+//   checked by the real brain's rules (src/web.ts), with no network:
 //   [[found:URL|TITLE|PAGE TEXT]]  a search in this call returned URL; PAGE TEXT is what
 //                                  the brain finds when it opens it (repeatable)
 //   [[source:URL|PASSAGE]]         the page the correction cites, and the words it quotes:
@@ -73,7 +74,7 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { withWorking } from "../../src/working.ts";
-import { verifySource } from "../../src/web.ts";
+import { verifySource, WEB_TASKS } from "../../src/web.ts";
 
 type Any = Record<string, any>;
 
@@ -182,7 +183,8 @@ function plan(id: string, input: Any, settings: Any = {}) {
   const arg = (name: string) => ds.find((d) => d.name === name)?.arg ?? null;
   const delayDirective = arg("delay");
   const delay = delayDirective !== null ? num(delayDirective, DEFAULT_DELAY) : num(env[`FAKE_DELAY_${task.toUpperCase()}_MS`], DEFAULT_DELAY);
-  return { task, ds, has, arg, delay, web: settings?.web === true };
+  // as the real brain: only what the writer asked for may look things up, never a read
+  return { task, ds, has, arg, delay, web: settings?.web === true && WEB_TASKS.has(task) };
 }
 
 type Answer = { data?: unknown; stream?: string; error?: [string, string] };

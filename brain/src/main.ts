@@ -4,7 +4,7 @@
 // `done` or `error` event; after a cancel it is never `done`.
 
 import { createInterface } from "node:readline";
-import { accountStatus, ProviderError, runStructured, runText, type LimitInfo } from "./claude.ts";
+import { accountStatus, ProviderError, runStructured, runText, WebSpent, type LimitInfo } from "./claude.ts";
 import { cleanSvg, clip, findQuote, snapQuote } from "./output.ts";
 import {
   answerPrompt,
@@ -232,7 +232,24 @@ function nonEmpty(v: unknown, what: string): string {
 
 // ----- running tasks ------------------------------------------------------------
 
+/**
+ * A task that may look things up runs with the web; if that spends its cap or its turns,
+ * it runs again without it (one turn, no tools), so it still ends as an answer: a question,
+ * for a correction it could not back. The usage then counts both.
+ */
 async function run(id: string, settings: RunSettings, input: Task, signal: AbortController): Promise<{ data: unknown; usage: Usage }> {
+  const web = settings.web === true && WEB_TASKS.has(input.task);
+  try {
+    return await runOnce(id, settings, input, signal, web);
+  } catch (e) {
+    if (!web || !(e instanceof WebSpent) || signal.signal.aborted) throw e;
+    log(`${input.task} ${id}: ${e.message}; answering without the web`);
+    const again = await runOnce(id, settings, input, signal, false);
+    return { data: again.data, usage: { ...again.usage, costUsd: (again.usage.costUsd ?? 0) + e.spentUsd } };
+  }
+}
+
+async function runOnce(id: string, settings: RunSettings, input: Task, signal: AbortController, web: boolean): Promise<{ data: unknown; usage: Usage }> {
   if (input.task === "relate" && input.passages.length === 0) {
     // Nothing to compare with: no model call.
     return { data: { speak: false }, usage: { ms: 0 } };
@@ -244,7 +261,6 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
     return { data: { update: aboutMe.length > 0, aboutMe }, usage };
   }
   const sys = systemPrompt(input.ctx);
-  const web = settings.web === true && WEB_TASKS.has(input.task);
   // With the web on, a link no search returned is taken out; off, the words are as before.
   const links = (t: string, found: Found[]) => (web ? keepFoundLinks(t, found) : t);
   // Nothing streams to the app once a request is cancelled.
@@ -275,7 +291,7 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
       const quote = snapQuote(text(d.quote), input.target);
       // A page a correction cites counts only if this call's searches returned it and the
       // passage is on it.
-      const cites = d.kind === "correction" && isObject(d.check) && isObject(d.check.source);
+      const cites = web && d.kind === "correction" && isObject(d.check) && isObject(d.check.source);
       const cited = cites ? await verifySource((d.check as Json).source, found) : null;
       const thought = withWorking(
         { speak: true, kind: d.kind === "correction" ? "correction" : "question", quote, text: links(nonEmpty(d.text, "an empty note"), found), sketch: d.sketch === true },

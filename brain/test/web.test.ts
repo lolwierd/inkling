@@ -95,9 +95,10 @@ describe("a correction backed by a page", () => {
 });
 
 describe("which tasks may look things up", () => {
-  test("reads, probes, asks, answers, replies and chat; never sketches, drawings or learning", () => {
-    expect(["read", "probe", "ask", "answer", "reply", "chat"].every((t) => WEB_TASKS.has(t))).toBe(true);
-    expect(["sketch", "draw", "learn"].some((t) => WEB_TASKS.has(t))).toBe(false);
+  test("only what the writer asked for: probes, asks, answers, replies and chat", () => {
+    expect(["probe", "ask", "answer", "reply", "chat"].every((t) => WEB_TASKS.has(t))).toBe(true);
+    // reading along at a pause never searches, nor do sketches, drawings, learning or relating notes
+    expect(["read", "sketch", "draw", "learn", "relate"].some((t) => WEB_TASKS.has(t))).toBe(false);
   });
 });
 

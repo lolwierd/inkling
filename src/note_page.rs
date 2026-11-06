@@ -479,6 +479,8 @@ pub struct NotePage {
     /// and brings them back when the pointer moves. The page's header row follows it.
     pub chrome: Rc<std::cell::Cell<f32>>,
     enlarged: Option<String>,
+    /// The back of the note (Turn over): every thread it has had, and how each ended.
+    pub(crate) back: crate::back::Back,
     /// The thread whose Copy was just pressed, and when: it shows a tick for a moment.
     copied: Option<(String, std::time::Instant)>,
     marks_open: HashSet<String>,
@@ -600,6 +602,7 @@ impl NotePage {
             chat_pending: None,
             just_my_words: false,
             enlarged: None,
+            back: crate::back::Back::new(cx),
             copied: None,
             marks_open: HashSet::new(),
             m: Metrics::for_width(1320.),
@@ -713,6 +716,8 @@ impl NotePage {
         self.brief_input = None;
         self.show_toolbar = false;
         self.enlarged = None;
+        // another note opens on its front
+        self.back.reset();
         self.heights.borrow_mut().clear();
         self.marks_open.clear();
         self.load_into_editor(cx);
@@ -829,6 +834,17 @@ impl NotePage {
     /// the selection toolbar, and last the chat when its box has the keyboard. The
     /// keyboard goes back to the note. Returns whether anything closed.
     pub fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        // On the back: the chat when its box has the keyboard, else the reason box, else the back.
+        if self.back.shown {
+            if self.chat_open && self.chat_input.read(cx).focus_handle(cx).is_focused(window) {
+                self.chat_open = false;
+                self.back.focus.focus(window, cx);
+                cx.notify();
+            } else {
+                crate::back::escape(self, window, cx);
+            }
+            return true;
+        }
         // a tag that only unfolded under the pointer folds first
         let hover_open = self.hover_at.keys().chain(self.hover_left.keys()).any(|id| {
             self.active.as_deref() != Some(id.as_str()) && self.unfold.get(id).copied().unwrap_or(0.) > 0.5
@@ -879,6 +895,8 @@ impl NotePage {
     pub fn set_hidden(&mut self, hidden: bool, cx: &mut Context<Self>) {
         self.just_my_words = hidden;
         if hidden {
+            // hiding threads on the back turns the note to its front first
+            self.leave_back(cx);
             self.menu = None;
             self.asking = None;
             self.brief_input = None;
@@ -892,7 +910,69 @@ impl NotePage {
     /// The keyboard has nowhere to be (the box that had it went away): back to the note,
     /// the caret where it was.
     pub fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.back.shown {
+            self.back.focus.focus(window, cx);
+            return;
+        }
         self.editor.update(cx, |e, cx| e.focus(window, cx));
+    }
+
+    /// Turn over (⇧⌘B, View › Turn Over, the header's Turn over): the back of the note,
+    /// every thread it has had and how each ended (`back.rs`). Again, and it turns back.
+    /// What the front had open over the words (a menu, the question box, the toolbar, a
+    /// sketch seen larger) closes; the open tag and the caret stay for the way back.
+    pub fn turn_over(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.back.shown {
+            return self.turn_back(window, cx);
+        }
+        self.sync_from_editor(cx);
+        self.menu = None;
+        self.asking = None;
+        self.brief_input = None;
+        self.show_toolbar = false;
+        self.enlarged = None;
+        self.back.show(self.scroll.offset());
+        // the keyboard leaves the note, so nothing typed lands in it unseen
+        self.back.focus.focus(window, cx);
+        cx.notify();
+    }
+
+    /// Back to the front, scrolled as it was, with the caret where you left it.
+    pub(crate) fn turn_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.leave_back(cx);
+        self.editor.update(cx, |e, cx| e.focus(window, cx));
+    }
+
+    fn leave_back(&mut self, cx: &mut Context<Self>) {
+        if let Some(at) = self.back.hide() {
+            self.scroll.set_offset(at);
+            cx.notify();
+        }
+    }
+
+    /// From the back: turn to the front and open the thread's tag at its words, as ⌥⌘↓
+    /// does (Show on the page); `reopen` first opens a thread that ended on its words again,
+    /// found where they are now, its reason and date gone (Reopen).
+    pub(crate) fn from_back(&mut self, id: &str, reopen: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.turn_back(window, cx);
+        if self.just_my_words {
+            self.set_hidden(false, cx);
+        }
+        let anchored = self.editor.read(cx).anchors().iter().any(|a| a.id == id);
+        if reopen && !anchored {
+            let text = self.editor.read(cx).text().to_string();
+            let Some(range) = self.note.threads.iter().find(|t| t.id == id).and_then(|t| nearest_match(&text, &t.quote, t.start).map(|i| i..i + t.quote.len())) else { return };
+            // its Undo, if it was the last one dismissed, would put it back a second time
+            if self.last_dismissed.as_ref().is_some_and(|(d, _, _)| d == id) {
+                self.last_dismissed = None;
+                crate::toast::close(cx, crate::toast::Kind::ThreadDismissed);
+            }
+            self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.to_string(), range, open: true }, cx));
+        }
+        if reopen {
+            self.set_status(id, ThreadStatus::Open, cx);
+        }
+        self.show_thread(id, window, cx);
     }
 
     fn keep_cursor_visible(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1684,6 +1764,10 @@ impl NotePage {
     /// "Find a loose thread": Inkling looks for the one thing in the selection that
     /// does not hold up yet, and always asks about it.
     pub fn find_loose_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // the front is not on the sheet: nothing selected there can be asked about
+        if self.back.shown {
+            return;
+        }
         // ⌘↩ with nothing selected and a thread open: that thread is done.
         if self.editor.read(cx).selection().is_empty() {
             if let Some(id) = self.active.clone() {
@@ -1826,7 +1910,7 @@ impl NotePage {
 
     /// Dismiss the open thread from the keyboard (⌘⇧⌫).
     pub fn dismiss_active(&mut self, cx: &mut Context<Self>) {
-        if let Some(id) = self.active.clone() {
+        if let Some(id) = self.active.clone().filter(|_| !self.back.shown) {
             self.set_status(&id, ThreadStatus::Dismissed, cx);
         }
     }
@@ -2437,6 +2521,8 @@ impl NotePage {
             Step::Escape => {
                 self.escape(window, cx);
             }
+            Step::Turn => self.turn_over(window, cx),
+            Step::BackReason(..) | Step::BackReopen(_) | Step::BackShow(_) => crate::back::script_step(self, step, window, cx),
             Step::Resolve(n) | Step::Reopen(n) | Step::Dismiss(n) | Step::Mark(n) | Step::Copy(n) | Step::MakeNote(n) | Step::Retry(n) => {
                 let Some(id) = self.nth_thread(*n) else {
                     log::warn!("script: no thread {n}");
@@ -2678,6 +2764,8 @@ impl NotePage {
         state["lets_stand"] = json!(self.active.as_ref().and_then(|a| self.note.threads.iter().find(|t| &t.id == a)).map(crate::stand::lets_stand));
         // Loose ends, open or as it would open now (see loose_ends.rs)
         state["loose_ends"] = crate::loose_ends::describe(&self.note, window, cx);
+        // the back of the note: `turned`, and `back`, its entries in order
+        crate::back::dump_into(&mut state, self, window, cx);
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -2820,6 +2908,10 @@ impl NotePage {
                                 .child(if jmw { "Show threads" } else { "Hide threads" })
                                 .keyed_as("header:hide-threads", 4., t.voice_ink, cx, move |this, _, cx| this.set_hidden(!jmw, cx)),
                         )
+                    })
+                    // the back of the note, once it has had a thread (where Turn back sits on the back)
+                    .when(!jmw && !self.note.threads.is_empty(), |d| {
+                        d.child(control("turn-over", false).child("Turn over").keyed_as("header:turn-over", 4., t.voice_ink, cx, |this, window, cx| this.turn_over(window, cx)))
                     }),
             )
             .into_any_element()
@@ -2954,15 +3046,25 @@ impl NotePage {
             (None, false) => order.last(),
         };
         if let Some((_, id)) = next.cloned() {
-            let start = self.editor.read(cx).anchors().iter().find(|a| a.id == id).map(|a| a.range.start);
-            self.activate(Some(id.clone()), window, cx);
-            if let Some(start) = start {
-                self.editor.update(cx, |e, cx| e.move_cursor_to(start, cx));
-                self.keep_cursor_visible(window, cx);
+            // from the back, the sheet turns to the front first
+            if self.back.shown {
+                self.turn_back(window, cx);
             }
-            if let Some(input) = self.replies.get(&id).cloned() {
-                input.update(cx, |i, cx| i.focus(window, cx));
-            }
+            self.show_thread(&id, window, cx);
+        }
+    }
+
+    /// Open a thread's tag at its words: the caret at their start, the page scrolled to
+    /// them, the keyboard in its reply box (⌥⌘↓, Show on the page).
+    pub(crate) fn show_thread(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let start = self.editor.read(cx).anchors().iter().find(|a| a.id == id).map(|a| a.range.start);
+        self.activate(Some(id.to_string()), window, cx);
+        if let Some(start) = start {
+            self.editor.update(cx, |e, cx| e.move_cursor_to(start, cx));
+            self.keep_cursor_visible(window, cx);
+        }
+        if let Some(input) = self.replies.get(id).cloned() {
+            input.update(cx, |i, cx| i.focus(window, cx));
         }
     }
 
@@ -4789,6 +4891,17 @@ impl Render for NotePage {
             .child(div().h(px(18.)))
             .child(body)
             .child(div().h(px(220.)));
+        // Turned over, the sheet holds the back instead (`back.rs`), and either side fades
+        // while the sheet turns; the back shows from its top.
+        let turn = self.back.turn_now(|at| anim_since(at, now), cx.reduce_motion());
+        if self.back.first_drawn(&turn) {
+            self.scroll.set_offset(point(px(0.), px(0.)));
+        }
+        if turn.moving() {
+            window.request_animation_frame();
+        }
+        let page = if turn.back { crate::back::view(self, &own_mind, m.column_left(), m.column, m.page(), cx) } else { page.into_any_element() };
+        let page = div().opacity(turn.opacity).when(self.back.shown, |d| d.track_focus(&self.back.focus)).child(page);
 
         let sheet = div()
             .relative()
@@ -4804,6 +4917,7 @@ impl Render for NotePage {
             ])
             .child(border)
             .child(page)
+            .children(turn.fold.map(|at| crate::back::fold_shadow(at, m.page() + 2. * SHEET_PAD, &p)))
             .child({
                 let sheet_bounds = self.sheet_bounds.clone();
                 canvas(move |b, _, _| sheet_bounds.set(Some(b)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()

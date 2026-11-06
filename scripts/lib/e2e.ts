@@ -18,7 +18,8 @@
 // the app quit), note(title), requests (what the app sent the brain), tasks (their task
 // names), events (what the brain sent back), log (app log records), warnings, exit; and
 // helpers: textOf(note), rangeText(note, thread), blockOf(note, thread or quote),
-// overlaps(d). `requests` and the files are the final state, not the state at the dump.
+// overlaps(d), onPaper(d, id). `requests` and the files are the final state, not the
+// state at the dump.
 //
 // A run fails when an expectation is false or throws, a dump or shot is missing, the app
 // panics, logs an error, exits non-zero or times out, or a script step only warned
@@ -186,6 +187,14 @@ const helpers = {
       for (let i = 1; i < s.length; i++) if (s[i].top < s[i - 1].top + s[i - 1].h - 0.5) n++;
     }
     return n;
+  },
+  /** Whether a thread's tab sits on the paper you can see, 8 px in from its edges, where a
+   *  drag keeps it. */
+  onPaper: (d: any, id: string): boolean => {
+    const [l, t, r, b] = d.paper ?? [];
+    const [x, y, w, h] = d.tabs?.[id] ?? [];
+    if (![l, t, r, b, x, y, w, h].every((v) => typeof v === "number")) return false;
+    return x >= l + 7.5 && y >= t + 7.5 && x + w <= r - 7.5 && y + h <= b - 7.5;
   },
 };
 

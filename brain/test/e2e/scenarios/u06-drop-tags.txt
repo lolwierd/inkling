@@ -1,5 +1,6 @@
 # Tags drop open: a tag unfolds only after the pointer rests on it, one at a time, and a
-# key in the note or Esc folds it again. Starts on the running plan (two open threads).
+# key in the note or Esc folds it again. A tag dragged as far as it goes stays on the
+# paper. Starts on the running plan (two open threads).
 # fixture: running-plan
 wait: 1500
 hover: 1
@@ -24,4 +25,15 @@ escape
 wait: 900
 dump: escaped
 expect: d.unfolded.length === 0
+# dragged past the sheet's corner, a tag stops 8 px in from the paper's edges, never out
+# on the cloth; dragged back past the other corner, the same
+hover: 0
+drag: 1 4000 4000
+wait: 900
+dump: dragged-far
+expect: d.moved_tags.length === 1 && onPaper(d, "t1")
+drag: 1 -8000 -8000
+wait: 900
+dump: dragged-back
+expect: onPaper(d, "t1")
 quit

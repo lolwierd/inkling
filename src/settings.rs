@@ -759,15 +759,29 @@ impl SettingsView {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let minds = cx.global::<Store>().minds.clone();
+        let chosen = cx.global::<Store>().settings.ink;
         let built_in = minds.first().cloned();
+        let own = built_in.as_ref().map(|m| m.name.clone()).unwrap_or_default();
+        // A mind's name beside the thread it asks in, the dot the page's header and Ask the
+        // room show; what it is for sits under the name, not under the dot.
+        let titled = |name: String, color: Hsla, detail: Option<SharedString>| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(div().flex().items_center().gap(px(9.)).child(ui::small_dot(color, 7.)).child(div().min_w(px(0.)).truncate().child(name)))
+                .children(detail.map(|d| div().pl(px(16.)).text_size(px(ts::SMALL)).line_height(px(16.)).text_color(p.graphite).child(d)))
+        };
         let mut yours = vec![];
         for (i, m) in minds.iter().enumerate().skip(1) {
             let mind = m.clone();
             let detail = (!m.description.trim().is_empty()).then(|| SharedString::from(m.description.clone()));
+            // the colour it asks in on a note that is Inkling's, where you meet it most
+            let color = crate::note_page::mind_thread(&m.name, &own, chosen, &t);
             yours.push(
                 row(
-                    m.name.clone(),
-                    detail,
+                    titled(m.name.clone(), color, detail),
+                    None,
                     parts::push_button(("edit-mind", i), "Edit", &t).keyed_as(format!("settings:edit-mind-{i}"), 7., t.voice_ink, cx, move |this, window, cx| {
                         this.start_mind(Some(mind.clone()), window, cx)
                     }),
@@ -780,11 +794,12 @@ impl SettingsView {
         div()
             .children(built_in.map(|m| {
                 group(
-                    vec![row(m.name.clone(), Some(m.description.clone().into()), div().text_size(px(ts::META)).text_color(p.faint).child("Built in"), &t).into_any_element()],
+                    vec![row(titled(m.name.clone(), t.voice_ink, Some(m.description.clone().into())), None, div().text_size(px(ts::META)).text_color(p.faint).child("Built in"), &t).into_any_element()],
                     &t,
                 )
                 .mt(px(4.))
             }))
+            .child(note("Each mind asks in a thread of its own colour, so you can see who asked what. The mind a note is set to asks in your thread colour.", &t))
             .child(section("Yours", None, &t))
             .when(empty, |d| {
                 let mut chips = div().mt(px(10.)).flex().flex_wrap().gap(px(6.));

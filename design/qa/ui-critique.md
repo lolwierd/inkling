@@ -84,6 +84,19 @@ Ordered by what a user would notice first.
 | 32 | Callouts | A callout's stitched edge is heavier than a tag's or a toast's. | Low | The sewn blocks are the owner's decision, sized from the explorations board; a patch is meant to be bolder than a label. |
 | 33 | Settings › Minds | Minds are listed without their thread colour, which the page uses to tell minds apart. | Low | A small feature rather than polish. |
 
+## Decided after the pass (7 Nov 2026)
+
+The owner asked for a call on each of the five left for them, made on whether it improves
+the app. Three changed, two stay.
+
+| # | Call | Why | Shots |
+|---|---|---|---|
+| 26 | Kept: Settings' rounded rectangles, the page's pills | Two windows, two families on purpose: Settings is a Mac window and speaks macOS; the page's dialogs are the notebook's. | |
+| 27 | Changed: every current key in the selection toolbar is filled with its own thread, the paper colour on it: T and the lists in ink, Note, Warning, Tip and Code in theirs, and the colour your words wear | One rule for "this is on" in a menu that had three (filled, outlined, outlined in colour). The fill is one small key, never more than one per row. | decided-toolbar-current, decided-toolbar-current-dark |
+| 28 | Kept: ⌘K dims the page less than Export | Two weights on purpose: a quick switcher you pass through, a dialog you work in. | |
+| 29 | Changed: a dragged tag stays on the paper, 8 px in from the sheet's edges, and an open tag looks for room on the paper, not the window | Tags hang on the page; one half on the cloth read as a mistake. Tags still go anywhere on the page. Scenario u06 drags past both corners and checks (`onPaper`, with the dump's new `paper` and `tabs`). | decided-tag-on-paper |
+| 33 | Changed: Settings › Minds shows each mind's thread colour beside its name, with one line on what the colours mean | The page tells minds apart by colour; the place you manage them now does too. Inkling shows your thread colour (it is a note's mind unless you choose another); your minds show the colour they ask in on Inkling's notes. | decided-mind-colours, decided-mind-colours-dark |
+
 ## How it was checked
 
 - Surfaces: the page and header row, every block kind (sewn ones included), gutter

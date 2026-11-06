@@ -89,7 +89,7 @@ struct TagDrag {
 
 /// A thread's colour. The note's own mind wears the thread you chose; every other mind
 /// has its own, the same one every time, so you can see at a glance who asked what.
-fn mind_thread(mind_name: &str, own: &str, chosen: crate::store::InkColor, t: &Theme) -> Hsla {
+pub(crate) fn mind_thread(mind_name: &str, own: &str, chosen: crate::store::InkColor, t: &Theme) -> Hsla {
     use crate::store::InkColor as C;
     if mind_name.is_empty() || mind_name == own {
         return t.voice_ink;
@@ -483,6 +483,8 @@ pub struct NotePage {
     panel_heights: Heights,
     /// Each tab's bounds in the window at the last paint: where its panel has room to open.
     tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// The sheet's bounds in the window at the last paint: tags are kept on the paper.
+    sheet_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
     _subs: Vec<Subscription>,
@@ -571,6 +573,7 @@ impl NotePage {
             last_drag_end: None,
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
             tab_bounds: Rc::new(RefCell::new(HashMap::new())),
+            sheet_bounds: Rc::new(Cell::new(None)),
             viewport: size(px(1200.), px(800.)),
             last_frame: None,
             _subs: subs,
@@ -2420,7 +2423,7 @@ impl NotePage {
             .collect();
         let ed = self.editor.read(cx);
         let error = crate::toast::text_of(cx, crate::toast::Kind::Problem);
-        json!({
+        let mut state = json!({
             "note": {"title": ed.title(), "mode": format!("{:?}", self.note.mode), "mind": self.mind.name},
             "reading": self.reading.as_ref().map(|r| json!({"req": r.req, "line": r.line})),
             "waiting": self.waiting,
@@ -2487,8 +2490,19 @@ impl NotePage {
             // tags more than half unfolded, and tags moved from where the margin puts them
             "unfolded": self.unfold.iter().filter(|(_, u)| **u > 0.5).map(|(id, _)| short(id)).collect::<Vec<_>>(),
             "moved_tags": self.note.threads.iter().filter(|t| t.tag_offset != (0., 0.)).map(|t| format!("{}:{:.0},{:.0}", short(&t.id), t.tag_offset.0, t.tag_offset.1)).collect::<Vec<_>>(),
-        })
-        .to_string()
+        });
+        // the paper you can see and each tab, in the window at the last paint: a dragged tag
+        // stays on the paper (set apart, as one more key is past what json! can expand)
+        let (l, t, r, b) = self.paper();
+        state["paper"] = json!([l, t, r, b]);
+        state["tabs"] = Value::Object(
+            self.tab_bounds
+                .borrow()
+                .iter()
+                .map(|(id, b)| (short(id), json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()])))
+                .collect(),
+        );
+        state.to_string()
     }
 
     // ----- export -------------------------------------------------------------
@@ -3221,23 +3235,23 @@ impl NotePage {
         let e = unfold.max(0.);
         let ec = e.min(1.);
 
-        // A tag opens away from the words, unless that runs off the window: then it opens
-        // the other way, and it slides up when it would hang below the bottom edge.
+        // A tag opens away from the words, unless that runs off the paper: then it opens
+        // the other way, and it slides up when it would hang below the paper's edge.
         let mut open_right = right;
         let mut lift = px(0.);
         if let Some(b) = self.tab_bounds.borrow().get(&id).copied() {
-            let vp = self.viewport;
-            // the chat is not room: a tag opens over the page, not under the chat
-            let room_right = vp.width - px(if self.chat_open { CHAT_WIDTH } else { 0. }) - px(8.) - b.origin.x;
-            let room_left = b.origin.x + b.size.width - px(8.);
+            // the paper is the room (the chat sits beside the sheet, so it is never room)
+            let (left, top, right_edge, bottom) = self.paper();
+            let room_right = px(right_edge - 8.) - b.origin.x;
+            let room_left = b.origin.x + b.size.width - px(left + 8.);
             if open_right && room_right < px(width) && room_left > room_right {
                 open_right = false;
             } else if !open_right && room_left < px(width) && room_right > room_left {
                 open_right = true;
             }
-            let below = vp.height - px(8.) - b.origin.y;
+            let below = px(bottom - 8.) - b.origin.y;
             if natural > below {
-                lift = (natural - below).min((b.origin.y - px(44.)).max(px(0.)));
+                lift = (natural - below).min((b.origin.y - px(top + 4.)).max(px(0.)));
             }
         }
         let lift = lift * e;
@@ -3527,8 +3541,22 @@ impl NotePage {
         }
     }
 
-    /// Move the tag being dragged by `delta` from where the drag began, kept inside the
-    /// window. A press that moves less than 4 px is still a click.
+    /// The paper you can see, in the window: (left, top, right, bottom). Tags hang on the
+    /// page, so a dragged tag stays on it and an open one looks for room on it, never out
+    /// over the cloth. Before the first paint, the window less its band of cloth.
+    fn paper(&self) -> (f32, f32, f32, f32) {
+        let (w, h) = (self.viewport.width.as_f32(), self.viewport.height.as_f32());
+        match self.sheet_bounds.get() {
+            Some(s) => {
+                let (x, y) = (s.origin.x.as_f32(), s.origin.y.as_f32());
+                (x, y.max(CHROME_H), x + s.size.width.as_f32(), (y + s.size.height.as_f32()).min(h))
+            }
+            None => (0., CHROME_H, w, h),
+        }
+    }
+
+    /// Move the tag being dragged by `delta` from where the drag began, kept on the paper,
+    /// 8 px in from its edges. A press that moves less than 4 px is still a click.
     fn drag_tag_by(&mut self, delta: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(d) = self.drag.as_mut() else { return };
         if !d.moved && (delta.x.abs() + delta.y.abs()) < px(4.) {
@@ -3538,12 +3566,12 @@ impl NotePage {
         let (id, origin, tab) = (d.id.clone(), d.origin, d.tab);
         let (mut dx, mut dy) = (delta.x.as_f32(), delta.y.as_f32());
         if let Some(b) = tab {
-            let vp = self.viewport;
+            let (left, top, right, bottom) = self.paper();
             let (x0, y0) = (b.origin.x.as_f32(), b.origin.y.as_f32());
             let (w, h) = (b.size.width.as_f32(), b.size.height.as_f32());
-            let (lo_x, lo_y) = (8. - x0, 44. - y0);
-            dx = dx.clamp(lo_x, (vp.width.as_f32() - 8. - w - x0).max(lo_x));
-            dy = dy.clamp(lo_y, (vp.height.as_f32() - 8. - h - y0).max(lo_y));
+            let (lo_x, lo_y) = (left + 8. - x0, top + 8. - y0);
+            dx = dx.clamp(lo_x, (right - 8. - w - x0).max(lo_x));
+            dy = dy.clamp(lo_y, (bottom - 8. - h - y0).max(lo_y));
         }
         if let Some(t) = self.thread_mut(&id) {
             t.tag_offset = (origin.0 + dx, origin.1 + dy);
@@ -3650,12 +3678,12 @@ impl NotePage {
                     .justify_center()
                     .rounded(px(5.))
                     .cursor_pointer()
-                    .border_1()
-                    .border_color(if on { c } else { gpui_kit::transparent_black() })
-                    .hover(move |s| s.bg(p.hover))
+                    // the colour your words wear is filled in, as every current key is
+                    .when(on, |d| d.bg(c))
+                    .when(!on, |d| d.hover(move |s| s.bg(p.hover)))
                     .active(|s| s.opacity(0.7))
                     .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(*name).build(window, cx))
-                    .child(div().text_size(px(ts::UI)).font_weight(FontWeight::SEMIBOLD).text_color(c).child("A"))
+                    .child(div().text_size(px(ts::UI)).font_weight(FontWeight::SEMIBOLD).text_color(if on { p.paper } else { c }).child("A"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.editor.update(cx, |e, cx| e.toggle_mark(Mark::Color(value), cx));
                         this.show_toolbar = true;
@@ -3749,10 +3777,9 @@ impl NotePage {
                     .font_family(family)
                     .text_size(px(ts::SMALL))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(color)
-                    .border_1()
-                    .border_color(if on { color } else { gpui_kit::transparent_black() })
-                    .hover(move |s| s.bg(p.hover))
+                    // the current block's key is filled with its thread, as T is with the ink
+                    .when(on, |d| d.bg(color).text_color(p.paper))
+                    .when(!on, |d| d.text_color(color).hover(move |s| s.bg(p.hover)))
                     .active(|s| s.opacity(0.7))
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -4525,7 +4552,11 @@ impl Render for NotePage {
                 BoxShadow { color: p.shadow.opacity(0.6), offset: point(px(0.), px(12.)), blur_radius: px(32.), spread_radius: px(-12.), inset: false },
             ])
             .child(border)
-            .child(page);
+            .child(page)
+            .child({
+                let sheet_bounds = self.sheet_bounds.clone();
+                canvas(move |b, _, _| sheet_bounds.set(Some(b)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+            });
         let fits = m.page() + 2. * SHEET_PAD <= width - 16.;
         // Scrolled, the sheet slides under the cloth along the top, which lays a soft
         // shadow on it there; the shadow comes in over the first few pixels of scroll.

@@ -25,6 +25,6 @@ enter
 wait: 2600
 dump: ask-mode
 expect: d.threads.length === 5 && d.threads[4].kind === "Answer"   // a call answers in Waits to be asked; a plain paragraph stays quiet
-expect: tasks.join() === "answer,answer,answer,read,answer"
+expect: tasks.join() === "answer,answer,answer,read,answer,read" && requests.at(-1).input.answersOnly === true   // the last read: threads are open, so the waiting note reads the finished plain paragraph once, for answers only (Answer in the note); it says nothing
 expect: note("Minds").threads.every(t => t.mind_name === "Skeptic")
 quit

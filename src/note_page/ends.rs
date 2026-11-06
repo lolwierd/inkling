@@ -16,7 +16,7 @@ use gpui_kit::prelude::*;
 use serde_json::{Value, json};
 
 use super::{CHROME_H, NotePage, PageEvent};
-use crate::store::{Elsewhere, Mind, Store, Thread};
+use crate::store::{Elsewhere, Mind, Placement, Side, Store, Thread, ThreadStatus};
 use crate::theme::{SERIF, Theme, ts};
 use crate::ui::{Keyed, icon};
 
@@ -117,26 +117,53 @@ impl NotePage {
         }
     }
 
-    /// A far end shown in this note for the first time hangs on the side a new thread would
-    /// take here (`pick_side`), chosen once its words are laid out, and is marked `placed`:
-    /// the next save takes its side home, and from then on the side is its own.
+    /// A far end shown in this note for the first time hangs in the margin less crowded
+    /// near its words, and when neither is, on the side its home end hangs, so following it
+    /// keeps your eye on the same side. Chosen once its words are laid out, and marked
+    /// `placed`: the next save takes the side home, and from then on it is its own.
     pub(super) fn side_new_far_ends(&mut self, cx: &mut Context<Self>) {
         if self.editor.read(cx).layout.is_none() {
             return;
         }
-        let fresh: Vec<String> = self.note.elsewhere.iter().filter(|e| e.visiting && !e.placed).map(|e| e.thread.clone()).collect();
-        for id in fresh {
+        let fresh: Vec<(String, Side)> =
+            self.note.elsewhere.iter().filter(|e| e.visiting && !e.placed).map(|e| (e.thread.clone(), e.side)).collect();
+        for (id, home) in fresh {
             // a far end with no words here (dismissed) waits until it has some
-            let Some(range) = self.editor.read(cx).anchor(&id).map(|a| a.range.clone()) else { continue };
-            let Some(i) = self.note.threads.iter().position(|t| t.id == id) else { continue };
-            // chosen as for a thread not yet in the margin: without itself
-            let th = self.note.threads.remove(i);
-            let side = self.pick_side(&range, cx);
-            self.note.threads.insert(i, Thread { side, ..th });
+            let Some(side) = self.first_side(&id, home, cx) else { continue };
+            if let Some(t) = self.note.threads.iter_mut().find(|t| t.id == id) {
+                t.side = side;
+            }
             if let Some(e) = self.note.elsewhere.iter_mut().find(|e| e.visiting && e.thread == id) {
                 e.placed = true;
             }
         }
+    }
+
+    /// Where thread `id` (a far end shown here for the first time) hangs: as `pick_side`
+    /// weighs a new thread, the margin with fewer open threads near its words, but on a tie
+    /// the side of its home end (`home`) rather than taking turns. `None` while it has no
+    /// words laid out here.
+    fn first_side(&self, id: &str, home: Side, cx: &App) -> Option<Side> {
+        let ed = self.editor.read(cx);
+        let layout = ed.layout.as_ref()?;
+        let top = |t: &str| ed.anchor(t).and_then(|a| layout.rects(a.range.clone()).first().map(|r| r.origin.y.as_f32()));
+        let y = top(id)?;
+        if cx.global::<Store>().settings.placement != Placement::Both {
+            return Some(Side::Right);
+        }
+        let near = |side: Side| {
+            self.note
+                .threads
+                .iter()
+                .filter(|t| t.id != id && t.status == ThreadStatus::Open && t.side == side)
+                .filter(|t| top(&t.id).is_some_and(|ty| (ty - y).abs() < 160.))
+                .count()
+        };
+        Some(match near(Side::Left).cmp(&near(Side::Right)) {
+            std::cmp::Ordering::Less => Side::Left,
+            std::cmp::Ordering::Greater => Side::Right,
+            std::cmp::Ordering::Equal => home,
+        })
     }
 
     // ----- replies -----------------------------------------------------------------------

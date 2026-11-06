@@ -110,7 +110,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("app::NextThread", "Next open thread", Group::Threads, None),
     ("app::PrevThread", "Previous open thread", Group::Threads, None),
     ("app::LooseEnds", "Loose ends", Group::Threads, Some("Every open thread in the notebook, oldest first.")),
-    ("app::FollowThread", "Go to the other end", Group::Threads, Some("Of the open thread, when it also quotes another note: that note, at those words.")),
+    ("app::FollowThread", "Go to the other end", Group::Threads, Some("From an open thread between notes: the other note, at its words.")),
     ("app::DismissThread", "Let stand or dismiss the open thread", Group::Threads, Some("A mind's question or correction is let stand, with what you typed in its box as your reason.")),
     ("app::UndoDismiss", "Undo let stand or dismiss", Group::Threads, None),
     ("app::JustMyWords", "Hide threads", Group::Threads, None),

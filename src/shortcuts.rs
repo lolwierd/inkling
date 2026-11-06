@@ -17,7 +17,7 @@ use gpui_kit::*;
 
 use crate::app::{
     CopyNote, DismissThread, ExportNote, FindLooseThread, JustMyWords, LooseEnds, NewNote, NextThread, OpenPalette,
-    OpenSettings, PrevThread, Quit, ToggleChat, ToggleSidebar, UndoDismiss,
+    OpenSettings, PrevThread, Quit, ToggleChat, ToggleSidebar, TurnOver, UndoDismiss,
 };
 use crate::store::Store;
 
@@ -41,6 +41,7 @@ fn app_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("alt-cmd-up", PrevThread, None),
         KeyBinding::new("cmd-shift-backspace", DismissThread, None),
         KeyBinding::new("alt-cmd-z", UndoDismiss, None),
+        KeyBinding::new("cmd-shift-b", TurnOver, None),
     ]
 }
 
@@ -111,6 +112,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("app::DismissThread", "Let stand or dismiss the open thread", Group::Threads, Some("A mind's question or correction is let stand, with what you typed in its box as your reason.")),
     ("app::UndoDismiss", "Undo let stand or dismiss", Group::Threads, None),
     ("app::JustMyWords", "Hide threads", Group::Threads, None),
+    ("app::TurnOver", "Turn the note over", Group::Threads, Some("Every thread the note has had, and how each one ended.")),
     ("app::ToggleChat", "Chat", Group::Window, None),
     ("app::OpenSettings", "Settings", Group::Window, None),
     ("app::Quit", "Quit Inkling", Group::Window, None),
@@ -560,8 +562,8 @@ mod tests {
         let c = clashes(&t, &custom(&[("app::ToggleChat", &["cmd-b"])]));
         assert_eq!(c["editor::ToggleBold"], vec![Clash { keys: "cmd-b".into(), other: "app::ToggleChat" }]);
         // Two editor actions on one key clash; spellings of the same keys are the same keys.
-        let c = clashes(&t, &custom(&[("editor::ToggleCode", &["shift-cmd-b"]), ("editor::ToggleBold", &["cmd-shift-b"])]));
-        assert_eq!(c["editor::ToggleCode"], vec![Clash { keys: "shift-cmd-b".into(), other: "editor::ToggleBold" }]);
+        let c = clashes(&t, &custom(&[("editor::ToggleCode", &["shift-cmd-y"]), ("editor::ToggleBold", &["cmd-shift-y"])]));
+        assert_eq!(c["editor::ToggleCode"], vec![Clash { keys: "shift-cmd-y".into(), other: "editor::ToggleBold" }]);
         // A hidden alias clashes as the keys it spells.
         let c = clashes(&t, &custom(&[("app::ToggleChat", &["cmd->"])]));
         assert_eq!(c["app::JustMyWords"], vec![Clash { keys: "cmd-shift-.".into(), other: "app::ToggleChat" }]);

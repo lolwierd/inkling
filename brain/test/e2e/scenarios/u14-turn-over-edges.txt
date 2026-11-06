@@ -1,0 +1,55 @@
+# Turn it over, the edges. On the back nothing reaches the note: not keys, not ⌘↩, not ⇧⌘⌫
+# on the open tag. Tab reaches the back's controls, Return opens the reason box, Esc leaves
+# the reason as it was, and Esc again turns back with the caret where it was. A point whose
+# words are gone offers no Reopen. Show on the page, and going to the thread from Loose
+# ends, open its tag on the front. Hiding threads turns the note to its front. A note with
+# no threads has an empty back.
+# fixture: running-plan
+# env: FAKE_READ_DEFAULT=silent
+wait: 1500
+set: appearance=light
+stand: 2
+edit: add a kilometre every week until I reach 16 => build up slowly
+settle
+caret: four days a week
+activate: 1
+dump: before
+turn
+key: x y z cmd-enter cmd-shift-backspace
+dump: gone
+expect: d.turned === true && d.focus === "back" && d.back.length === 2
+expect: d.typing === false && d.last_edited === null && d.back[0].ending === "Open" && d.active === "t1"
+expect: d.back[1].ending === "LetStand" && d.back[1].found === false && d.back[1].acts.join() === "reason"
+key: tab tab tab tab
+dump: tabbed
+expect: d.focus === "back:reason-t2"
+key: enter
+dump: box
+expect: d.back_editing === "t2" && d.focus === "back:reason-box"
+key: escape
+dump: kept-as-was
+expect: d.back_editing === null && d.focus === "back:reason-t2" && d.back[1].reason === null && d.turned === true
+key: escape
+dump: front
+expect: d.turned === false && d.focus === "note" && d.selection.join() === dumps["before"].selection.join()
+turn
+back-show: 1
+dump: shown
+expect: d.turned === false && d.active === "t1" && d.focus === "reply"
+turn
+open: loose
+key: enter
+settle
+dump: gone-to
+expect: d.turned === false && d.active === "t1" && d.focus === "reply"   // Loose ends goes to the front
+turn
+open: jmw
+dump: hidden
+expect: d.turned === false && d.hidden === true
+open: jmw
+note: 
+key: cmd-shift-b
+dump: empty
+expect: d.turned === true && d.back.length === 0 && d.focus === "back"
+shot: empty-back
+quit

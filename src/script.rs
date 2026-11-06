@@ -49,6 +49,16 @@
 //! disagree: 1     (press Disagree on thread 1's working: the next `reply:` disputes it)
 //! ```
 //!
+//! The back of the note, whose entries are numbered from 1 in the order the back lists
+//! them (every thread, oldest first):
+//!
+//! ```text
+//! turn                      # turn the note over (⇧⌘B), or back to the front
+//! back-reason: 2 Ten weeks  # entry 2's reason, written in its box and kept with Return
+//! back-reopen: 2            # Reopen entry 2 (a point let stand, or a snipped thread)
+//! back-show: 1              # Show on the page: entry 1's tag, opened at its words
+//! ```
+//!
 //! The note, the reader and the room:
 //!
 //! ```text
@@ -174,6 +184,14 @@ pub enum Step {
     See(usize, usize),
     /// Press Disagree on thread n's working.
     Disagree(usize),
+    /// Turn the note over, or back (Turn over, ⇧⌘B).
+    Turn,
+    /// On the back, entry N's reason, written in its box and kept.
+    BackReason(usize, String),
+    /// On the back, Reopen entry N.
+    BackReopen(usize),
+    /// On the back, Show on the page for entry N.
+    BackShow(usize),
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -292,6 +310,19 @@ pub fn parse(src: &str) -> Vec<Step> {
                     }
                 },
                 "key" => Step::Key(arg.split_whitespace().map(str::to_string).collect()),
+                "turn" => Step::Turn,
+                "back-reason" => {
+                    let (n, reason) = arg.split_once(char::is_whitespace).unwrap_or((arg.as_str(), ""));
+                    match n.parse() {
+                        Ok(n) => Step::BackReason(n, reason.trim().to_string()),
+                        Err(_) => {
+                            log::warn!("script: back-reason needs `n text`: {l:?}");
+                            return None;
+                        }
+                    }
+                }
+                "back-reopen" => Step::BackReopen(n()),
+                "back-show" => Step::BackShow(n()),
                 "click" | "point" => match point_arg(&arg) {
                     Some((x, y)) if cmd == "click" => Step::Click(x, y),
                     Some((x, y)) => Step::Pointer(x, y),
@@ -377,6 +408,14 @@ mod tests {
         assert_eq!(
             parse("stand: 2 It is deliberate: the  team's slogan.\nstand: 3\nstand\n"),
             vec![Step::Stand(2, "It is deliberate: the  team's slogan.".into()), Step::Stand(3, String::new()), Step::Stand(1, String::new())]
+        );
+    }
+
+    #[std::prelude::v1::test]
+    fn parses_the_back_of_the_note() {
+        assert_eq!(
+            parse("turn\nback-reason: 2 Ten weeks out, from 8 km.\nback-reason: 3\nback-reopen: 2\nback-show\nback-reason: two words\n"),
+            vec![Step::Turn, Step::BackReason(2, "Ten weeks out, from 8 km.".into()), Step::BackReason(3, String::new()), Step::BackReopen(2), Step::BackShow(1)]
         );
     }
 

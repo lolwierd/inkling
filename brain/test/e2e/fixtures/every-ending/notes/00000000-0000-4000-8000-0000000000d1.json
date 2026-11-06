@@ -1,0 +1,162 @@
+{
+  "id": "00000000-0000-4000-8000-0000000000d1",
+  "title": "Sub-50 10k by March",
+  "folder": null,
+  "blocks": [
+    {
+      "kind": "title",
+      "text": "Sub-50 10k by March"
+    },
+    {
+      "kind": "paragraph",
+      "text": "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes."
+    },
+    {
+      "kind": "paragraph",
+      "text": "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 4:55 for the whole race, I’ll come in just under 50."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Sunday is the long run. I’ll add a kilometre every week until I reach 16."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Strength work twice a week, mostly calves and hips, because that’s where it fell apart last year."
+    },
+    {
+      "kind": "paragraph",
+      "text": ""
+    }
+  ],
+  "marks": [],
+  "brief": null,
+  "mode": "thinks_with_you",
+  "mind_id": "inkling",
+  "threads": [
+    {
+      "id": "e1",
+      "start": 261,
+      "end": 325,
+      "quote": "If I hold 4:55 for the whole race, I’ll come in just under 50.",
+      "kind": "correction",
+      "status": "resolved",
+      "side": "right",
+      "mind_name": "Inkling",
+      "created_at": "2026-11-04T09:12:00Z",
+      "ended_at": "2026-11-05T18:40:00Z",
+      "first_quote": "If I hold 5:30 for the whole race, I’ll come in just under 50.",
+      "messages": [
+        {
+          "role": "mind",
+          "text": "At 5:30 a km, 10 km takes 55:00. Under 50 needs 5:00 a km or faster; 4:55 leaves a little room. Which do you want to change: the pace or the goal?",
+          "at": "2026-11-04T09:12:00Z",
+          "check": {
+            "sum": [
+              {
+                "sum": "5:30 × 10",
+                "is": "55:00"
+              }
+            ],
+            "givens": [
+              {
+                "value": "5:30",
+                "words": "hold 5:30"
+              }
+            ]
+          }
+        },
+        {
+          "role": "mind",
+          "text": "4:55 a km comes to 49:10. That works.",
+          "at": "2026-11-05T18:40:00Z"
+        }
+      ]
+    },
+    {
+      "id": "e2",
+      "start": 357,
+      "end": 400,
+      "quote": "add a kilometre every week until I reach 16",
+      "kind": "question",
+      "status": "dismissed",
+      "side": "right",
+      "mind_name": "Inkling",
+      "created_at": "2026-11-05T10:02:00Z",
+      "ended_at": "2026-11-06T08:15:00Z",
+      "reason": "Ten weeks out, from 8 km.",
+      "messages": [
+        {
+          "role": "mind",
+          "text": "Starting from how far? From 8 km, 16 km is eight weeks out.",
+          "at": "2026-11-05T10:02:00Z"
+        }
+      ]
+    },
+    {
+      "id": "e3",
+      "start": 181,
+      "end": 197,
+      "quote": "four days a week",
+      "kind": "question",
+      "status": "open",
+      "side": "left",
+      "mind_name": "Skeptic",
+      "created_at": "2026-11-06T11:30:00Z",
+      "messages": [
+        {
+          "role": "mind",
+          "text": "You walked after 7 km last year. Is pace the problem, or the last 3 km?",
+          "at": "2026-11-06T11:30:00Z"
+        },
+        {
+          "role": "you",
+          "text": "Both, I think.",
+          "at": "2026-11-06T11:34:00Z"
+        },
+        {
+          "role": "mind",
+          "text": "Then the long run matters more than the pace work. Which of the four days is the long one?",
+          "at": "2026-11-06T11:34:10Z"
+        },
+        {
+          "role": "you",
+          "text": "Sunday.",
+          "at": "2026-11-06T11:35:00Z"
+        },
+        {
+          "role": "mind",
+          "text": "Then Sunday decides the race. What does a Sunday look like in week six?",
+          "at": "2026-11-06T11:35:10Z"
+        }
+      ]
+    },
+    {
+      "id": "e4",
+      "start": 402,
+      "end": 428,
+      "quote": "Strength work twice a week",
+      "kind": "ask",
+      "status": "dismissed",
+      "side": "right",
+      "mind_name": "Socratic tutor",
+      "created_at": "2026-11-06T16:20:00Z",
+      "ended_at": "2026-11-06T16:31:00Z",
+      "messages": [
+        {
+          "role": "you",
+          "text": "What should the strength work be?",
+          "at": "2026-11-06T16:20:00Z"
+        },
+        {
+          "role": "mind",
+          "text": "What gave out first last year, your calves or your form?",
+          "at": "2026-11-06T16:20:08Z"
+        }
+      ]
+    }
+  ],
+  "chat": [],
+  "read_hashes": [],
+  "created_at": "2026-11-04T09:00:00Z",
+  "updated_at": "2026-11-06T16:31:00Z"
+}

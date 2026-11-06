@@ -432,9 +432,11 @@ open). It also takes shots of the open tag in linen and in lamplight.
 
 ```text
 # Turn it over: the back lists every thread in order with how it ended, the words before and
-# after, and reasons that can be added; Reopen and Show on the page turn back.
+# after, and reasons that can be added; ⇧⌘C copies the back; Reopen turns back and opens the
+# point on its words again.
 # fixture: running-plan
 wait: 1500
+set: appearance=light
 edit: hold 5:30 for the whole race => hold 4:55 for the whole race
 settle
 resolve: 1
@@ -444,6 +446,7 @@ dump: back
 expect: d.turned === true && d.back.length === 2
 expect: d.back[0].ending === "TiedOff" && d.back[0].before.includes("5:30") && d.back[0].after.includes("4:55")
 expect: d.back[1].ending === "LetStand" && d.back[1].reason === null
+expect: d.back[0].acts.join() === "show" && d.back[1].acts.join() === "reason,reopen"
 shot: back
 set: appearance=dark
 shot: back-dark
@@ -451,12 +454,22 @@ set: appearance=light
 back-reason: 2 Ten weeks out, from 8 km.
 dump: reasoned
 expect: d.back[1].reason === "Ten weeks out, from 8 km."
+expect: d.focus === "back:reason-t2"
 key: cmd-shift-c
 dump: copied
 expect: d.toasts.some(t => t.text === "Copied the back as Markdown")
+expect: log.some(r => r.msg.startsWith("script copy back:") && r.msg.includes("~~If I hold 5:30") && r.msg.includes("Your reason: Ten weeks out, from 8 km."))
 back-reopen: 2
 dump: reopened
 expect: d.turned === false && d.threads.find(t => t.id === "t2").status === "Open" && d.active === "t2"
+expect: d.threads.find(t => t.id === "t2").reason === null && d.anchors.some(a => a.id === "t2" && a.open)
+expect: d.back.find(e => e.id === "t2").ending === "Open" && !d.back.find(e => e.id === "t2").ended
+stand: 2 Not ten weeks after all.
+turn
+back-reopen: 2
+dismiss: 2
+dump: again
+expect: d.threads.find(t => t.id === "t2").ending === "LetStand" && d.threads.find(t => t.id === "t2").reason === null   // reopened on an empty box
 quit
 ```
 
@@ -464,8 +477,20 @@ The steps it needs: `stand: N [reason]` (Let it stand: types the reason into thr
 numbered as `dismiss:` numbers them, then Let stand); `turn` (turns the note over or back);
 `back-reason: N text`, `back-reopen: N` and `back-show: N`, where N is the entry's place on
 the back, counted from 1. A thread whose words were edited needs a `settle` before the dump,
-so `first_quote` is saved. The dump gains `turned`, and `back` as a list of `{id, ending,
-reason, before, after, mind, kind}`.
+so `first_quote` is saved. The dump gains `turned`; `back`, a list of `{id, ending, reason,
+before, after, changed, mind, kind, found, ended, acts}` (`before` is always the words it was
+opened on, `changed` says whether they differ from `after`, `acts` lists the entry's controls:
+`show`, `reason`, `reopen`); `back_editing`, the entry whose reason box is open; and `focus`
+reads `back` or `back:reason-box` when the back or the box has the keyboard. ⇧⌘C during a
+script logs the Markdown (`script copy back: "…"`) and leaves the clipboard alone, as `copy:`
+does.
+
+`u14-turn-over-edges.txt`, from `running-plan` with silent reads: on the back, keys, ⌘↩ and
+⇧⌘⌫ never reach the note or its open tag; Tab reaches the back's controls, Return opens the
+reason box, Esc leaves the reason as it was and Esc again turns back with the caret where it
+was; a point whose words were edited away offers no Reopen; Show on the page, and going to
+the thread from Loose ends, open the tag on the front; hiding threads turns the note to its
+front; an untitled note with no threads has the empty back. The fixture `every-ending` (one thread that ended each way) is for looking at the back.
 
 ## 7. Files and functions, and size
 
@@ -509,6 +534,33 @@ reason, before, after, mind, kind}`.
 - `app.rs`: the `TurnOver` action, View › Turn Over, and `copy_note` copying the back while it
   shows. `shortcuts.rs`: ⇧⌘B and the label **Turn the note over**. `script.rs`: four steps.
 - `design/capabilities.md`: a Turn it over row under Threads.
+
+**As built (7 Nov 2026).** Where this design was silent or the build had a reason to differ:
+- A tied-off thread's last message from its mind goes under the ending line (1.3, "Below it"),
+  so above the line are its first message and the fold; nothing shows twice. A thread that
+  never got a word (its first answer did not come) is left off the back.
+- Turning back puts the front on the sheet from the first frame, fading in as the fold sweeps
+  the other way, so a key pressed straight after Esc reaches the note (rule 6). Turning over
+  is as written. While the back shows it has the keyboard: typing, ⌘↩ and ⇧⌘⌫ do nothing,
+  and ⌥⌘↓ and ⌥⌘↑ turn back and jump. The window's controls do not stay faded on the back,
+  because nothing is written there.
+- Reopen drops the thread's reply box, so the reason Let stand left in it for Undo does not
+  come back as the reason of the next Let stand. If the thread was the last one let stand,
+  its Undo goes too, so it cannot be put back twice.
+- The snipped tail is drawn at 78% of its thread, which keeps it at 3:1 or better on the page
+  in every thread (sage in linen is the closest, at 3.3:1); a test holds it there.
+- A correction's working (Show its working) shows under its message as the tag shows it, but
+  still: the sum line by line and the words it took, struck through once taken back. ⇧⌘C
+  writes it under the message, as Copy does.
+- While a reason's box is open, its Add a reason or Change the reason steps aside: Return and
+  Esc are the box's controls.
+- Going to a thread from Loose ends while the back shows turns the note to its front first
+  (one line in `note_page/goto.rs`).
+- The Markdown's heading date is when the thread was opened, as on the entry's top row;
+  every message is copied, the folded ones too.
+- Shots: `design/features/shots/turn-it-over-{light,dark}.jpg` (the fixture `every-ending`),
+  `turn-it-over-turning.jpg` (the fold mid-sweep) and `turn-it-over-reason.jpg` (a reason
+  being written).
 
 The back's Markdown, for ⇧⌘C:
 

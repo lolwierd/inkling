@@ -46,6 +46,7 @@ gpui_kit::actions!(
         ShowAll,
         Minimize,
         Zoom,
+        TurnOver,
     ]
 );
 
@@ -114,6 +115,7 @@ pub fn init(cx: &mut App) {
                 MenuItem::action("Notes", ToggleSidebar),
                 MenuItem::action("Chat", ToggleChat),
                 MenuItem::action("Hide Threads", JustMyWords),
+                MenuItem::action("Turn Over", TurnOver),
             ],
             disabled: false,
         },
@@ -1612,6 +1614,11 @@ impl AppView {
     }
 
     fn copy_note(&mut self, cx: &mut Context<Self>) {
+        // on the back of the note, ⇧⌘C copies the back
+        if let Some(md) = self.page.update(cx, |p, cx| p.back.shown.then(|| crate::back::to_markdown(&p.note_snapshot(cx)))) {
+            crate::back::copy(md, cx);
+            return self.toast("Copied the back as Markdown", cx);
+        }
         let md = self.page.update(cx, |p, cx| p.markdown(true, cx));
         cx.write_to_clipboard(ClipboardItem::new_string(md));
         self.toast("Copied as Markdown", cx);
@@ -1797,6 +1804,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_action(cx.listener(|this, _: &ImportObsidian, _, cx| this.choose_vault(cx)))
+            .on_action(cx.listener(|this, _: &TurnOver, window, cx| this.page.update(cx, |p, cx| p.turn_over(window, cx))))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_pointer))

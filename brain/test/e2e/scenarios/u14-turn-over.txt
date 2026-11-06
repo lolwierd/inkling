@@ -1,0 +1,40 @@
+# Turn it over: the back lists every thread in order with how it ended, the words before and
+# after, and reasons that can be added; ⇧⌘C copies the back; Reopen turns back and opens the
+# point on its words again.
+# fixture: running-plan
+wait: 1500
+set: appearance=light
+edit: hold 5:30 for the whole race => hold 4:55 for the whole race
+settle
+resolve: 1
+stand: 2
+turn
+dump: back
+expect: d.turned === true && d.back.length === 2
+expect: d.back[0].ending === "TiedOff" && d.back[0].before.includes("5:30") && d.back[0].after.includes("4:55")
+expect: d.back[1].ending === "LetStand" && d.back[1].reason === null
+expect: d.back[0].acts.join() === "show" && d.back[1].acts.join() === "reason,reopen"
+shot: back
+set: appearance=dark
+shot: back-dark
+set: appearance=light
+back-reason: 2 Ten weeks out, from 8 km.
+dump: reasoned
+expect: d.back[1].reason === "Ten weeks out, from 8 km."
+expect: d.focus === "back:reason-t2"
+key: cmd-shift-c
+dump: copied
+expect: d.toasts.some(t => t.text === "Copied the back as Markdown")
+expect: log.some(r => r.msg.startsWith("script copy back:") && r.msg.includes("~~If I hold 5:30") && r.msg.includes("Your reason: Ten weeks out, from 8 km."))
+back-reopen: 2
+dump: reopened
+expect: d.turned === false && d.threads.find(t => t.id === "t2").status === "Open" && d.active === "t2"
+expect: d.threads.find(t => t.id === "t2").reason === null && d.anchors.some(a => a.id === "t2" && a.open)
+expect: d.back.find(e => e.id === "t2").ending === "Open" && !d.back.find(e => e.id === "t2").ended
+stand: 2 Not ten weeks after all.
+turn
+back-reopen: 2
+dismiss: 2
+dump: again
+expect: d.threads.find(t => t.id === "t2").ending === "LetStand" && d.threads.find(t => t.id === "t2").reason === null   // reopened on an empty box
+quit

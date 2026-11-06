@@ -6,6 +6,11 @@
 # stops; Tab stays inside the export dialog.
 # fixture: running-plan
 wait: 1500
+# a tag under the owner's parked pointer drops open by itself (GPUI tracks the real pointer
+# over the covered test window): move the pointer off every tag first, so the Tab order
+# below is the page's own
+hover: 0
+wait: 700
 set: appearance=light
 caret: end
 key: shift-tab

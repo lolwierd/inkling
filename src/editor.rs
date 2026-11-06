@@ -2083,6 +2083,15 @@ impl NoteEditor {
         window.focus(&self.focus, cx);
     }
 
+    /// Whether Undo or Redo would change anything (the Edit menu turns them off when not).
+    pub fn can_undo(&self) -> bool {
+        !self.st.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.st.redo.is_empty()
+    }
+
     pub fn move_cursor_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         self.st.set_caret(offset, false);
         self.apply(Fx::moved(), cx);
@@ -2369,19 +2378,19 @@ impl NoteEditor {
 
     fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         if !self.st.selected.is_empty() {
-            cx.write_to_clipboard(ClipboardItem::new_string(self.selected_text()));
+            clip_write(self.selected_text(), cx);
         }
     }
 
     fn cut(&mut self, _: &Cut, _: &mut Window, cx: &mut Context<Self>) {
         if let Some((text, fx)) = self.st.cut() {
-            cx.write_to_clipboard(ClipboardItem::new_string(text));
+            clip_write(text, cx);
             self.apply(fx, cx);
         }
     }
 
     fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) else {
+        let Some(text) = clip_read(cx) else {
             return;
         };
         let fx = self.st.paste(&text);
@@ -2442,7 +2451,7 @@ impl NoteEditor {
             }
             if let Some(block) = code_blocks(&layout).into_iter().find(|b| sewn::copy_hit(b.ground).contains(&at)) {
                 let code = self.lines_text(block.lines.clone());
-                cx.write_to_clipboard(ClipboardItem::new_string(code));
+                clip_write(code, cx);
                 self.copied = Some((block.lines.start, Instant::now()));
                 cx.notify();
                 let epoch = self.copied;
@@ -2816,6 +2825,29 @@ fn gaps(kind: BlockKind, st: &LineStyle, opens: bool, closes: bool) -> (Pixels, 
             if closes { px(sewn::CODE_PAD + sewn::CODE_AFTER) } else { px(0.) },
         ),
         _ => (st.gap_before, st.gap_after),
+    }
+}
+
+/// Under a script (`INKLING_SCRIPT`) the editor's clipboard is a stand-in, and the log says
+/// what it got, so a run never touches the clipboard of the Mac it runs on.
+static SCRIPT_CLIPBOARD: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// What Copy and Cut (and a code block's Copy) put on the clipboard.
+fn clip_write(text: String, cx: &mut App) {
+    if std::env::var_os("INKLING_SCRIPT").is_some() {
+        log::info!("script clipboard: {text:?}");
+        *SCRIPT_CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner()) = Some(text);
+    } else {
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+    }
+}
+
+/// What Paste takes from it.
+fn clip_read(cx: &App) -> Option<String> {
+    if std::env::var_os("INKLING_SCRIPT").is_some() {
+        SCRIPT_CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    } else {
+        cx.read_from_clipboard().and_then(|i| i.text())
     }
 }
 

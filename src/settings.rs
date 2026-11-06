@@ -1517,7 +1517,7 @@ impl Focusable for SettingsView {
 }
 
 impl Render for SettingsView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let g = Glass::of(&p);
@@ -1598,8 +1598,8 @@ impl Render for SettingsView {
                         .child(div().px(px(32.)).pt(px(8.)).pb(px(32.)).child(content.max_w(px(640.)))),
                 ),
         );
-        div()
-            .id("settings")
+        // the Edit menu's items, to the field the keyboard is in
+        crate::app::edit_menu(div().id("settings"), None, window, cx)
             .key_context("Settings")
             .track_focus(&self.focus)
             .size_full()

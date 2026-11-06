@@ -50,8 +50,86 @@ gpui_kit::actions!(
         FollowThread,
         ReadThrough,
         AskYourself,
+        EditUndo,
+        EditRedo,
+        EditCut,
+        EditCopy,
+        EditPaste,
+        EditDelete,
+        EditSelectAll,
     ]
 );
+
+/// The Edit menu's items, and the commands of the note's editor whose keys they show (see
+/// `shortcuts::apply`). Delete has no keys of its own in a Mac Edit menu.
+pub const EDIT_MENU: &[(&str, &str)] = &[
+    ("app::EditUndo", "editor::Undo"),
+    ("app::EditRedo", "editor::Redo"),
+    ("app::EditCut", "editor::Cut"),
+    ("app::EditCopy", "editor::Copy"),
+    ("app::EditPaste", "editor::Paste"),
+    ("app::EditSelectAll", "editor::SelectAll"),
+];
+
+/// Whether `window` has drawn a frame yet: the windows that have, by id.
+fn window_has_drawn(window: &Window) -> bool {
+    thread_local! {
+        static DRAWN: std::cell::RefCell<std::collections::HashSet<WindowId>> = Default::default();
+    }
+    let id = window.window_handle().window_id();
+    // asked during a render: true from the window's second render on
+    DRAWN.with(|d| !d.borrow_mut().insert(id))
+}
+
+/// The Edit menu's items go to whatever takes them where the keyboard is: the note's
+/// editor, with the editor's own commands (so the menu does exactly what its keys do), or a
+/// text field, with the component library's. An item with nothing to act on gets no
+/// listener here, which leaves it off in the menu: Undo and Redo with nothing to undo or
+/// redo in the note, Cut, Copy and Delete with nothing selected in it, and Delete in a
+/// field (whose Delete would take the next letter when nothing is selected). A field's
+/// Undo, Copy and the like stay on; with nothing to act on they do nothing.
+pub(crate) fn edit_menu<E: InteractiveElement>(el: E, note: Option<&Entity<crate::editor::NoteEditor>>, window: &mut Window, cx: &mut App) -> E {
+    use crate::editor as ed;
+    // Before a window's first frame there is nothing to ask (GPUI asks the last frame); the
+    // menu is not open then.
+    if !window_has_drawn(window) {
+        return el;
+    }
+    use gpui_kit::component::input as field;
+    let in_note = |a: &dyn Action, window: &Window, cx: &App| note.is_some() && window.is_action_available(a, cx);
+    let (can_undo, can_redo, selected) = note.map_or((false, false, false), |n| {
+        let n = n.read(cx);
+        (n.can_undo(), n.can_redo(), !n.selection().is_empty())
+    });
+    // where each item goes now, if anywhere
+    let pick = |note_has: bool, mine: Box<dyn Action>, theirs: Option<Box<dyn Action>>, window: &Window, cx: &App| -> Option<Box<dyn Action>> {
+        if in_note(mine.as_ref(), window, cx) {
+            note_has.then_some(mine)
+        } else {
+            theirs.filter(|a| window.is_action_available(a.as_ref(), cx))
+        }
+    };
+    let undo = pick(can_undo, Box::new(ed::Undo), Some(Box::new(field::Undo)), window, cx);
+    let redo = pick(can_redo, Box::new(ed::Redo), Some(Box::new(field::Redo)), window, cx);
+    let cut = pick(selected, Box::new(ed::Cut), Some(Box::new(field::Cut)), window, cx);
+    let copy = pick(selected, Box::new(ed::Copy), Some(Box::new(field::Copy)), window, cx);
+    let paste = pick(true, Box::new(ed::Paste), Some(Box::new(field::Paste)), window, cx);
+    let delete = pick(selected, Box::new(ed::Delete), None, window, cx);
+    let all = pick(true, Box::new(ed::SelectAll), Some(Box::new(field::SelectAll)), window, cx);
+    fn route<E: InteractiveElement, A: Action>(el: E, to: Option<Box<dyn Action>>) -> E {
+        match to {
+            Some(to) => el.on_action(move |_: &A, window, cx| window.dispatch_action(to.boxed_clone(), cx)),
+            None => el,
+        }
+    }
+    let el = route::<E, EditUndo>(el, undo);
+    let el = route::<E, EditRedo>(el, redo);
+    let el = route::<E, EditCut>(el, cut);
+    let el = route::<E, EditCopy>(el, copy);
+    let el = route::<E, EditPaste>(el, paste);
+    let el = route::<E, EditDelete>(el, delete);
+    route::<E, EditSelectAll>(el, all)
+}
 
 pub fn init(cx: &mut App) {
     // Every shortcut, the editor's included, with the keys from Settings › Shortcuts.
@@ -109,6 +187,20 @@ pub fn init(cx: &mut App) {
                 MenuItem::action("Export This Note…", ExportNote),
                 MenuItem::separator(),
                 MenuItem::action("Import from Obsidian…", ImportObsidian),
+            ],
+            disabled: false,
+        },
+        Menu {
+            name: "Edit".into(),
+            items: vec![
+                MenuItem::os_action("Undo", EditUndo, OsAction::Undo),
+                MenuItem::os_action("Redo", EditRedo, OsAction::Redo),
+                MenuItem::separator(),
+                MenuItem::os_action("Cut", EditCut, OsAction::Cut),
+                MenuItem::os_action("Copy", EditCopy, OsAction::Copy),
+                MenuItem::os_action("Paste", EditPaste, OsAction::Paste),
+                MenuItem::action("Delete", EditDelete),
+                MenuItem::os_action("Select All", EditSelectAll, OsAction::SelectAll),
             ],
             disabled: false,
         },
@@ -721,6 +813,18 @@ impl AppView {
             Step::Quit => cx.quit(),
             Step::Import(dir) => self.import_vault(crate::script::path(dir), cx),
             Step::Size(w, h) => script_resize(window, *w, *h),
+            // as the menu bar does: off (nothing takes it) is left alone, on is dispatched
+            Step::Menu(menu, item) => {
+                let found = cx.get_menus().into_iter().flatten().filter(|m| m.name.as_ref() == menu.as_str()).flat_map(|m| m.items).find_map(|i| match i {
+                    OwnedMenuItem::Action { name, action, .. } if name.as_str() == item.as_str() => Some(action),
+                    _ => None,
+                });
+                match found {
+                    Some(action) if window.is_action_available(action.as_ref(), cx) => window.dispatch_action(action, cx),
+                    Some(_) => log::info!("script menu: {menu} > {item} is off"),
+                    None => log::warn!("script: no menu item {menu} > {item}"),
+                }
+            }
             Step::Delete(title) => match cx.global::<Store>().notes.iter().find(|n| n.title == *title).map(|n| n.id.clone()) {
                 Some(id) => self.delete_note(id, window, cx),
                 None => log::warn!("script: no note titled {title:?}"),
@@ -1230,7 +1334,9 @@ impl AppView {
         };
         // Read it through: how far the pass has got, centred over the page
         let pass = self.page.update(cx, |p, cx| p.read_through_status(cx));
-        let calm = typed.is_some_and(|k| self.last_pointer.is_none_or(|m| m < k)) && !self.sidebar_open;
+        // (a control up here with the keyboard on it stays in view, ring and all)
+        let keyed_here = ui::focused_key(window, cx).is_some_and(|k| k.starts_with("chrome:"));
+        let calm = typed.is_some_and(|k| self.last_pointer.is_none_or(|m| m < k)) && !self.sidebar_open && !keyed_here;
         let target = if calm { 0. } else { 1. };
         let now = Instant::now();
         let dt = self.chrome_frame.map(|l| (now - l).as_secs_f32()).unwrap_or(1. / 60.).clamp(1. / 240., 1. / 30.);
@@ -1254,7 +1360,9 @@ impl AppView {
             .h(px(crate::note_page::CHROME_H))
             .window_control_area(WindowControlArea::Drag)
             .opacity(next)
-            .when(next > 0.02, |d| {
+            // drawn even when faded right out, so ☰ and Chat keep their places in the Tab
+            // order after you type (the keyboard on one brings them back into view)
+            .map(|d| {
                 d.child(
                     div()
                         .id("toggle-sidebar")
@@ -1813,11 +1921,13 @@ impl Render for AppView {
         let export = self.export_dialog(cx);
         let badge = self.listening_badge(cx);
         let blots = self.blot_layer(cx);
+        let note = self.page.read(cx).editor.clone();
         // The window itself is not focusable: a click on the linen, the header or any
         // other chrome leaves the keyboard where it was (in the note) instead of taking
         // it to the window, where typing goes nowhere.
-        div()
-            .id("app")
+        let root = div().id("app");
+        // the Edit menu's items, to the note or the field the keyboard is in
+        edit_menu(root, Some(&note), window, cx)
             .size_full()
             .relative()
             .flex()

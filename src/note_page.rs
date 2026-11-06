@@ -306,6 +306,15 @@ fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mu
     }
 }
 
+/// Whether the pointer unfolds tags. Not in a test run (`INKLING_BACKGROUND`, which only
+/// `scripts/dev` sets): GPUI tracks the real pointer over the covered test window, so the
+/// owner's parked pointer would unfold whatever tag it rests on. There a tag takes its
+/// hover only from script steps (`hover: n`).
+fn pointer_hovers_tags() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("INKLING_BACKGROUND").is_none())
+}
+
 pub(crate) fn slowmo() -> f32 {
     static F: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *F.get_or_init(|| std::env::var("INKLING_SLOWMO").ok().and_then(|v| v.parse::<f32>().ok()).filter(|f| *f >= 1.).unwrap_or(1.))
@@ -3058,6 +3067,12 @@ impl NotePage {
         }
         // the sidebar: asked open, and how much of it shows (0 to 1) as it slides
         state["sidebar"] = cx.try_global::<crate::app::SidebarShown>().map_or(Value::Null, |s| json!({"open": s.open, "shown": s.shown}));
+        // which of the Edit menu's items are on where the keyboard is (as the menu bar asks)
+        state["edit"] = {
+            use crate::app::{EditCopy, EditCut, EditDelete, EditPaste, EditRedo, EditSelectAll, EditUndo};
+            let on = |a: &dyn Action| window.is_action_available(a, cx);
+            json!({"undo": on(&EditUndo), "redo": on(&EditRedo), "cut": on(&EditCut), "copy": on(&EditCopy), "paste": on(&EditPaste), "delete": on(&EditDelete), "select_all": on(&EditSelectAll)})
+        };
         // threads whose question or reply got no answer, with why (Try again in the tag)
         state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         // whether the open tag's second button reads Let stand (else Dismiss), or null with none open
@@ -3777,7 +3792,9 @@ impl NotePage {
             // a tag dragged over your words must not put the caret under it
             .occlude()
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                this.set_tag_hover(&id_hover, "tab", *hovered, cx);
+                if pointer_hovers_tags() {
+                    this.set_tag_hover(&id_hover, "tab", *hovered, cx);
+                }
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, _| {
                 let tab = this.tab_bounds.borrow().get(&id_down).copied();
@@ -4052,27 +4069,36 @@ impl NotePage {
                             .keyed_as("tag:dismiss", 4., thread_color, cx, move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx)),
                     )
                     .children((thread.own && !tied).then(|| self.own_ask_button(&id, thread_color, cx)))
-                    .child(div().flex_1())
-                    .child(
-                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
-                            .keyed_as("tag:note", 4., thread_color, cx, move |this, _, cx| this.make_note_from_thread(&id_note, cx)),
-                    )
-                    // Copy is the least used of the four: an icon, so the row fits a margin
+                    // Make a note and Copy go together, at the row's right end: on its first
+                    // line when they fit (they do in a 250 px margin, Let stand and all), else
+                    // together on a second line, still at the right; never the icon alone
                     .child(
                         div()
-                            .id(SharedString::from(format!("copy-{id_copy}")))
-                            .cursor_pointer()
-                            .p(px(2.))
-                            .rounded(px(4.))
-                            .hover(move |s| s.bg(p.hover))
-                            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
-                            // a tick where the pointer is, the words in the toasts (the row has no room)
-                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
-                            .keyed_as("tag:copy", 4., thread_color, cx, move |this, _, cx| {
-                                let text = this.copy_text(&id_copy, cx);
-                                cx.write_to_clipboard(ClipboardItem::new_string(text));
-                                this.show_copied(&id_copy, cx);
-                            }),
+                            .ml_auto()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
+                                    .keyed_as("tag:note", 4., thread_color, cx, move |this, _, cx| this.make_note_from_thread(&id_note, cx)),
+                            )
+                            // Copy is the least used of the four: an icon, so the row fits a margin
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("copy-{id_copy}")))
+                                    .cursor_pointer()
+                                    .p(px(2.))
+                                    .rounded(px(4.))
+                                    .hover(move |s| s.bg(p.hover))
+                                    .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
+                                    // a tick where the pointer is, the words in the toasts (the row has no room)
+                                    .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
+                                    .keyed_as("tag:copy", 4., thread_color, cx, move |this, _, cx| {
+                                        let text = this.copy_text(&id_copy, cx);
+                                        cx.write_to_clipboard(ClipboardItem::new_string(text));
+                                        this.show_copied(&id_copy, cx);
+                                    }),
+                            ),
                     ),
             );
         }
@@ -4106,7 +4132,9 @@ impl NotePage {
                     inset: false,
                 }])
                 .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                    this.set_tag_hover(&id_hover, "panel", *hovered, cx);
+                    if pointer_hovers_tags() {
+                        this.set_tag_hover(&id_hover, "panel", *hovered, cx);
+                    }
                 }))
                 // a click on a tag that only unfolded under the pointer opens it for a reply
                 .on_click(cx.listener(move |this, _, window, cx| {

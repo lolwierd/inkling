@@ -1,0 +1,38 @@
+# The Edit menu does what its keys do, where the keyboard is. In the note, Select All then
+# Copy puts the whole note on the clipboard (under a script a stand-in, which the log
+# shows); with nothing to act on an item is off: Undo and Redo before there is anything
+# to undo or redo, Cut, Copy and Delete with nothing selected. ⌘Z typed still undoes the
+# note, and the menu's Redo brings the words back. In a text field (the chat's box) the
+# items go to the field, all but Delete.
+# fixture: running-plan
+wait: 1500
+caret: end
+dump: start
+expect: !d.edit.undo && !d.edit.redo && !d.edit.copy && !d.edit.cut && !d.edit.delete && d.edit.paste && d.edit.select_all
+menu: Edit > Copy
+menu: Edit > Select All
+dump: all
+expect: d.selection[0] === 0 && d.selection[1] > 300 && d.cursor_line === d.kinds.length - 1
+expect: d.edit.copy && d.edit.cut && d.edit.delete
+menu: Edit > Copy
+expect: log.some(r => r.msg === "script menu: Edit > Copy is off")   // the first Copy, with nothing selected
+expect: log.filter(r => r.msg.startsWith("script clipboard:")).length === 1 && log.some(r => r.msg.startsWith("script clipboard:") && r.msg.includes("Sub-50 10k by March") && r.msg.includes("Strength work twice a week"))
+caret: end
+keys: \sAnd one more.
+wait: 300
+dump: typed
+expect: d.edit.undo && !d.edit.redo
+key: cmd-z
+wait: 300
+dump: undone-by-key
+expect: d.edit.redo
+menu: Edit > Redo
+wait: 300
+dump: redone-by-menu
+expect: d.edit.undo && !d.edit.redo
+key: cmd-j
+wait: 600
+dump: chat-box
+expect: d.focus === "chat" && d.edit.select_all && d.edit.paste && d.edit.copy && d.edit.undo && !d.edit.delete
+quit
+expect: textOf(note("Sub-50 10k by March")).includes("And one more.")

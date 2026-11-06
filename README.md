@@ -1,99 +1,78 @@
+<p align="center">
+  <img src="assets/icon.svg" width="128" alt="Inkling's icon: a linen page whose top border is a row of darns, the last one still being woven">
+</p>
+
 # Inkling
 
-A local notebook that asks. You write; Inkling reads along, and when something does not
-hold up it stitches a running stitch under the exact words and hangs a thread to a tag in
-the margin with its question. Answer it, or fix the words, and the thread ties itself off.
+Inkling is a notebook for your Mac that asks you questions. You write, and it reads along. When a line doesn't add up, it pulls a thread from those exact words out into the margin, with a question or a correction hanging on it. It never writes your notes for you. The thinking stays yours; Inkling only makes sure you have done it.
 
-It runs on your Claude subscription: the model calls go through the Claude Agent SDK,
-which uses this Mac's Claude Code login. No API key.
+It runs on your own Claude subscription, through the Claude Code login already on your Mac. Your notes stay on your Mac as plain files.
 
-The look is "Loose Threads" (linen, Fraunces, stitches, knots). How it was chosen, and the
-two directions it was chosen over: `design/directions/DESIGN.md`.
+## Watch it first
 
-## Run it
+<video src="design/video/page/film.mp4" poster="design/video/page/poster.jpg" controls width="100%"></video>
 
-You need Rust (stable), Bun, and a logged-in Claude Code (`claude`, then `/login`).
+The film is three and a half minutes long and shows everything Inkling does, in seven chapters, with real answers from the model. If the player doesn't appear, open [`design/video/page/film.mp4`](design/video/page/film.mp4). Every capability and the moment it appears in the film are listed in [`design/video/coverage.md`](design/video/coverage.md).
+
+## What it's like to use
+
+**You write, and it reads along.** When you pause, Inkling reads the paragraph you just finished. Most of the time it says nothing: a small stitch in the gutter shows it has read the paragraph and found nothing to ask. When something doesn't hold up, it sews a running stitch under the exact words and hangs a thread out to a tag in the margin, with a ? for a question or a × for a correction. A question that arrives while you are mid-sentence waits until you stop.
+
+**Threads stay quiet until you look at them.** A tag stays folded until you rest the pointer on it, then drops open to show the question. Click it to write back, and the mind answers in the same thread. If you fix the words a thread is about, Inkling reads them again; when the problem is gone, the thread ties itself off and its knot joins the border at the top of the page. You can drag a tag anywhere, dismiss it (and take that back), jump between open threads with ⌥⌘↓ and ⌥⌘↑, or hide every thread with ⌘⇧. to see only your words.
+
+**You can ask whenever you want.** Select some words and press ⌘↵, and Inkling picks the one thing in them most worth a question. You can also ask your own question, or have it answer with a sketch that is stitched out step by step. Ask the room to hear from up to three minds at once, or start a sentence with a mind's name to call it directly. ⌘J opens a chat about the whole note.
+
+**The minds have their own voices.** Inkling comes with a staff engineer, an editor, a skeptic, a Socratic tutor and an investor, and you can write your own: what it is for, how it thinks, its voice and how often it speaks. Each mind keeps its own thread colour, so you can see at a glance who asked what. Tell Inkling, above each note's title, says what that note is for, and a note can read along or wait to be asked.
+
+**The window stays out of the way.** There is no toolbar. The few controls fade while you write and come back when you move the pointer. Settings is a proper Mac window, every keyboard shortcut can be changed, and you choose Linen (light) or Lamplight (dark), your thread colour, the lettering and the text size. Hold ⌥ to speak instead of typing.
+
+**It is a real notebook.** Notes and folders live in the sidebar, ⌘K finds a note or starts one, ⌘⇧C copies a note as Markdown, and ⌘⇧E exports it as Markdown, HTML or Word, with its threads or without. File > Import from Obsidian brings in a whole vault, folders and all, and Inkling leaves the imported words alone so it reads only what you write afterwards.
+
+The complete list, row by row, is [`design/capabilities.md`](design/capabilities.md).
+
+## What it believes
+
+Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](design/manifesto.md). You find out what you think by writing it down yourself, which is why Inkling never writes your notes for you. The most useful thing a reader can do is ask a good question in the right place, beside the exact words, and leave the answer to you. Most of what you write needs no comment, so Inkling's silence means something. And deciding that your words should stand is an answer too.
+
+## Install and run
+
+You need macOS 13 or later, Rust (stable), [Bun](https://bun.sh), and Claude Code signed in: run `claude`, then `/login`.
 
 ```bash
 cd brain && bun install && cd ..
-./scripts/bundle.sh          # builds target/Inkling.app (debug); pass `release` for an optimized build
+./scripts/bundle.sh release
 open target/Inkling.app
 ```
 
-The bundle links to this checkout's `brain/` folder, so sidecar edits apply on the next
-launch. Notes are JSON files in `~/Library/Application Support/Inkling/`.
+The first time Inkling opens, a note called Start here walks you through everything, with real threads to try, and ends by asking you for one sentence about something you are working on. Help > Welcome Guide brings it back later. Your notes are JSON files in `~/Library/Application Support/Inkling/`.
 
-## What's in it
+## How it works
 
-| | |
+Inkling is two programs that talk over a pipe. The app, written in Rust with [GPUI](https://www.gpui.rs), draws the page, the threads and the margin, and keeps your notes. A small helper called the brain, written in TypeScript and run with Bun, talks to Claude through the Claude Agent SDK, using your Claude Code login. When you pause, the app sends the brain the paragraph and enough of the note for context, and the brain answers with silence, a question, a correction or a sketch.
+
+You pick the model in Settings > Model, from the list Claude Code offers; reading along and answering each have their own effort setting. Nothing leaves your Mac except the text Inkling sends to Claude to read along or to answer you.
+
+## The look
+
+The design is called Loose Threads, after embroidery: running stitches under your words, a thread that hangs with real rope physics, fabric tags, a knot when a thread is tied off, and a sampler border that grows as you work. The logo, Darn · Border, is a page whose top border is a row of darns, one for every question answered, the newest still on the needle. The type is Fraunces for writing and Figtree for the controls.
+
+How the design was chosen, and the two directions it was chosen over, is in [`design/directions/DESIGN.md`](design/directions/DESIGN.md). The motion, the stitched diagrams and code blocks are explored in [`design/explorations/`](design/explorations/), and the logo rounds are in [`design/logo/`](design/logo/).
+
+## Working on Inkling
+
+Start with [`AGENTS.md`](AGENTS.md). It maps the code, lists the rules, and explains the one command that matters: `scripts/dev check` runs every check in about fifteen seconds. `scripts/dev e2e` drives the real app through scripted scenarios against a fake brain, so it makes no model calls, and `scripts/dev shot` takes a screenshot of the app without touching your screen.
+
+| Where | What |
 |---|---|
-| Reads along | After you pause, reads the paragraph you just finished; usually quiet, sometimes one question stitched to the exact words. The gutter shows what it made of each paragraph: a needle while it reads, a tacking stitch when it is fine, a numbered knot when it has a question. |
-| Threads | Quiet until you look at one. Click a tag or the stitched words to open it; reply, resolve (⌘↵), dismiss (⌘⇧⌫, with Undo for 8 s or ⌥⌘Z), copy, or make it a note. ⌥⌘↓ / ⌥⌘↑ jump between open threads. |
-| Fix the words | Edit the words a question is about and Inkling looks again: if the edit answers it, the thread ties itself off with one line saying why; if not, it says what is still missing. |
-| While you type | A question that lands mid-sentence waits, folded, until you pause. |
-| Selection | Block types, marks, thread colours, and **Find a loose thread** (⌘↵), **Ask Inkling**, **Sketch it**. |
-| Ask the room | Ask up to three minds about a selection at once; each answers in its own thread colour. |
-| Sketches | Stitched step by step, with captions, ‹ › and replay. |
-| Call by name | Start a paragraph with "Inkling," (or the mind's name) to ask directly, in either mode. |
-| Chat | ⌘J, about the whole note and its threads. |
-| Modes | Per note: Reads along, or Waits to be asked. |
-| Minds | Readers with their own voice and thread colour (staff engineer, editor, skeptic, Socratic tutor, investor, or your own). |
-| First run | A new notebook asks for one sentence about something you are working on; the first question is about your own words. |
-| Tell Inkling | A per-note brief it keeps in mind. |
-| About you | A short profile every note starts with; optionally learned from what you say. |
-| Notes | Sidebar, folders, ⌘K find or start, ⌘⌫ delete, copy as Markdown (⌘⇧C), export Markdown / Word / HTML with the threads under their paragraphs (⌘⇧E), hide threads (⌘⇧.), File > Import from Obsidian… (a vault's notes and folders, left unread). |
-| Voice | Hold ⌥ to dictate (macOS speech recognition). |
-| Settings | ⌘, opens a Settings window: Reading, Appearance, Minds, About you, Model, Shortcuts, Help. Changes show in the note as you make them. |
-| Shortcuts | Every key is yours to change, the editor's included: click keys to record new ones, add or remove keys, clashes are flagged on both rows, reset one or all. New keys work at once, in the note and the menu bar. |
-| Models | The list comes from Claude Code (the Agent SDK's `supportedModels()`), with each model's effort levels; it is kept for when the brain is not running. Empty means Claude Code's own default. |
+| `src/editor.rs` | The editor: blocks, marks, typing, undo, and the anchors that keep threads on their words |
+| `src/note_page.rs` | The page: the reading loop, threads and tags, asking, sketches, chat |
+| `src/stitch.rs` | The thread's rope physics, stitches, knots, the needle and the border |
+| `src/settings.rs`, `src/shortcuts.rs` | The Settings window and every shortcut |
+| `src/import.rs` | Import from Obsidian |
+| `brain/src/prompts.ts` | Every prompt Inkling sends to the model |
 
-## How it's built
+## A note on the Claude login
 
-```
-GPUI app (Rust, src/)                        brain sidecar (Bun + TypeScript, brain/)
-  editor, margin, drawings, chat     ⇄ JSONL ⇄   Claude Agent SDK → Claude Code runtime
-  notes as JSON on disk                           (your subscription login)
-```
+Anthropic's terms don't allow offering a claude.ai login inside products you ship to other people. Inkling is a personal tool that runs on your own machine with your own login, and it should stay that way. To share it, switch the brain to an API key: `INKLING_USE_API_KEY=1` keeps `ANTHROPIC_API_KEY` in its environment.
 
-- `src/editor.rs`: the block editor (title, paragraphs, headings, lists, quotes, marks,
-  IME, undo) and the anchors that keep threads attached to their words while you type.
-- `src/note_page.rs`: the page, the reading loop, threads, toolbar, Ask / Sketch it / Ask the room, chat.
-- `src/margin.rs`: tag placement without overlaps.
-- `src/stitch.rs`: the thread (a small rope simulation), stitches, knots, the needle, the sampler border.
-- `src/drawing.rs`: parses the mind's SVG and draws it like ink, one step at a time.
-- `src/settings.rs` (and `src/settings/parts.rs`): the Settings window, its glass and controls.
-- `src/shortcuts.rs`: every shortcut, its default keys and yours (`shortcuts` in settings.json), the
-  keymap rebuild and the menu refresh.
-- `brain/src/prompts.ts`: every prompt Inkling sends; `brain/src/claude.ts`: the SDK calls.
-
-## Testing hooks
-
-Agents, and anyone scripting the app: start at `AGENTS.md`. `scripts/dev help` lists the
-commands (checks, scenarios with expectations, the page state as JSON, screenshots).
-
-| Variable | Effect |
-|---|---|
-| `INKLING_DATA_DIR=<dir>` | Use another notebook folder. |
-| `INKLING_SCRIPT=<file>` | Play a script against the UI (see `src/script.rs`): type, select, ask, sketch, room, reply, jump, dismiss, undo, chat, open panels. Needs `INKLING_DATA_DIR`, so a script never edits the real notebook. End-to-end scenarios: `scripts/dev e2e <name>`. |
-| `INKLING_OPEN=sidebar,chat,...` | Open panels at launch. |
-| `INKLING_BACKGROUND=1` | Don't take focus when launched. |
-| `INKLING_JIGGLE=<ms>` | Nudge the window so it keeps drawing while covered (for screenshots). |
-| `INKLING_SLOWMO=<factor>` | Slow every thread animation down (screenshots, the walkthrough video). |
-| `INKLING_LOG_JSON=1` | Log one JSON object per line (`ms`, `level`, `target`, `msg`), for tools. |
-| `INKLING_BRAIN_ENTRY=<file.ts>` | Run another brain, e.g. the fake one in `brain/test/e2e/fake-brain.ts` (no model calls). |
-| `INKLING_CLAUDE_PATH=<path>` | Use a specific `claude` binary instead of the SDK's bundled one. |
-| `INKLING_SETTINGS_TAB=<pane>` | Open Settings on reading, appearance, minds, newmind, about, model, shortcuts or help (with `INKLING_OPEN=settings`). |
-| `INKLING_SETTINGS_RECORD=<action>` | Open Settings listening for new keys for that shortcut, e.g. `app::NewNote`. |
-| `INKLING_SETTINGS_KEYS=settings:<keys>,main:<keys>` | Press keys in Settings or in the note window, a second apart, through GPUI's own dispatch. |
-| `INKLING_SETTINGS_SEARCH=<text>` | Fill the shortcut search. |
-| `FAKE_MODELS=none` | The fake brain reports no model list (by default it reports the list the real SDK gave, `brain/test/fixtures/supported-models.json`). |
-
-`cargo test` covers the editor, margin placement, the rope, drawings, export, the store, Obsidian import and the page's reading rules; `cd brain && bun test test/` covers the sidecar.
-
-## Notes
-
-- Anthropic's docs do not allow offering claude.ai login inside products you ship to
-  others. This is a personal tool on your own machine; keep it that way, or switch the
-  sidecar to an API key (`INKLING_USE_API_KEY=1` keeps `ANTHROPIC_API_KEY` in its env).
-- Codex (ChatGPT sign-in with the device code flow) is the next provider; it slots in
-  beside `brain/src/claude.ts` without app changes.
+Fraunces and Figtree are used under the SIL Open Font License; the licence texts are in [`assets/fonts/`](assets/fonts/).

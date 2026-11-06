@@ -5,6 +5,7 @@
 //   bun run render.ts frames <scratch> [--workers=8] [--only=3,4]   the picture, chapter by chapter (see below)
 //   bun run render.ts page <scratch> [--kbps=N]                     segments + audio/mix.wav -> page/film.mp4, under 20 MiB
 //   bun run render.ts moments <scratch>                             coverage.md and page/moments.json from the cut
+//   bun run render.ts paths <scratch>                               how smoothly the camera, threads, knots and pointer move
 //   bun run render.ts eval <scratch> '<expression>'                 a value from the page, for tuning
 //
 // The picture is rendered at 1080p and the film's own rate (60 fps), in segments that follow
@@ -29,7 +30,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const FFMPEG = "/opt/homebrew/bin/ffmpeg";
 const [mode, scratch, ...rest] = process.argv.slice(2);
 if (!mode || !scratch) {
-  console.error("usage: bun run render.ts <stills|audio|frames|page|coverage|eval|worker> <scratch> ...");
+  console.error("usage: bun run render.ts <stills|audio|frames|page|moments|paths|eval|worker> <scratch> ...");
   process.exit(2);
 }
 mkdirSync(scratch, { recursive: true });
@@ -200,14 +201,17 @@ async function page() {
   await run(["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(segDir, "list.txt"), "-c", "copy", joined]);
   const outFile = join(HERE, "page", "film.mp4"), log = join(scratch, "x264-2pass");
   // the bitrate that fills about 19.4 MiB with the video, after 96 kbit/s of audio
-  const dur = +new TextDecoder().decode((await Bun.spawn(["/opt/homebrew/bin/ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", joined], { stdout: "pipe" }).stdout.arrayBuffer() as any)).trim();
+  const probe = Bun.spawn(["/opt/homebrew/bin/ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", joined], { stdout: "pipe" });
+  const dur = +(await new Response(probe.stdout).text()).trim();
   const kbps = opt("kbps") ?? String(Math.floor((19.4 * 8 * 1048.576) / dur - 96));
   console.log(`page: ${dur.toFixed(1)} s at ${kbps} kbit/s video + 96 kbit/s audio`);
   const v = ["-c:v", "libx264", "-preset", "slow", "-b:v", kbps + "k", "-maxrate", String(Math.round(+kbps * 2)) + "k", "-bufsize", String(Math.round(+kbps * 4)) + "k", "-profile:v", "high", "-pix_fmt", "yuv420p",
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-passlogfile", log];
   await run(["-loglevel", "error", "-y", "-i", joined, ...v, "-pass", "1", "-an", "-f", "mp4", "/dev/null"]);
+  // the mix's reverb rings past the picture: fade it with the picture's last 0.6 s, so the
+  // film ends in silence rather than on a cut tail
   await run(["-loglevel", "error", "-y", "-i", joined, "-i", join(HERE, "audio", "mix.wav"), "-map", "0:v", "-map", "1:a", ...v, "-pass", "2",
-    "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-shortest", "-movflags", "+faststart", outFile]);
+    "-af", `afade=t=out:st=${(dur - 0.6).toFixed(3)}:d=0.6`, "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-shortest", "-movflags", "+faststart", outFile]);
   const size = statSync(outFile).size;
   console.log(`→ ${outFile}: ${(size / 1048576).toFixed(2)} MiB${size >= 20 * 1048576 ? " (over 20 MiB: lower --kbps)" : ""}`);
 }
@@ -253,6 +257,63 @@ else if (mode === "moments") {
     writeFileSync(join(HERE, "coverage.md"), md);
     writeFileSync(join(HERE, "page", "moments.json"), JSON.stringify({ length: mmss(dur), fps, moments: moments.map((m: any) => ({ ...m, at: mmss(m.t) })) }, null, 1) + "\n");
     console.log(`coverage.md and page/moments.json: ${moments.length} moments, ${mmss(dur)}`);
+  } finally { tab.close(); }
+}
+else if (mode === "paths") {
+  // How smoothly everything that moves on its own moves, from the timeline itself: the camera
+  // (the world point under the frame's centre), and on screen the threads (every point of a
+  // rope), the knots (from the tie through the flight to the border) and the pointer. For
+  // each, the largest step, acceleration and jerk in 1080p px per frame: a jump, a snap or a
+  // bounce shows as a spike in the last two. tools/motion.ts checks the encoded film.
+  const tab = await Tab.open(join(scratch, "chrome-paths"), PAGE);
+  try {
+    await tab.ready();
+    const out = await tab.eval(`(() => {
+      const F = FILM, T = F.T, fps = F.FPS, N = Math.round(F.DUR * fps), S = { camera: [], threads: [], knots: [], pointer: [] };
+      const flights = [[T.knot5, T.fly5], [T.knot7, T.fly7]];
+      for (let n = 0; n < N; n++) {
+        const t = n / fps, c = F.camAt(t), scr = (x, y) => [960 + (x - c.x) * c.z, 540 + (y - c.y) * c.z];
+        F.renderAt(t);
+        S.camera.push([c.x, c.y, c.z]);
+        const p = document.querySelector('#sceneA svg.ov path[style*="stroke-width:1.75"]');
+        let rope = null;
+        if (p) {
+          const g = p.parentNode.parentNode, m = (g.getAttribute("transform") || "").match(/translate\\(([-\\d.]+)[ ,]+([-\\d.]+)\\)/), ly = m ? +m[2] : 0;
+          const v = (p.getAttribute("d").match(/-?\\d+(?:\\.\\d+)?/g) || []).map(Number);
+          rope = []; for (let i = 0; i + 1 < v.length; i += 2) rope.push(scr(v[i], v[i + 1] + ly));
+        }
+        S.threads.push(rope);
+        const fly = document.querySelector("#film svg.fly circle"), end = document.querySelector("#film g.endknot circle");
+        const on = [...document.querySelectorAll("#sceneA svg.ov circle")].find((e) => +e.getAttribute("r") > 2);
+        const xy = (e) => [+e.getAttribute("cx"), +e.getAttribute("cy")];
+        S.knots.push(fly ? [xy(fly)] : end ? [xy(end)] : on && flights.some(([k, f]) => t >= k && t < f[0]) ? [scr(...xy(on))] : flights.some(([k, f]) => t >= f[1] && t < f[1] + 0.5) ? [scr(660, 68)] : null);
+        const el = document.getElementById("cursor"), tm = el.style.display !== "none" && el.style.transform.match(/translate\\(([-\\d.]+)px,\\s*([-\\d.]+)px\\)/);
+        S.pointer.push(tm ? [[+tm[1], +tm[2]]] : null);
+      }
+      return S;
+    })()`);
+    // the camera as the motion of the world point under the centre; the rest as positions
+    const cam: number[][] = out.camera;
+    const vel = cam.map((c, i) => (i ? [(cam[i - 1][0] - c[0]) * c[2], (cam[i - 1][1] - c[1]) * c[2]] : [0, 0]));
+    const stats = (pos: (number[][] | null)[], v?: number[][]) => {
+      let step = 0, acc = 0, jerk = 0, at = 0;
+      const d = (a: number[][], b: number[][]) => a.map((p, k) => [p[0] - b[k][0], p[1] - b[k][1]]);
+      const big = (a: number[][]) => Math.max(...a.map((p) => Math.hypot(p[0], p[1])));
+      for (let i = 3; i < pos.length; i++) {
+        let v0, v1, v2;
+        if (v) [v0, v1, v2] = [[v[i - 2]], [v[i - 1]], [v[i]]];
+        else {
+          const w = pos.slice(i - 3, i + 1);
+          if (w.some((x) => !x || x.length !== w[0]!.length)) continue;
+          [v0, v1, v2] = [d(w[1]!, w[0]!), d(w[2]!, w[1]!), d(w[3]!, w[2]!)];
+        }
+        const a1 = d(v2, v1), a0 = d(v1, v0), j = big(d(a1, a0));
+        step = Math.max(step, big(v2)); acc = Math.max(acc, big(a1));
+        if (j > jerk) { jerk = j; at = i / 60; }
+      }
+      return { maxStep: +step.toFixed(1), maxAccel: +acc.toFixed(2), maxJerk: +jerk.toFixed(2), maxJerkAt: +at.toFixed(2) };
+    };
+    console.log(JSON.stringify({ camera: stats(cam.map(() => [[0, 0]]), vel), threads: stats(out.threads), knots: stats(out.knots), pointer: stats(out.pointer) }));
   } finally { tab.close(); }
 }
 else { console.error(`unknown mode ${mode}`); process.exit(2); }

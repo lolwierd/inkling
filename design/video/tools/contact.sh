@@ -1,16 +1,17 @@
 #!/bin/bash
 # contact.sh [film.mp4] [out.jpg]: 36 moments of the film, 6 x 6, each with its time.
 # Frames come from the encoded film itself, so the sheet shows exactly what plays; the sheet
-# is set in a page (labels in Figtree) and photographed with headless Chrome. The moments are
-# the cut's (7 Nov 2026): the guide, the correction and its fix, each ask, the threads, the
-# minds, the montages, the mark. Its work files stay in a fresh folder under $TMPDIR.
+# is set in a page (labels in Figtree) and photographed with headless Chrome. Its work files
+# stay in a fresh folder under $TMPDIR.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
 film=${1:-$here/page/film.mp4}; out=${2:-$here/contact-sheet.jpg}
 FF=/opt/homebrew/bin/ffmpeg
 CH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/inkling-contact.XXXXXX")
-times=(2.60 7.20 11.75 23.15 33.95 45.50 52.20 54.90 57.22 65.50 74.25 82.25 84.05 92.15 101.25 105.20 108.35 114.35 116.45 128.00 130.90 136.82 140.25 142.45 145.45 151.05 155.50 161.35 165.55 184.62 187.72 189.82 207.20 209.70 216.15 219.30)
+# 36 moments, evenly spread over the film (the cut is short enough for that to show every moment)
+dur=$(/opt/homebrew/bin/ffprobe -v error -show_entries format=duration -of csv=p=0 "$film")
+times=($(python3 -c "d=$dur; print(' '.join(f'{0.8 + i * (d - 2.2) / 35:.2f}' for i in range(36)))"))
 cells=""
 i=0
 for t in "${times[@]}"; do

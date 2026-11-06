@@ -19,6 +19,7 @@
     io: (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2),
     sine: (k) => 0.5 - 0.5 * Math.cos(Math.PI * k),
     quint: (k) => 1 - Math.pow(1 - k, 5),
+    smooth: (k) => k * k * k * (k * (k * 6 - 15) + 10), // smootherstep: starts and stops at rest
   };
   /** A spring from 0 to 1 from rest after `s` seconds (stiffness k, damping c, mass 1). */
   function spring(s, k, c) {
@@ -265,7 +266,7 @@
     const r = st.r;
     for (; st.k < steps; st.k++) {
       const ts = t0 + ((st.k + 1) * R.DT) / speed;
-      if (track.carry) { const e = E.out(clamp((ts - t0) / (track.carry || 0.5))); r.b = [lerp(a[0] + 0.5, b[0], e), lerp(a[1] + 0.5, b[1], e)]; }
+      if (track.carry) { const e = E.smooth(clamp((ts - t0) / (track.carry || 0.5))); r.b = [lerp(a[0] + 0.5, b[0], e), lerp(a[1] + 0.5, b[1], e)]; }
       if (track.b) r.b = track.b(ts);
       if (track.tieAt != null && ts >= track.tieAt) r.slackTo = 0;
       if (track.cutAt != null && ts >= track.cutAt) r.pinB = false;

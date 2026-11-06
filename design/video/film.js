@@ -51,11 +51,11 @@
     { n: 4, id: "working", name: "It shows its working", dur: 9.0, chords: ["Am7", "C9sus"], caption: [0.4, 8.6, "It shows its working, from your own numbers."],
       cues: (s) => ({ hover1: s + 0.4, link: s + 7.2 }) },
     { n: 5, id: "fix", name: "Fix the words", dur: 10.0, chords: ["C9sus"], caption: [0.2, 9.6, "Fix the words, and the thread ties itself off."],
-      cues: (s) => ({ click: s + 0.15, type: [s + 0.6, s + 1.6], reread: [s + 1.9, s + 2.9], settle: [s + 3.0, s + 4.6], breath5: s + 5.3, tie5: s + 5.9, knot5: s + 6.5, fly5: [s + 6.6, s + 7.4], fade5: [s + 8.0, s + 8.5] }) },
+      cues: (s) => ({ click: s + 0.15, type: [s + 0.6, s + 1.6], reread: [s + 1.9, s + 2.9], settle: [s + 3.0, s + 4.6], breath5: s + 5.3, tie5: s + 5.9, knot5: s + 6.5, fly5: [s + 6.6, s + 7.7], fade5: [s + 8.0, s + 8.5] }) },
     { n: 6, id: "find", name: "Select words, and it asks", dur: 8.0, chords: ["Dm9", "Bbmaj7"], caption: [0.3, 7.8, "Select any words, and it finds the question in them."],
-      cues: (s) => ({ sel: [s + 0.5, s + 1.1], bar: s + 1.2, find: s + 1.6, sew2: [s + 1.8, s + 2.5], carry2: s + 2.5, open2: s + 3.4 }) },
+      cues: (s) => ({ sel: [s + 0.5, s + 1.1], bar: s + 1.2, find: s + 2.1, sew2: [s + 2.3, s + 3.0], carry2: s + 3.0, open2: s + 3.9 }) },
     { n: 7, id: "reply", name: "Write back, and tie it off", dur: 10.0, chords: ["Gm9"], caption: [0.3, 9.6, "Write back. When it’s settled, tie it off."],
-      cues: (s) => ({ openTag: s + 0.2, focus: s + 0.6, typeReply: [s + 0.8, s + 3.8], send: s + 3.9, answer: [s + 4.5, s + 5.9], resolveHov: s + 6.6, breath7: s + 7.0, tie7: s + 7.5, knot7: s + 8.1, fly7: [s + 8.2, s + 9.0], fade7: [s + 9.4, s + 9.9] }) },
+      cues: (s) => ({ openTag: s + 0.2, focus: s + 0.6, typeReply: [s + 0.8, s + 3.8], send: s + 3.9, answer: [s + 4.5, s + 5.9], resolveHov: s + 6.6, breath7: s + 7.0, tie7: s + 7.5, knot7: s + 8.1, fly7: [s + 8.2, s + 9.3], fade7: [s + 9.4, s + 9.9] }) },
     { n: 8, id: "end", name: "The thinking stays yours", dur: 7.2, chords: ["Fmaj9"], caption: [0.2, 2.4, "It never writes your notes. The thinking stays yours.", "title"],
       cues: (s) => ({ __into: "ED", back: [s, s + 1.5], lift: [s + 2.4, s + 3.1], plate: [s + 2.5, s + 3.1], tile: [s + 3.1, s + 3.45], border: [s + 3.2, s + 3.9], satin: [s + 3.45, s + 4.2],
         settle: s + 4.3, word: [s + 4.4, s + 5.2], wdot: s + 5.3, line: [s + 5.35, s + 5.9] }) },
@@ -172,7 +172,7 @@
     const p1 = P1.slice(0, count(S.p1, t)), p2 = p2At(t), p3 = P3.slice(0, count(S.p3, t));
     const sel = {};
     if (p2.sel) sel.p2 = p2.sel;
-    if (within(t, T.sel[0], T.sew2[0])) { const i = p3.indexOf(TXT.probeQuote); if (i >= 0) sel.p3 = [i, Math.round(i + TXT.probeQuote.length * E.sine(prog(t, ...T.sel)))]; }
+    if (within(t, T.sel[0], T.sew2[0])) { const i = p3.indexOf(TXT.probeQuote); if (i >= 0) sel.p3 = [i, Math.round(i + TXT.probeQuote.length * SMOOTH(prog(t, ...T.sel)))]; }
     const gut = {};
     gut.p1 = within(t, ...T.read1) ? { type: "needle" } : t >= T.read1[1] ? { type: "tack" } : null;
     gut.p2 = within(t, ...T.read2) || within(t, ...T.reread) ? { type: "needle" } : t >= T.read2[1] ? { type: "tack" } : null;
@@ -244,7 +244,7 @@
     if (t >= T.fly7[1] && t < ED.lift[0]) motifs.push({ c: "madder", k: prog(t, T.fly7[1], T.fly7[1] + 0.4) });
     const header = { op: 1 - calmAt(t), mind: "Inkling", mindC: "var(--voice)", mode: "Reads along", loose: open.length };
     const page = { scroll: 0, header, blocks, threads, border: { motifs }, title: { text: TITLE.slice(0, count(S.title, t)), caret: caretIn === "title" ? count(S.title, t) : null }, caretOn: caretOn(t), menus: [] };
-    if (within(t, T.bar, T.find + 0.1)) page.menus.push({ type: "toolbar", block: "p3", anchor: "t2s", op: spring(t - T.bar, 400, 32), hov: t >= T.find - 0.3 ? "find" : null });
+    if (within(t, T.bar, T.find + 0.1)) page.menus.push({ type: "toolbar", block: "p3", anchor: "t2s", op: spring(t - T.bar, 400, 40), hov: t >= T.find - 0.15 ? "find" : null });
     if (within(t, T.bar, T.find + 0.1)) { const b = block("p3"); const i = p3.indexOf(TXT.probeQuote); if (b && i >= 0) b.ranges.push({ a: i, b: i + TXT.probeQuote.length, id: "t2s", cls: "" }); }
     return page;
   }
@@ -277,19 +277,20 @@
       { t: [T.p2[0] - 0.4, T.p2[0] + 2.2], to: { x: 640, y: (b1.y + b2.y) / 2 + 40, z: 1.62 } },
       // the thread: in on the words as it is sewn, then along it to its tag
       { t: [T.pause3 - 0.4, T.stitch1[1]], to: { x: 700, y: a1.y + 27, z: 2.1 } },
-      { t: [T.carry1 - 0.1, T.carry1 + 1.6], to: { x: 880, y: a1.y + 27, z: 1.95 } },
-      // the working: the tag open beside its words, clear of the caption
-      { t: [T.hover1, T.hover1 + 1.8], to: { x: 930, y: a1.y + 167, z: 1.9 } },
+      { t: [T.carry1 - 0.1, T.carry1 + 1.6], to: { x: 805, y: a1.y + 27, z: 1.95 } },
+      // the working: the tag open beside the whole paragraph, so every number in the sum shows
+      // in the note too; clear of the caption
+      { t: [T.hover1, T.hover1 + 1.8], to: { x: 805, y: a1.y + 135, z: 1.9 } },
       // the fix: the paragraph and the tag together as the tag grows; in on the knot as it is tied
-      { t: [T.click - 0.6, T.click + 0.9], to: { x: 900, y: a1.y + 227, z: 1.72 } },
-      { t: [T.breath5 - 0.3, T.tie5 + 0.2], to: { x: 1000, y: a1.y + 27, z: 2.4 } },
+      { t: [T.click - 0.6, T.click + 0.9], to: { x: 810, y: a1.y + 227, z: 1.72 } },
+      { t: [T.breath5 - 0.3, T.tie5 + 0.2], to: { x: 950, y: a1.y + 27, z: 2.4 } },
       { t: [T.fly5[0] - 0.1, T.fly5[1] + 0.6], to: { x: 700, y: 260, z: 1.45 } },
       // the staging line, its menu, its question
       { t: [T.sel[0] - 1.0, T.sel[1] + 0.3], to: { x: 800, y: b3.y + 110, z: 1.75 } },
-      { t: [T.carry2 - 0.1, T.open2 + 0.8], to: { x: 930, y: a2.y + 160, z: 1.9 } },
+      { t: [T.carry2 - 0.1, T.open2 + 0.8], to: { x: 805, y: a2.y + 170, z: 1.9 } },
       // writing back: the open tag as it grows
-      { t: [T.openTag - 0.1, T.focus + 1.0], to: { x: 900, y: a2.y + 250, z: 1.7 } },
-      { t: [T.breath7 - 0.3, T.tie7 + 0.2], to: { x: 1000, y: a2.y + 30, z: 2.4 } },
+      { t: [T.openTag - 0.1, T.focus + 1.0], to: { x: 810, y: a2.y + 250, z: 1.7 } },
+      { t: [T.breath7 - 0.3, T.tie7 + 0.2], to: { x: 950, y: a2.y + 30, z: 2.4 } },
       { t: [T.fly7[0] - 0.1, T.fly7[1] + 0.6], to: { x: 700, y: 270, z: 1.45 } },
       // the end: back to the whole page
       { t: [ED.back[0], ED.back[1] + 0.4], to: { x: 660, y: 330, z: 1.2 } },
@@ -383,11 +384,11 @@
     // from the last motif in the page's border (two motifs, 22 apart, centred on the band)
     const from = toScreen(camAt(ED.lift[0]), 671, 68);
     const lk = SMOOTH(prog(t, ...ED.lift));
-    const kx = lerp(from[0], D.x, lk), ky = lerp(from[1], D.y, lk) - 120 * Math.sin(Math.PI * prog(t, ...ED.lift));
+    const kx = lerp(from[0], D.x, lk), ky = lerp(from[1], D.y, lk) - 120 * Math.sin(Math.PI * lk);
     const kr = lerp(3.2 * camAt(ED.lift[0]).z, D.r, SMOOTH(lk));
     const pop = t >= ED.settle ? knotScale(t - ED.settle + 0.12) : 1;
     const ko = 1 - prog(t, ED.settle + 0.05, ED.settle + 0.3);
-    if (ko > 0) html += `<g opacity="${fx(ko)}">${knotSVG(kx, ky, kr, "var(--voice)", pop)}</g>`;
+    if (ko > 0) html += `<g class="endknot" opacity="${fx(ko)}">${knotSVG(kx, ky, kr, "var(--voice)", pop)}</g>`;
     // the wordmark, sewn on beside the icon, and its knot
     const W = LG.wm, ws = 600 / W.vb[2], wx = 940, wy = 578; // wy: the baseline
     const rk = prog(t, ...ED.word);
@@ -447,11 +448,11 @@
     if (t > T.lineUp + 0.4) return "";
     const words = "A notebook that asks.".split(" ");
     const out = 1 - E.in(prog(t, T.lineUp, T.lineUp + 0.32));
-    const lift = -60 * E.in(prog(t, T.lineUp, T.lineUp + 0.32)) + 4 * Math.sin(prog(t, T.openTie - 0.12, T.openTie + 0.1) * Math.PI);
+    const lift = -60 * E.in(prog(t, T.lineUp, T.lineUp + 0.32)) + 4 * Math.sin(SMOOTH(prog(t, T.openTie - 0.12, T.openTie + 0.1)) * Math.PI);
     let html = `<div style="position:absolute;left:0;right:0;top:${fx(400 + lift)}px;text-align:center;font:500 108px/1 'Fraunces Display';letter-spacing:-.02em;color:var(--ink);opacity:${fx(out)}">`;
     words.forEach((w, i) => {
       const wk = clamp((k * words.length - i) * 1.4);
-      const rise = (1 - spring(Math.max(0, (k * words.length - i)) * 0.5, 160, 14)) * 26;
+      const rise = (1 - spring(Math.max(0, (k * words.length - i)) * 0.5, 160, 25.3)) * 26;
       html += `<span style="display:inline-block;opacity:${fx(wk)};transform:translateY(${fx(rise)}px)">${esc(w)}</span> `;
     });
     return html + `</div>`;
@@ -476,11 +477,11 @@
       const w = tw + padX * 2 + keyW;
       const x = 96, y = 1080 - 92 - h;
       // in: the patch is sewn on (it unfolds from its top edge), the words stitch in behind a needle
-      const inK = spring(t - c.t0, 300, 26);
+      const inK = spring(t - c.t0, 300, 34.7);
       const sew = prog(t, c.t0 + 0.08, c.t0 + 0.08 + clamp(0.3 + c.text.length * 0.012, 0.45, 0.95));
       // out: tied off. The thread under the words pulls taut, a knot pops, the patch lifts away
       const tie0 = c.t1 - 0.36, taut = prog(t, tie0, tie0 + 0.14), pop = t - (tie0 + 0.14), yank = prog(t, c.t1 - 0.17, c.t1);
-      const dy = -4 * Math.sin(Math.PI * prog(t, tie0 + 0.1, c.t1 - 0.17)) - 70 * E.in(yank);
+      const dy = -4 * Math.sin(Math.PI * SMOOTH(prog(t, tie0 + 0.1, c.t1 - 0.17))) - 70 * E.in(yank);
       const op = (1 - E.in(yank));
       const sy = clamp(inK, 0, 1.2);
       html += `<div style="position:absolute;left:0;top:0;transform:translate(${fx(x)}px,${fx(y + dy)}px)">` + `<div style="transform-origin:0 0;transform:scaleY(${fx(sy)})">` + patch(0, 0, w, h, op) + `</div>`;
@@ -537,7 +538,7 @@
     A.applyTheme($("#stage"), dark, "madder", {});
     $("#fx").innerHTML = coldOpenFX(t, cam);
     $("#film").innerHTML = captionsHTML(t) + flyHTML(t, cam, geo) + endHTML(t, cam, geo);
-    renderPointer(t, cam, geo);
+    renderPointer(t, cam);
     $("#fade").style.opacity = String(fx(Math.max(1 - prog(t, 0, 0.6), prog(t, DUR - 0.6, DUR))));
   }
 
@@ -549,56 +550,80 @@
       const g = geo.tags[id];
       const from = g && g.ropeEnd ? g.ropeEnd : [1000, 300];
       const k = SMOOTH(prog(t, ...span));
-      const wx = lerp(from[0], 660, k), wy = lerp(from[1], 68, k) - 60 * Math.sin(Math.PI * prog(t, ...span));
+      const wx = lerp(from[0], 660, k), wy = lerp(from[1], 68, k) - 60 * Math.sin(Math.PI * k);
       const p = toScreen(cam, wx, wy);
       s += knotSVG(p[0], p[1], 3.2 * cam.z, "var(--voice)", 1);
     }
-    return s ? `<svg width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">${s}</svg>` : "";
+    return s ? `<svg class="fly" width="1920" height="1080" style="position:absolute;inset:0;overflow:visible">${s}</svg>` : "";
   }
 
   // ======================================================================= the pointer
-  // Moves ease like a hand (smootherstep, on a slight arc); a press dips it.
-  function pointerPath(t, cam, geo) {
-    const G = geo || { tags: {} };
-    const tag = (id, dx = 26, dy = 13) => () => { const g = G.tags[id]; return g ? [g.x + dx, g.y + dy] : null; };
+  // A hand on a mouse. It shows when the hand reaches for it, moves from point to point (a
+  // smootherstep on a slight arc), dips where it clicks, and fades when typing starts or the
+  // hand lets go. Between moves it stays put on the page, as a real pointer does, so every
+  // target is taken once, where its move ends (freezePointer, at boot). A move with no target
+  // is a click in place; the cursor takes its target's shape past mid-move.
+  function pointerSessions() {
+    const tag = (id, dx = 26, dy = 13) => (G) => { const g = G.tags[id]; return g ? [g.x + dx, g.y + dy] : null; };
     const word = (id, f, line = 0) => () => { const Ls = MEAS.main.anchors[id] || []; const L = Ls[line < 0 ? Ls.length + line : line]; return L ? [lerp(L.x, L.r, f), L.y + 15] : null; };
-    const panel = (id, dx, dy) => () => { const g = G.tags[id]; return g && g.panel ? [g.panel.x + (dx >= 0 ? dx : g.panel.w + dx), g.panel.y + g.panel.h + dy] : null; };
-    const link = () => { const r = G.links && G.links[EDIT.from]; return r ? [r.x + r.w / 2, r.y + r.h / 2] : null; };
-    const act = (k) => () => { const r = G.acts && G.acts[k]; return r ? [r.x + r.w * 0.35, r.y + r.h / 2] : null; };
-    const keys = [
-      [T.hover1 - 0.9, T.hover1, tag("t1")],
-      [T.link - 0.9, T.link, link],
-      [T.sel[0] - 0.9, T.sel[0], word("t2", 0), true], [T.sel[0], T.sel[1], word("t2", 1), true],
-      [T.find - 0.45, T.find, act("find")],
-      [T.open2 - 0.8, T.open2, tag("t2")],
-      [T.openTag - 0.1, T.openTag + 0.05, tag("t2")],
-      [T.focus - 0.35, T.focus, panel("t2", 60, -60)],
-      [T.resolveHov - 0.6, T.resolveHov, panel("t2", 30, -20)],
+    const panel = (id, dx, dy) => (G) => { const g = G.tags[id]; return g && g.panel ? [g.panel.x + (dx >= 0 ? dx : g.panel.w + dx), g.panel.y + g.panel.h + dy] : null; };
+    const link = (G) => { const r = G.links && G.links[EDIT.from]; return r ? [r.x + r.w / 2, r.y + r.h / 2] : null; };
+    const act = (k) => (G) => { const r = G.acts && G.acts[k]; return r ? [r.x + r.w * 0.35, r.y + r.h / 2] : null; };
+    // out of the tag's way while you read it: in the gap between the words and the tag, under the thread
+    const aside = (id) => tag(id, -22, 64);
+    return [
+      // open the correction, read it, point at its words in the working, click to select them
+      { show: T.hover1 - 1.5, hide: T.type[0], moves: [
+        [T.hover1 - 0.9, T.hover1, tag("t1"), { press: true }], [T.hover1 + 0.35, T.hover1 + 1.25, aside("t1")],
+        [T.link - 0.9, T.link, link], [T.click, T.click, null, { press: true }]] },
+      // select the staging line, find its question, open it; going back in shows the reply
+      // field, and a click there starts the reply
+      { show: T.sel[0] - 1.5, hide: T.typeReply[0], moves: [
+        [T.sel[0] - 0.9, T.sel[0], word("t2", 0), { ibeam: true }], [T.sel[0], T.sel[1], word("t2", 1), { ibeam: true }],
+        [T.sel[1], T.find, act("find"), { press: true }], [T.open2 - 0.8, T.open2, tag("t2"), { press: true }],
+        [T.open2 + 0.35, T.open2 + 1.25, aside("t2")], [T.openTag - 0.3, T.focus, panel("t2", 60, -60), { press: true, ibeam: true }]] },
+      // the hand comes back to the mouse, where it left it in the reply, to resolve the thread
+      { show: T.resolveHov - 1.3, hide: T.knot7 + 0.6, from: [T.focus, panel("t2", 60, -60)], ibeam: true, moves: [
+        [T.resolveHov - 0.6, T.resolveHov, panel("t2", 30, -20), { press: true }]] },
     ];
-    let cur = null, ibeam = false, press = 0, visible = false;
-    for (let i = 0; i < keys.length; i++) {
-      const [a, b, fn, ib] = keys[i];
-      if (t < a - 0.6 || t > b + 1.2) continue;
-      const p = fn();
-      if (!p) continue;
-      const prev = i > 0 && keys[i - 1][1] > a - 1.2 ? keys[i - 1][2]() : null;
-      const from = prev || [p[0] + 120, p[1] + 160];
-      const k = SMOOTH(prog(t, a, b));
-      const arc = Math.sin(Math.PI * k) * 14;
-      cur = [lerp(from[0], p[0], k) + arc * 0.3, lerp(from[1], p[1], k) - arc];
-      ibeam = !!ib;
-      visible = true;
-      press = within(t, b, b + 0.12) ? 1 : 0;
-    }
-    if (t > T.knot7 + 0.6) visible = false;
-    return visible ? { p: cur, ibeam, press } : null;
   }
-  function renderPointer(t, cam, geo) {
+  let POINTER = [];
+  /** Takes every target where its move ends, by laying the page out at that moment. */
+  function freezePointer() {
+    const at = (t, fn) => fn(renderShot($("#sceneA"), t, camAt(t)) || { tags: {} });
+    POINTER = pointerSessions().map((S) => ({
+      ...S,
+      from: S.from ? at(S.from[0], S.from[1]) : null,
+      moves: S.moves.map(([a, b, fn, o = {}]) => ({ a, b, p: fn ? at(b, fn) : null, o })),
+    }));
+  }
+  function pointerPath(t) {
+    for (const S of POINTER) {
+      if (t < S.show || t > S.hide + 0.2) continue;
+      const q0 = S.moves[0].p;
+      let p = S.from || (q0 ? [q0[0] + 90, q0[1] + 120] : null), ibeam = !!S.ibeam, press = 0;
+      for (const { a, b, p: q, o } of S.moves) {
+        if (t < a) break;
+        if (o.press && within(t, b, b + 0.12)) press = 1;
+        if (!q) continue;
+        if (!p) { p = q; ibeam = !!o.ibeam; continue; }
+        const k = SMOOTH(prog(t, a, b)), arc = Math.sin(Math.PI * k) * 14;
+        p = [lerp(p[0], q[0], k) + arc * 0.3, lerp(p[1], q[1], k) - arc];
+        if (k > 0.6) ibeam = !!o.ibeam;
+        if (k < 1) break;
+      }
+      const op = Math.min(prog(t, S.show, S.show + 0.25), 1 - prog(t, S.hide, S.hide + 0.2));
+      return p && op > 0 ? { p, ibeam, press, op } : null;
+    }
+    return null;
+  }
+  function renderPointer(t, cam) {
     const el = $("#cursor");
-    const P = pointerPath(t, cam, geo);
+    const P = pointerPath(t);
     if (!P) { el.style.display = "none"; return; }
     const s = toScreen(cam, P.p[0], P.p[1]);
     el.style.display = "block";
+    el.style.opacity = fx(P.op);
     el.style.transform = `translate(${s[0]}px, ${s[1]}px) scale(${1.25 * (P.press ? 0.9 : 1)})`;
     el.innerHTML = P.ibeam
       ? `<svg width="14" height="26" viewBox="-7 -13 14 26"><path d="M-4 -11h8M-4 11h8M0 -11v22" style="stroke:#fff;stroke-width:3.4;stroke-linecap:round"/><path d="M-4 -11h8M-4 11h8M0 -11v22" style="stroke:#111;stroke-width:1.4;stroke-linecap:round"/></svg>`
@@ -638,6 +663,7 @@
       measureNote("main", full);
       buildCamera();
       buildEvents();
+      freezePointer();
       FILM.ready = true;
       const q = new URLSearchParams(location.search);
       if (q.has("t")) renderAt(+q.get("t"));

@@ -69,26 +69,26 @@ footer { margin-top: 36px; color: var(--faint); font-size: 13px; }
 <main class="sheet">
   <div class="border" aria-hidden="true"></div>
   <p class="eyebrow">Inkling · the walkthrough film</p>
-  <h1>A notebook that asks, in under four minutes</h1>
+  <h1>A notebook that asks</h1>
   <div class="film">
     <video id="film" controls playsinline preload="metadata" poster="poster.jpg" src="film.mp4"></video>
   </div>
-  <p class="facts">{{LENGTH}} · 720p for phones · sound on</p>
-  <p class="lede">Everything Inkling can do, in seven chapters, on one technical note: a plan to get virtual machine cold starts under two seconds. The words from Inkling and the other minds are real model output, unedited. The app is rebuilt from screens of today's build, so the camera can move through it: pushing in on the words as a thread is pulled, following the thread out to its tag, and pulling back to the page.</p>
+  <p class="facts">{{LENGTH}} · 1080p, 60 fps · sound on</p>
+  <p class="lede">How you use a note in Inkling, on one technical note: a plan to get virtual machine cold starts under two seconds. You write; it reads along; when a line does not add up, a thread comes out of your exact words with a question or a correction, and the correction shows its working. Fix the words and the thread ties itself off; or write back, and once it is settled you tie it off. Every word from Inkling is real model output, unedited.</p>
 
   <section>
-    <h2>Chapters</h2>
+    <h2>Moments</h2>
     <p class="note">Tap one to jump there.</p>
-    <ol class="chapters">{{CHAPTERS}}</ol>
+    <ol class="chapters">{{MOMENTS}}</ol>
   </section>
 
   <section>
     <h2>How it sounds</h2>
     <ul class="plain">
-      <li>One quiet piece in F runs under the whole film: a felt piano over a bowed pad and a soft bass, slow, with room between the phrases.</li>
+      <li>One quiet piece in F runs under the film: a felt piano over a bowed pad and a soft bass, slow, with room between the phrases.</li>
       <li>Its one figure is a running stitch. Four notes go over and under a middle note, held and lifted in the proportion of the app's own stitches, and each phrase ends on its middle note, a knot.</li>
-      <li>The harmony moves where a chapter or a moment begins, and turns darker when the desk turns to Lamplight. There are no hits, and actions on screen make no sound.</li>
-      <li>Four moments are marked, and quietly: each tied-off thread lands a phrase on its knot with a low note under it, and the last knot becomes the dot of the i. While the threads are hidden, the melody rests.</li>
+      <li>The harmony moves where each moment begins. Actions on screen make no sound.</li>
+      <li>Three moments are marked, quietly: each tied-off thread lands a phrase on its knot with a low note under it, and the last knot becomes the dot of the i.</li>
       <li>It is mixed low and even, at -20 LUFS with peaks well under -3 dBTP.</li>
     </ul>
   </section>
@@ -96,23 +96,16 @@ footer { margin-top: 36px; color: var(--faint); font-size: 13px; }
   <section>
     <h2>What is real, and what is staged</h2>
     <ul class="plain">
-      <li>Real: every word Inkling and the other minds say, straight from the model through Inkling's brain, each time with the note, its brief and its threads as the app would send them at that moment.</li>
-      <li>Real: the reads too. Three of the four paragraphs pass without a word because the model let them pass; the note was worded until it did.</li>
-      <li>Staged: the app is rebuilt in HTML rather than recorded; typing and model waits are sped up; the dictated words are typed by the film; the other notes, the Obsidian vault and the email are made up; Copy and Make a note are only pointed at; and the last knot becoming the dot of the i is a film device.</li>
+      <li>Real: every word Inkling says, straight from the model through Inkling's brain, each time with the note and its threads as the app would send them at that moment. The working under the correction is the brain's own, checked against the writer's numbers before it is shown.</li>
+      <li>Real: the reads too. The first and third paragraphs pass without a word because the model let them pass.</li>
+      <li>Staged: the app is rebuilt in HTML rather than recorded, so the camera can move through it; typing and model waits are sped up; and the last knot becoming the dot of the i is a film device.</li>
     </ul>
-  </section>
-
-  <div class="stitch-rule" aria-hidden="true"></div>
-  <section>
-    <h2>Every capability, and when it appears</h2>
-    <p class="note">All {{TOTAL}} from Inkling's capability list. Tap one to see it.</p>
-    {{COVERAGE}}
   </section>
 
   <footer>Made from <code>design/video</code> in the repo; this page from <code>design/video/page/build.py</code>.</footer>
 </main>
 <script>
-  // chapters and moments move the film; the one playing is marked as it plays
+  // moments move the film; the one playing is marked as it plays
   const film = document.getElementById("film");
   const buttons = Array.from(document.querySelectorAll("button.seek"));
   buttons.forEach((b) => b.addEventListener("click", () => {

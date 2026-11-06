@@ -696,6 +696,8 @@ impl NotePage {
         self.last_edited = None;
         self.waiting.clear();
         self.chat_error = None;
+        // as the chat's failure line, a tag's goes with the note it was on
+        self.unanswered.clear();
         self.mind = cx.global::<Store>().mind(&note.mind_id);
         self.note = note;
         self.active = None;

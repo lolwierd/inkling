@@ -573,7 +573,18 @@ impl SettingsView {
         let m = k.modifiers;
         let only_cmd = m.platform && !m.shift && !m.alt && !m.control;
         match k.key.as_str() {
-            "escape" if !m.modified() => self.close(window, cx),
+            // Esc in the shortcut search, with words in it, clears them first, as a Mac
+            // search field does; with nothing to clear it closes Settings
+            "escape" if !m.modified() => {
+                let search = self.search.clone();
+                if search.read(cx).focus_handle(cx).is_focused(window) && !search.read(cx).value().is_empty() {
+                    search.update(cx, |s, cx| s.set_value("", window, cx));
+                    cx.stop_propagation();
+                    cx.notify();
+                } else {
+                    self.close(window, cx);
+                }
+            }
             "w" if only_cmd => self.close(window, cx),
             // Up and down walk the sidebar, as in System Settings, when no field has the keys.
             "up" | "down" if !m.modified() && self.focus.is_focused(window) => {

@@ -1,0 +1,26 @@
+# Answer in the note: a paragraph that answers an open thread ties it off (the read names
+# it, the thread's mind confirms with `settle`), its knot points to the answer, and Reopen
+# remembers those words are not its answer.
+# fixture: running-plan
+wait: 1500
+type: The long run starts at 8 km on 6 December and reaches 16 km by late January [[silent]] [[answers:2]].
+settle
+dump: answered
+expect: d.statuses.includes("t2:Resolved:Inkling") && d.statuses.includes("t1:Open:Inkling")
+expect: d.answers.length === 1 && d.answers[0].thread === "t2" && d.answers[0].quote.startsWith("The long run starts at 8")
+expect: d.knots.includes("t2") && d.tied_by.t2 === "answer"
+expect: tasks.join() === "read,settle"
+expect: requests[1].input.target.startsWith("The long run starts") && requests[1].input.answer === "The long run starts at 8"
+expect: requests[0].input.ctx.threads.find(t => t.id === "t2").open === true
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").messages.at(-1).text.includes("Settled by")
+export: md
+knot: 2
+dump: knot-clicked
+expect: d.active === "t2" && d.cursor_line === 3
+reopen: 2
+dump: reopened
+expect: d.statuses.includes("t2:Open:Inkling") && d.answers.length === 0 && d.knots.length === 0
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").not_answers[0] === "The long run starts at 8"
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").tied_by === undefined
+expect: log.some(l => l.msg.includes("Answered in the note:* “The long run starts at 8”"))
+quit

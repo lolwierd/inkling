@@ -1,0 +1,24 @@
+# A note that waits to be asked never starts a thread, but while one is open it reads each
+# finished paragraph for answers only; the explanation you asked for ties off once your
+# paragraph says it.
+wait: 1500
+note: VO2 notes
+mode: ask
+type: Intervals raise VO2 max more than easy running does, as far as I know.
+settle
+dump: quiet
+expect: d.threads.length === 0
+select: VO2 max
+ask: What is it?
+settle
+dump: asked
+expect: d.threads.length === 1 && d.threads[0].kind === "Ask" && d.threads[0].status === "Open"
+escape
+type: VO2 max is the most oxygen my body can use in a minute, which caps my pace [[answers:1]].
+settle
+dump: answered
+expect: d.threads[0].status === "Resolved" && d.knots.length === 1
+expect: tasks[0] === "ask" && tasks.filter(t => t === "settle").length === 1
+expect: requests.filter(r => r.input.task === "read").every(r => r.input.answersOnly === true)   // no full read in a note that waits
+expect: requests.find(r => r.input.task === "settle").input.ctx.mind.name === "Inkling"
+quit

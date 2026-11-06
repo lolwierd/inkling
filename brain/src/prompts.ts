@@ -458,3 +458,100 @@ export const LEARN_SCHEMA = {
   required: ["update", "aboutMe"],
   properties: { update: { type: "boolean" }, aboutMe: { type: "string" } },
 } as const;
+
+// ----- answers in the note (design/features/answer-in-the-note.md) --------------------
+
+/** A thread words in the note can still answer: open, and never the writer's own. */
+export function isOpen(t: Context["threads"][number]): boolean {
+  return (t.open ?? !t.resolved) && !t.own;
+}
+
+/** The open threads, by their number in the margin block. */
+export function openThreadNumbers(ctx: Context): number[] {
+  return ctx.threads.flatMap((t, i) => (isOpen(t) ? [i + 1] : []));
+}
+
+const ANSWER_RULES = [
+  "- It answers a thread when someone who read only that thread and this paragraph would say the thread's point is settled: the paragraph gives the number, reason, decision or corrected fact the thread asked for, and gets it right; or, for a thread where the writer asked for an explanation, it explains that thing correctly in the writer's own words.",
+  "- It does not answer a thread when it only touches the same subject, repeats or rephrases the question, promises to deal with it later, answers only part of it, copies the margin's own words, or gives a wrong answer.",
+  "- answers: for each thread it answers, the thread's number and quote: the exact words of the paragraph that answer it, the shortest span that does, often one sentence. Most paragraphs answer nothing; then answers is empty.",
+];
+
+function refusedLines(ctx: Context): string[] {
+  return ctx.threads.flatMap((t, i) =>
+    isOpen(t) && t.notAnswers?.length ? [`Thread ${i + 1}: the writer has said these words do not answer it: ${t.notAnswers.map((w) => `«${w}»`).join("; ")}.`] : [],
+  );
+}
+
+/** What a read adds when the note has open threads: does the paragraph answer one? Empty
+ *  when nothing is open, so the read is exactly what it was. */
+export function answersBlock(ctx: Context): string {
+  const open = openThreadNumbers(ctx);
+  if (open.length === 0) return "";
+  return ["", "", `Open margin threads: ${open.join(", ")}. Check whether this paragraph answers any of them.`, ...ANSWER_RULES, ...refusedLines(ctx)].join("\n");
+}
+
+/** A note that waits to be asked: no new points, only whether the paragraph answers an open thread. */
+export function answersOnlyPrompt(ctx: Context, target: string): string {
+  return [
+    noteBlock(ctx),
+    "",
+    "The writer just finished this paragraph:",
+    `<paragraph>${target}</paragraph>`,
+    "",
+    "The writer has asked you to stay quiet while they write, so raise nothing new: set speak to false, kind to \"question\", sketch to false, quote and text to empty strings, and repeats to 0.",
+  ].join("\n") + answersBlock(ctx);
+}
+
+export function settlePrompt(ctx: Context, quote: string, messages: ThreadMessage[], target: string, answer: string | undefined, notAnswers: string[]): string {
+  const history = messages.map((m) => `${m.role === "you" ? "Writer" : "You"}: ${m.text}`).join("\n");
+  return [
+    noteBlock(ctx),
+    "",
+    `This margin thread is about «${quote}»:`,
+    history || "(nothing said in it yet)",
+    "",
+    "Since then the writer wrote this paragraph in the note:",
+    `<paragraph>${target}</paragraph>`,
+    answer ? `The words that may settle it: «${answer}»` : "",
+    notAnswers.length ? `The writer has said these words do not answer it: ${notAnswers.map((w) => `«${w}»`).join("; ")}.` : "",
+    "",
+    "Does this paragraph settle the thread? Be strict: when in doubt, it does not.",
+    "- It settles the thread only when it gives what the thread asked for (the number, the reason, the decision, the corrected fact) and gets it right; or, where the writer asked for an explanation, when it says that explanation correctly in the writer's own words.",
+    "- It does not settle it when it only touches the subject, repeats or rephrases the question, promises to deal with it later, answers only part of it, copies the thread's own words, or is wrong.",
+    "- settled: true or false.",
+    "- quote: when settled, the exact words of the paragraph that settle it, the shortest span that does (often one sentence); otherwise an empty string.",
+    "- text: when settled, one short sentence for the thread saying what settled it, in the writer's terms, with no praise; otherwise an empty string.",
+  ]
+    .filter((l, i, a) => l !== "" || (a[i - 1] !== "" && i > 0))
+    .join("\n");
+}
+
+const { repeats: REPEATS_PROPERTY, ...BEFORE_REPEATS } = THOUGHT_SCHEMA.properties;
+
+/** The read's schema when the note has open threads: the same, plus the threads it answers,
+ *  before `repeats`, which stays last (it is written after the note it checks). */
+export const THOUGHT_WITH_ANSWERS_SCHEMA = {
+  ...THOUGHT_SCHEMA,
+  required: [...THOUGHT_SCHEMA.required.filter((k) => k !== "repeats"), "answers", "repeats"],
+  properties: {
+    ...BEFORE_REPEATS,
+    answers: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["thread", "quote"],
+        properties: { thread: { type: "integer" }, quote: { type: "string" } },
+      },
+    },
+    repeats: REPEATS_PROPERTY,
+  },
+} as const;
+
+export const SETTLE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["settled", "quote", "text"],
+  properties: { settled: { type: "boolean" }, quote: { type: "string" }, text: { type: "string" } },
+} as const;

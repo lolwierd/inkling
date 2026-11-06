@@ -28,6 +28,12 @@ export interface ThreadSummary {
   elsewhere?: { noteTitle: string; quote: string } | null;
   /** The writer hung this thread themselves; no mind answers in it unless called. */
   own?: boolean;
+  /** The thread's id, so an answer in the note can name it (Answer in the note). */
+  id?: string;
+  /** Still open: words in the note can answer it. Without it, a thread not resolved is open. */
+  open?: boolean;
+  /** Words the writer said do not answer it. */
+  notAnswers?: string[];
 }
 
 /** Words from another note that share the subject of the paragraph just read (relate). */
@@ -91,7 +97,8 @@ export interface RunSettings {
 
 export type Task =
   // `through`: a read made by Read it through, which reads a finished draft once.
-  | { task: "read"; ctx: Context; target: string; through?: boolean }
+  // `answersOnly`: a note that waits to be asked reads only for answers (Answer in the note).
+  | { task: "read"; ctx: Context; target: string; through?: boolean; answersOnly?: boolean }
   | { task: "probe"; ctx: Context; target: string }
   | { task: "ask"; ctx: Context; target: string; question: string; history?: ThreadMessage[] }
   | { task: "answer"; ctx: Context; target: string }
@@ -100,7 +107,8 @@ export type Task =
   | { task: "reply"; ctx: Context; quote: string; messages: ThreadMessage[]; message: string; elsewhere?: ElsewhereEnd }
   | { task: "chat"; ctx: Context; history: ThreadMessage[]; message: string; near: string | null }
   | { task: "learn"; aboutMe: string | null; message: string }
-  | { task: "relate"; ctx: Context; target: string; before: string[]; passages: Passage[] };
+  | { task: "relate"; ctx: Context; target: string; before: string[]; passages: Passage[] }
+  | { task: "settle"; ctx: Context; quote: string; messages: ThreadMessage[]; target: string; answer?: string; notAnswers: string[] };
 
 export type Request =
   | { op: "run"; id: string; settings: RunSettings; input: Task }

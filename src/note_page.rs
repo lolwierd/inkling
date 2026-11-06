@@ -558,6 +558,9 @@ pub struct NotePage {
     read_through: Option<read_through::Pass>,
     /// Your own threads a mind is answering in now, and which mind (`own::call_into_own`).
     own_calls: HashMap<String, String>,
+    /// Paragraphs a note that waits to be asked has read for answers only (by hash), so
+    /// each version is checked once (`answers.rs`).
+    answer_checks: HashSet<u64>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -658,6 +661,7 @@ impl NotePage {
             ends: Default::default(),
             read_through: None,
             own_calls: HashMap::new(),
+            answer_checks: HashSet::new(),
         };
         page.load_into_editor(cx);
         page
@@ -1252,13 +1256,15 @@ impl NotePage {
             (cursor_unit.start, candidates)
         };
         let mut marked = false;
+        let waits = self.note.mode == Mode::WhenYouAsk;
+        let listens = !waits || self.listens_for_answers();
         for (line, text, writing_code, alone) in candidates {
             let hash = hash_text(&text);
-            let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash);
+            let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash) || (waits && self.answer_checks.contains(&hash));
             let verdict = if writing_code && !already {
                 Verdict::Later
             } else {
-                judge(&text, line == cursor_line, already, self.calls_mind(&text), self.note.mode == Mode::ThinksWithYou, self.reading.is_some())
+                judge(&text, line == cursor_line, already, self.calls_mind(&text), listens, self.reading.is_some())
             };
             match verdict {
                 Verdict::Skip => {}
@@ -1272,6 +1278,7 @@ impl NotePage {
                     marked = true;
                     self.answer_call(line, text, cx);
                 }
+                Verdict::Read if waits => self.read_for_answers(line, text, hash, cx),
                 Verdict::Read => {
                     self.note.read_hashes.push(hash);
                     marked = true;
@@ -1302,6 +1309,11 @@ impl NotePage {
             .filter(|t| t.status != ThreadStatus::Dismissed)
             .map(|t| {
                 json!({
+                    "id": t.id,
+                    // words here can answer it: open, a mind's (not your own), and not visiting
+                    // from another note (answered in its home note)
+                    "open": crate::answers::answerable(t) && !self.note.elsewhere_of(&t.id).is_some_and(|e| e.visiting),
+                    "notAnswers": t.not_answers,
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
                     "messages": t.messages.iter().map(own::message_json).collect::<Vec<_>>(),
@@ -1558,6 +1570,7 @@ impl NotePage {
                         }
                     });
                 }
+                page.take_answers(line, &target, &v, cx);
                 page.later(cx, |page, cx| page.after_read(cx));
                 cx.notify();
             }

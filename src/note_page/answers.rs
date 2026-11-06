@@ -12,10 +12,11 @@ use gpui_kit::*;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-use super::{Metrics, NotePage, anim_since, knot_scale, mind_thread, nearest_match, short_title};
+use super::{Metrics, NotePage, Pending, Reading, anim_since, knot_scale, line_ranges, locate_thought, mind_thread, nearest_match, role_wire, short_title};
 use crate::answers as rules;
+use crate::brain::BrainMsg;
 use crate::editor::Anchor;
-use crate::store::{Answer, Note, Store, Thread, ThreadStatus, TiedBy};
+use crate::store::{Answer, Mind, Note, Role, Store, Thread, ThreadStatus, TiedBy};
 use crate::theme::{SANS, SERIF, Theme, ts};
 use crate::ui::Keyed;
 
@@ -292,5 +293,154 @@ impl NotePage {
         state["tied_by"] = self.note.threads.iter().filter_map(|t| t.tied_by.map(|b| (short(&t.id), json!(b)))).collect::<serde_json::Map<_, _>>().into();
         let washes: Vec<String> = ed.washes.iter().filter_map(|(w, _)| rules::thread_of(w).map(short)).collect();
         state["washed"] = json!(washes);
+    }
+}
+
+// ----- Answer in the note: noticing an answer ------------------------------------------
+//
+// A read names the open threads its paragraph may answer; each goes to its own mind
+// (`settle`), which must say it settles and give the words; then the app's own rules
+// (`crate::answers`) can still say no. Only then does the thread tie off.
+
+impl NotePage {
+    /// A note that waits to be asked listens for answers only while it has an open thread
+    /// of its own (one visiting from another note is answered in its home note).
+    pub(super) fn listens_for_answers(&self) -> bool {
+        let away = visiting_ids(&self.note);
+        self.note.threads.iter().any(|t| rules::answerable(t) && !away.contains(&t.id))
+    }
+
+    /// Can words in this note answer thread `t`? Open, and its own: a thread between notes
+    /// visiting from another note keeps its answer in its home note's words, so only words
+    /// written there tie it off.
+    fn answerable_here(&self, t: &Thread) -> bool {
+        rules::answerable(t) && !self.note.elsewhere_of(&t.id).is_some_and(|e| e.visiting)
+    }
+
+    /// A paragraph of a note that waits to be asked, finished while a thread is open: read
+    /// only for whether it answers one. It holds the one read slot, like any read.
+    pub(super) fn read_for_answers(&mut self, line: usize, text: String, hash: u64, cx: &mut Context<Self>) {
+        self.answer_checks.insert(hash);
+        let input = json!({"task": "read", "ctx": self.context(cx), "target": text, "answersOnly": true});
+        let target = text.clone();
+        let req = self.run(input, false, cx, move |page, msg, cx| match msg {
+            BrainMsg::Done(v) => {
+                page.reading = None;
+                page.take_answers(line, &target, &v, cx);
+                page.later(cx, |page, cx| page.after_read(cx));
+                cx.notify();
+            }
+            BrainMsg::Error { kind, message } => {
+                page.reading = None;
+                // never checked: a later pause may try it again
+                page.answer_checks.remove(&hash);
+                if kind != "cancelled" {
+                    page.report(&kind, &message, cx);
+                }
+                page.later(cx, |page, cx| page.after_read(cx));
+            }
+            BrainMsg::Delta(_) => {}
+        });
+        self.reading = Some(Reading { req, line, hash });
+        cx.notify();
+    }
+
+    /// The threads a read says its paragraph (line `line` when it was sent) answers: each
+    /// goes to its own mind to be confirmed. Called from a read's `done`.
+    pub(super) fn take_answers(&mut self, line: usize, paragraph: &str, v: &Value, cx: &mut Context<Self>) {
+        let named: Vec<(String, String)> = v["answers"]
+            .as_array()
+            .map(|list| list.iter().filter_map(|a| Some((a["thread"].as_str()?.to_string(), a["quote"].as_str().unwrap_or("").to_string()))).collect())
+            .unwrap_or_default();
+        if named.is_empty() {
+            return;
+        }
+        let paragraph = paragraph.to_string();
+        // after this update: it starts more requests
+        self.later(cx, move |page, cx| {
+            for (id, words) in named {
+                page.settle_answer(&id, line, &paragraph, &words, cx);
+            }
+        });
+    }
+
+    /// The mind that asked a thread, to judge an answer to it as it would.
+    fn mind_of(&self, t: &Thread, cx: &App) -> Mind {
+        if t.mind_name.trim().is_empty() || t.mind_name == self.mind.name {
+            return self.mind.clone();
+        }
+        self.room_candidates(cx).into_iter().find(|m| m.name == t.mind_name).unwrap_or_else(|| self.mind.clone())
+    }
+
+    /// Ask a thread's own mind whether `paragraph` settles it; `words` are the words the read
+    /// named. The needle works beside the thread's words meanwhile, as when you fix them.
+    fn settle_answer(&mut self, id: &str, line: usize, paragraph: &str, words: &str, cx: &mut Context<Self>) {
+        let Some(t) = self.note.threads.iter().find(|t| t.id == id).cloned() else { return };
+        if !self.answerable_here(&t) || self.pending.contains_key(id) || rules::is_not_answer(words, &t) {
+            return;
+        }
+        let mind = self.mind_of(&t, cx);
+        let input = json!({
+            "task": "settle",
+            "ctx": self.context_with(&mind, cx),
+            "quote": t.quote,
+            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+            "target": paragraph,
+            "answer": words,
+            "notAnswers": t.not_answers,
+        });
+        let (tid, para, said) = (id.to_string(), paragraph.to_string(), t.messages.len());
+        self.rechecking.insert(tid.clone());
+        let req = self.run(input, true, cx, move |page, msg, cx| match msg {
+            BrainMsg::Done(v) => {
+                page.pending.remove(&tid);
+                page.rechecking.remove(&tid);
+                if v["settled"].as_bool() == Some(true) {
+                    let words = v["quote"].as_str().unwrap_or("").to_string();
+                    let text = v["text"].as_str().unwrap_or("").trim().to_string();
+                    page.tie_by_answer(&tid, line, &para, &words, text, said, cx);
+                }
+                cx.notify();
+            }
+            BrainMsg::Error { kind, message } => {
+                page.pending.remove(&tid);
+                page.rechecking.remove(&tid);
+                if kind != "cancelled" {
+                    page.report(&kind, &message, cx);
+                }
+                cx.notify();
+            }
+            BrainMsg::Delta(_) => {}
+        });
+        self.pending.insert(id.to_string(), (req, Pending::Thinking));
+        cx.notify();
+    }
+
+    /// The thread's mind says `paragraph` settles it, with `words`: tie it off there, unless
+    /// the app's own rules say no. `said` is how many messages it had when it was asked.
+    fn tie_by_answer(&mut self, id: &str, line: usize, paragraph: &str, words: &str, text: String, said: usize, cx: &mut Context<Self>) {
+        let Some(t) = self.note.threads.iter().find(|t| t.id == id).cloned() else { return };
+        // still open, its own, and nothing said in it since
+        if !self.answerable_here(&t) || t.messages.len() != said || rules::is_not_answer(words, &t) {
+            return;
+        }
+        // an explanation you asked for counts in your own words, not the mind's
+        if rules::writer_asked(t.kind) && rules::copies_mind(paragraph, &t) {
+            log::info!("answer for {id}: the paragraph copies the mind's words; not tied off");
+            return;
+        }
+        // the words, where the paragraph is now (the whole paragraph when they are not in it)
+        let full = self.editor.read(cx).text().to_string();
+        let Some(range) = locate_thought(&full, &line_ranges(&full), line, paragraph, words).filter(|r| !r.is_empty()) else { return };
+        if let Some(t) = self.thread_mut(id) {
+            t.answer = Some(Answer { start: range.start, end: range.end, quote: full[range.clone()].to_string() });
+            t.tied_by = Some(TiedBy::Answer);
+        }
+        let aid = rules::anchor_id(id);
+        self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: aid, range, open: false }, cx));
+        if !text.is_empty() {
+            self.push_message(id, Role::Mind, text, cx);
+        }
+        self.set_status(id, ThreadStatus::Resolved, cx);
     }
 }

@@ -1,0 +1,12 @@
+# Answer in the note, the no: the read names thread 2 but its mind says the paragraph does
+# not settle it. Nothing changes in the thread, and nothing is said anywhere.
+# fixture: running-plan
+wait: 1500
+type: The long run is the most important run of the week for me [[answers:2]] [[settle>unsettled]].
+settle
+dump: unsettled
+expect: d.statuses.includes("t2:Open:Inkling") && d.threads.find(t => t.id === "t2").msgs === 1
+expect: d.answers.length === 0 && d.knots.length === 0 && d.error === null
+expect: tasks.join() === "read,settle"
+expect: d.rechecking.length === 0 && d.pending.length === 0
+quit

@@ -395,3 +395,72 @@ describe("the writer's own threads in prompts", async () => {
     expect(called).not.toContain("selected «");
   });
 });
+
+const { pickAnswers } = await import("../src/output.ts");
+const { answersBlock, answersOnlyPrompt, settlePrompt, THOUGHT_SCHEMA, THOUGHT_WITH_ANSWERS_SCHEMA } = await import("../src/prompts.ts");
+
+describe("answers in the note", () => {
+  const mind = { name: "Inkling", description: "", howItThinks: "", voice: "plain" as const, frequency: "when_it_matters" as const };
+  const thread = (id: string, open: boolean, notAnswers: string[] = []) => ({ id, quote: `q ${id}`, messages: [], resolved: !open, open, notAnswers });
+  const ctx = (threads: ReturnType<typeof thread>[]) => ({ noteTitle: "Plan", noteText: "The long run starts at 8 km.", brief: null, mind, aboutMe: null, threads, now: "Friday 7 November 2026", letStand: [] });
+  const target = "The long run starts at 8 km on 6 December, so it reaches 16 km by late January.";
+
+  test("a read names threads by their number; only open ones, each once, at most three, words snapped", () => {
+    const threads = [thread("t1", false), thread("t2", true), thread("t3", true), thread("t4", true), thread("t5", true)];
+    const raw = [
+      { thread: 2, quote: "STARTS AT 8 km" },
+      { thread: 1, quote: "tied off already" },
+      { thread: 9, quote: "no such thread" },
+      { thread: 2, quote: "twice" },
+      { thread: 3, quote: "words that are not there" },
+      { thread: 4, quote: "16 km" },
+      { thread: 5, quote: "one too many" },
+    ];
+    expect(pickAnswers(raw, threads, target)).toEqual([
+      { thread: "t2", quote: "starts at 8 km" },
+      { thread: "t3", quote: target },
+      { thread: "t4", quote: "16 km" },
+    ]);
+    expect(pickAnswers("nonsense", threads, target)).toEqual([]);
+    expect(pickAnswers([{ thread: 2 }], [{ resolved: false }], target)).toEqual([]); // no id, nothing to name
+  });
+
+  test("a thread of the writer's own is never answered, whatever `open` says", () => {
+    expect(pickAnswers([{ thread: 1, quote: "16 km" }], [{ id: "a", resolved: false, open: true, own: true }], target)).toEqual([]);
+    expect(answersBlock({ ...ctx([]), threads: [{ ...thread("o", true), own: true }] } as any)).toBe("");
+  });
+
+  test("an older client's thread without `open` is open while not resolved", () => {
+    expect(pickAnswers([{ thread: 1, quote: "16 km" }], [{ id: "a", resolved: false }], target)).toEqual([{ thread: "a", quote: "16 km" }]);
+  });
+
+  test("the read's answers block lists open threads and the words turned down, and nothing when none are open", () => {
+    expect(answersBlock(ctx([thread("t1", false)]))).toBe("");
+    const block = answersBlock(ctx([thread("t1", false), thread("t2", true, ["Sunday is the long run."]), thread("t3", true)]));
+    expect(block).toContain("Open margin threads: 2, 3. Check whether this paragraph answers any of them.");
+    expect(block).toContain("Thread 2: the writer has said these words do not answer it: «Sunday is the long run.».");
+    expect(block).not.toContain("Thread 3:");
+    const quiet = answersOnlyPrompt(ctx([thread("t2", true)]), target);
+    expect(quiet).toContain("raise nothing new");
+    expect(quiet).toContain(`<paragraph>${target}</paragraph>`);
+    expect(quiet).toContain("Open margin threads: 1.");
+  });
+
+  test("the schema with answers is the read's schema plus answers, before repeats, which stays last", () => {
+    const without = (l: string[]) => l.filter((k) => k !== "repeats");
+    expect(THOUGHT_WITH_ANSWERS_SCHEMA.required).toEqual([...without([...THOUGHT_SCHEMA.required]), "answers", "repeats"]);
+    expect(Object.keys(THOUGHT_WITH_ANSWERS_SCHEMA.properties)).toEqual([...without(Object.keys(THOUGHT_SCHEMA.properties)), "answers", "repeats"]);
+  });
+
+  test("settle shows the thread, the paragraph, the words and what was turned down, and asks for strictness", () => {
+    const p = settlePrompt(ctx([]), "add a kilometre every week", [{ role: "mind", text: "Starting from how far?" }, { role: "you", text: "Good point." }], target, "starts at 8 km", ["Sunday is the long run."]);
+    expect(p).toContain("This margin thread is about «add a kilometre every week»:\nYou: Starting from how far?\nWriter: Good point.");
+    expect(p).toContain(`<paragraph>${target}</paragraph>\nThe words that may settle it: «starts at 8 km»`);
+    expect(p).toContain("do not answer it: «Sunday is the long run.».");
+    expect(p).toContain("Be strict: when in doubt, it does not.");
+    expect(p).not.toMatch(/\n\n\n/);
+    const bare = settlePrompt(ctx([]), "q", [], target, undefined, []);
+    expect(bare).toContain("(nothing said in it yet)");
+    expect(bare).not.toContain("The words that may settle it");
+  });
+});

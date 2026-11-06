@@ -25,10 +25,11 @@ pub fn thread_of(anchor: &str) -> Option<&str> {
     anchor.strip_suffix(SUFFIX)
 }
 
-/// Can words you write in the note answer this thread now? Any open thread, whatever its
-/// kind: a mind's question or correction, something you asked, your own question.
+/// Can words you write in the note answer this thread now? Any open thread a mind asked or
+/// answered in, whatever its kind: a question, a correction, something you asked. Never a
+/// thread of your own, which only you tie off.
 pub fn answerable(t: &Thread) -> bool {
-    t.status == ThreadStatus::Open
+    t.status == ThreadStatus::Open && !t.own
 }
 
 /// You asked for an explanation (an ask, a call by name, a sketch): it counts only once it
@@ -123,6 +124,8 @@ mod tests {
     fn only_open_threads_can_be_answered() {
         let mut t = thread(ThoughtKind::Question, &[]);
         assert!(answerable(&t));
+        // a thread of your own only you tie off
+        assert!(!answerable(&Thread { own: true, ..t.clone() }));
         for status in [ThreadStatus::Resolved, ThreadStatus::Dismissed] {
             t.status = status;
             assert!(!answerable(&t));

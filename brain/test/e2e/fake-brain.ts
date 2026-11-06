@@ -53,6 +53,10 @@
 //                                  a search hit with the words on its page is shown; a URL
 //                                  no [[found]] returned (made up), or a page without the
 //                                  words (a miss), falls back to the rest of the check
+//   [[answers:2]]         read: the paragraph answers thread 2 (its number in the margin, as
+//                         the real brain is told), quoting its first six words; [[answers:2,3]]
+//   [[settle>unsettled]]  settle: the thread's mind says the paragraph does not settle it (by
+//                         default it does, with the read's words)
 //
 // Prefix a directive with a task to scope it: [[draw>badsvg]], [[reply>resolved]],
 // [[chat>error:overloaded]]. Directives are only read from the request's own
@@ -122,6 +126,7 @@ function ownText(input: Any): string {
     case "answer":
     case "sketch":
     case "relate":
+    case "settle":
       parts.push(input.target);
       break;
     case "ask": {
@@ -203,19 +208,28 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
   switch (task) {
     case "read":
     case "probe": {
-      const silent = has("silent") || (READ_DEFAULT === "silent" && !has("speak"));
-      if (task === "read" && silent) return { data: { speak: false } };
+      // like the real brain: an open thread's number in the margin, as its id, at most three
+      const threads: Any[] = Array.isArray(input.ctx?.threads) ? input.ctx.threads : [];
+      const answers = (arg("answers") ?? "")
+        .split(",")
+        .map((n) => threads[Number(n.trim()) - 1])
+        .filter((t) => task === "read" && t && t.id && (t.open ?? !t.resolved) && !t.own)
+        .slice(0, 3)
+        .map((t) => ({ thread: t.id, quote: firstWords(target, 6) }));
+      const answered = answers.length ? { answers } : {};
+      const silent = has("silent") || (READ_DEFAULT === "silent" && !has("speak")) || input.answersOnly === true;
+      if (task === "read" && silent) return { data: { speak: false, ...answered } };
       const raw = arg("rawquote");
       const q = arg("quote");
       const quote = raw !== null ? raw : snapQuote(q ?? firstWords(target, 3), target);
       const stood: Any[] = Array.isArray(input.ctx?.letStand) ? input.ctx.letStand : [];
       const n = stood.findIndex((s) => s.quote === quote || (task === "probe" && s.quote === shown));
-      if (n >= 0 && !has("again")) return { data: { speak: false, repeats: n + 1 } };
+      if (n >= 0 && !has("again")) return { data: { speak: false, repeats: n + 1, ...answered } };
       const text = has("empty") ? "" : `[${id}] ${task === "read" ? "Read" : "Probe"}: what about “${clean(quote)}”?`;
-      if (task === "read" && !text.trim()) return { data: { speak: false } };
+      if (task === "read" && !text.trim()) return { data: { speak: false, ...answered } };
       const thought = { speak: true as const, kind: has("correction") ? ("correction" as const) : ("question" as const), quote, text, sketch: has("sketch") };
       const checked = ["sum", "given", "words", "question", "nocheck", "source"].some(has);
-      if (thought.kind !== "correction" || !checked) return { data: thought };
+      if (thought.kind !== "correction" || !checked) return { data: { ...thought, ...answered } };
       // The check goes through the real brain's rules, against the text without directives.
       const all = (name: string) => p.ds.filter((d) => d.name === name).map((d) => d.arg ?? "");
       const check = {
@@ -231,8 +245,8 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
       const writer = { title: bare(ctx.noteTitle), note: bare(ctx.noteText), brief: ctx.brief ? bare(ctx.brief) : null, target: bare(target), quote: bare(quote) };
       const settle = (cited: Parameters<typeof withWorking>[4]): Answer => {
         const settled = withWorking(thought, { check: has("nocheck") ? undefined : check, question: arg("question") ?? "" }, writer, (why) => log(why), cited);
-        if (settled) return { data: settled };
-        return task === "read" ? { data: { speak: false } } : { error: ["bad_output", "a correction came without a check or a question"] };
+        if (settled) return { data: { ...settled, ...answered } };
+        return task === "read" ? { data: { speak: false, ...answered } } : { error: ["bad_output", "a correction came without a check or a question"] };
       };
       const source = arg("source");
       if (source === null) return settle(null);
@@ -242,6 +256,11 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
       const pages = new Map(hits.map(([url, , ...page]) => [url.trim(), page.join("|")]));
       const [url, ...passage] = source.split("|");
       return { pending: verifySource({ url: url.trim(), passage: passage.join("|").trim() }, found, async (u) => pages.get(u) ?? null).then(settle) };
+    }
+    case "settle": {
+      if (has("unsettled")) return { data: { settled: false, quote: "", text: "" } };
+      const quote = typeof input.answer === "string" && input.answer ? input.answer : firstWords(target, 6);
+      return { data: { settled: true, quote, text: `[${id}] Settled by “${clean(quote)}”` } };
     }
     case "sketch": {
       const raw = arg("rawquote");

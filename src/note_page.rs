@@ -44,6 +44,12 @@ const ROOM_MAX: usize = 3;
 /// A folded tag: just its tab.
 const TAB_W: f32 = 54.;
 const TAB_H: f32 = 26.;
+/// A left-margin thread comes up this far left of the column: past the gutter's knot and
+/// number (the editor draws them 26 px out, about 6 px either side).
+const GUTTER_CLEAR: f32 = 36.;
+/// ...and its tab hangs this much further out than a right tab hangs from the column, so
+/// the thread between them still shows.
+const LEFT_TAB_OUT: f32 = 24.;
 /// After the pointer leaves a tag, it stays open this long (moving onto its panel).
 const FOLD_DELAY: Duration = Duration::from_millis(250);
 /// How long the pointer rests on a tag before it unfolds, so passing over the margin
@@ -2351,6 +2357,15 @@ impl NotePage {
         } else {
             vec![]
         };
+        // where each tag's thread comes up and where it ties on, in the page body
+        let ropes: Vec<Value> = slots
+            .iter()
+            .filter_map(|s| {
+                let rects = boxes.get(&s.id).filter(|r| !r.is_empty())?;
+                let (a, b) = self.thread_ends(s, rects, m, cx);
+                Some(json!({"id": short(&s.id), "side": format!("{:?}", s.side), "from": [a.x.as_f32(), a.y.as_f32()], "to": [b.x.as_f32(), b.y.as_f32()]}))
+            })
+            .collect();
         let ed = self.editor.read(cx);
         let error = crate::toast::text_of(cx, crate::toast::Kind::Problem);
         json!({
@@ -2383,6 +2398,7 @@ impl NotePage {
             "kinds": ed.lines().iter().map(|(k, _)| crate::store::kind_name(*k)).collect::<Vec<_>>(),
             "metrics": {"viewport": viewport, "available": available, "column": m.column, "margin": m.margin, "both": m.both, "page": m.page(), "fits": fits, "column_left": m.column_left(), "right_left": m.right_left()},
             "marks": marks,
+            "ropes": ropes,
             "slots": slots.iter().map(|s| json!({"id": short(&s.id), "side": format!("{:?}", s.side), "anchor": s.anchor_top.as_f32(), "top": s.top.as_f32(), "h": s.height.as_f32()})).collect::<Vec<_>>(),
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
@@ -2942,7 +2958,7 @@ impl NotePage {
             .relative()
             .w(px(TAB_W))
             .h(px(TAB_H))
-            .when(!right, |d| d.ml(px(self.m.margin - TAB_W)))
+            .when(!right, |d| d.ml(px(self.m.margin - TAB_W - LEFT_TAB_OUT)))
             .opacity(fade)
             .cursor_pointer()
             // a tag dragged over your words must not put the caret under it
@@ -3927,8 +3943,9 @@ impl NotePage {
 
 impl NotePage {
     /// Where a thread comes up through the cloth and where it ties onto its tag. It
-    /// never runs across words on the front: it surfaces right after its stitches when
-    /// they end the paragraph, otherwise at the edge of the column, level with them.
+    /// never runs across words on the front: it surfaces beside the column, level with its
+    /// first stitched row; on the left, past the gutter, so it never crosses the
+    /// paragraph's knot and number.
     fn thread_ends(&self, s: &margin::Slot, rects: &[Bounds<Pixels>], m: Metrics, _cx: &App) -> (Point<Pixels>, Point<Pixels>) {
         let col = px(m.column_left());
         let (dx, dy) = self.note.threads.iter().find(|t| t.id == s.id).map(|t| t.tag_offset).unwrap_or((0., 0.));
@@ -3941,7 +3958,7 @@ impl NotePage {
         let y = first.origin.y + first.size.height - px(3.2);
         match s.side {
             Side::Right => (point(col + px(m.column) + px(9.), y), point(px(m.right_left()) + px(13. + dx), tag_y)),
-            Side::Left => (point(col - px(9.), y), point(px(m.margin) - px(13. - dx), tag_y)),
+            Side::Left => (point(col - px(GUTTER_CLEAR), y), point(px(m.margin - LEFT_TAB_OUT) - px(13. - dx), tag_y)),
         }
     }
 }

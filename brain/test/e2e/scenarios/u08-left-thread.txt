@@ -1,0 +1,14 @@
+# A left-margin tab's thread comes up past the gutter, so it never crosses the knot and
+# number beside its paragraph (the editor draws them 26 px left of the column, about
+# 6 px either side). Starts on the tour, which has a thread in each margin.
+wait: 1500
+set: appearance=light
+dump: tour
+expect: d.metrics.both && d.ropes.some(r => r.side === "Left") && d.ropes.some(r => r.side === "Right")
+expect: d.ropes.filter(r => r.side === "Left").every(r => r.from[0] <= d.metrics.column_left - 32 && r.to[0] < r.from[0] - 12)
+expect: d.ropes.filter(r => r.side === "Right").every(r => r.from[0] > d.metrics.column_left + d.metrics.column)
+shot: left-thread
+set: appearance=dark
+wait: 300
+shot: left-thread-dark
+quit

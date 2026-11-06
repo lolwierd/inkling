@@ -75,9 +75,9 @@ impl Tab {
         match self {
             Tab::Customize => "How Inkling reads along, and where its questions go.",
             Tab::Appearance => "How Inkling looks. Your note changes as you choose.",
-            Tab::Minds => "Minds that read your notes, each with its own way of asking. Pick one for any note from the row above its title.",
+            Tab::Minds => "Each mind reads your notes its own way. Pick one for any note from the row above its title.",
             Tab::NewMind => "A mind is what reads your notes: what it looks for, and how it asks. Give any note the one it needs.",
-            Tab::AboutYou => "A short paragraph Inkling keeps about you, so every note starts out knowing it. It stays on this Mac.",
+            Tab::AboutYou => "A short paragraph every note starts out knowing. It stays on this Mac.",
             Tab::Model => "Inkling thinks with Claude through the Claude Agent SDK, using this Mac's Claude Code login, so it runs on your Claude subscription. No API key.",
             Tab::Shortcuts => "Click keys to change them. New keys work at once, in your notes and in the menu bar.",
             Tab::Help => "How Inkling works, and where your notes are kept.",
@@ -147,14 +147,14 @@ pub fn open_window(tab: Tab, cx: &mut App) -> Option<Entity<SettingsView>> {
         Err(_) => "Inkling Settings".into(),
     };
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(900.), px(660.)), cx))),
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(900.), px(720.)), cx))),
         titlebar: Some(TitlebarOptions {
             title: Some(title.into()),
             appears_transparent: true,
             traffic_light_position: Some(point(px(22.), px(22.))),
         }),
         window_background: WindowBackgroundAppearance::Blurred,
-        window_min_size: Some(size(px(760.), px(520.))),
+        window_min_size: Some(size(px(820.), px(560.))),
         focus: !background,
         ..Default::default()
     };
@@ -223,7 +223,7 @@ impl SettingsView {
         let about = cx.new(|cx| {
             let mut t = TextareaState::new(window, cx)
                 .auto_grow(5, 12)
-                .placeholder("Nothing yet. Write what Inkling should know: what you do, what you're working toward, how you like feedback.");
+                .placeholder("Nothing yet. What you do, what you're working toward, how you like feedback.");
             t.set_value(s.about_me.clone(), window, cx);
             t
         });
@@ -232,7 +232,14 @@ impl SettingsView {
             i.set_value(s.model.clone(), window, cx);
             i
         });
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search shortcuts"));
+        let search = cx.new(|cx| {
+            let mut i = InputState::new(window, cx).placeholder("Search shortcuts");
+            // Test aid: INKLING_SETTINGS_SEARCH fills the shortcut search at launch.
+            if let Ok(q) = std::env::var("INKLING_SETTINGS_SEARCH") {
+                i.set_value(q, window, cx);
+            }
+            i
+        });
         let mut subs = vec![];
         subs.push(cx.subscribe_in(&about, window, |_, about, ev: &InputEvent, window, cx| {
             if let InputEvent::Change = ev {
@@ -768,12 +775,24 @@ impl SettingsView {
             }))
             .child(section("Yours", None, &t))
             .when(empty, |d| {
-                d.child(
-                    group(
-                        vec![div().px(px(14.)).py(px(14.)).text_size(px(12.)).text_color(p.graphite).child("None yet. Start from a staff engineer, an editor, a tutor, or write your own.").into_any_element()],
-                        &t,
-                    ),
-                )
+                let mut chips = div().mt(px(10.)).flex().flex_wrap().gap(px(6.));
+                for (i, tm) in mind_templates().into_iter().enumerate() {
+                    chips = chips.child(ui::pill(("start-from", i), tm.name.clone(), false, &t).on_click(cx.listener(move |this, _, window, cx| {
+                        this.start_mind(None, window, cx);
+                        this.template = Some(i);
+                        this.fill(&tm, window, cx);
+                    })));
+                }
+                d.child(group(
+                    vec![div()
+                        .px(px(14.))
+                        .py(px(14.))
+                        .child(div().text_size(px(13.)).text_color(p.ink).child("None yet"))
+                        .child(div().mt(px(2.)).text_size(px(11.5)).text_color(p.graphite).child("Start from one of these, or write your own with New mind."))
+                        .child(chips)
+                        .into_any_element()],
+                    &t,
+                ))
             })
             .when(!empty, |d| d.child(group(yours, &t)))
     }
@@ -860,7 +879,6 @@ impl SettingsView {
 
     fn about(&mut self, cx: &mut Context<Self>) -> Div {
         let t = Theme::get(cx).clone();
-        let p = t.p;
         let s = cx.global::<Store>().settings.clone();
         div()
             .child(
@@ -877,12 +895,12 @@ impl SettingsView {
                 .mt(px(4.)),
             )
             .child(section("What Inkling knows", Some(format!("{} of {ABOUT_LIMIT}", s.about_me.chars().count()).into()), &t))
-            .child(group(vec![div().px(px(14.)).py(px(12.)).text_size(px(13.)).line_height(px(19.)).child(Textarea::new(&self.about).appearance(false)).into_any_element()], &t))
-            .child(note("Every note starts out knowing this. Edit it any time; Inkling only adds to it when the switch above is on.", &t))
-            .when(s.about_me.trim().is_empty(), |d| d.child(div().mt(px(2.)).text_size(px(11.)).text_color(p.faint)))
+            // The text area pads itself; this lines its words up with the rows' titles.
+            .child(group(vec![div().px(px(4.)).py(px(6.)).text_size(px(13.)).line_height(px(19.)).child(Textarea::new(&self.about).appearance(false)).into_any_element()], &t))
+            .child(note("Edit it any time. Inkling only adds to it when the switch above is on.", &t))
     }
 
-    fn model_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn model_tab(&mut self, cx: &mut Context<Self>) -> Div {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let s = cx.global::<Store>().settings.clone();
@@ -979,7 +997,7 @@ impl SettingsView {
             row(
                 "Model id",
                 Some("Any model Claude Code takes. Empty is its default.".into()),
-                div().w(px(220.)).px(px(9.)).py(px(3.)).rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(12.5)).child(Input::new(&self.model).appearance(false)),
+                div().w(px(220.)).h(px(28.)).px(px(9.)).flex().items_center().rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(12.5)).child(Input::new(&self.model).appearance(false)),
                 &t,
             )
             .into_any_element(),
@@ -1018,7 +1036,6 @@ impl SettingsView {
             row(label, None, control, &t).into_any_element()
         };
         let no_effort = levels.as_ref().is_some_and(|l| l.is_empty());
-        let _ = window;
         div()
             .child(group(vec![claude.into_any_element()], &t).mt(px(4.)))
             .child(section("Model", Some(source.into()), &t))
@@ -1079,7 +1096,7 @@ impl SettingsView {
             custom: bool,
             clashes: Vec<(String, &'static str)>,
         }
-        let (lines, labels): (Vec<Line>, Vec<(&'static str, &'static str)>) = {
+        let lines: Vec<Line> = {
             let table = &cx.global::<Shortcuts>().0;
             let clashes = shortcuts::clashes(table, &custom);
             let label_of = |name: &str| table.iter().find(|s| s.name == name).map(|s| s.label).unwrap_or("another shortcut");
@@ -1108,9 +1125,8 @@ impl SettingsView {
                     clashes: clashes.get(s.name).map(|c| c.iter().map(|c| (c.keys.clone(), label_of(c.other))).collect()).unwrap_or_default(),
                 })
                 .collect();
-            (lines, table.iter().map(|s| (s.name, s.label)).collect())
+            lines
         };
-        let _ = labels;
         let recording = self.recording.as_ref().map(|r| (r.name, r.slot, r.held, r.refused));
         let mut out = div();
         let mut first = true;
@@ -1196,7 +1212,7 @@ impl SettingsView {
                     .flex_col()
                     .gap(px(2.))
                     .child(div().flex().items_center().gap(px(6.)).child(div().text_size(px(13.)).text_color(p.ink).child(l.label)).when(l.custom, |d| {
-                        d.child(div().text_size(px(10.5)).text_color(p.faint).child("Changed"))
+                        d.child(div().text_size(px(11.)).text_color(p.faint).child("Changed"))
                     }))
                     .children(l.hint.map(|h| div().text_size(px(11.5)).line_height(px(16.)).text_color(p.graphite).child(h)));
                 for (keys, other) in &l.clashes {
@@ -1270,7 +1286,7 @@ impl SettingsView {
                     .text_size(px(13.))
                     .line_height(px(19.))
                     .text_color(p.graphite)
-                    .child(div().child(format!("{lead} {rest}")))
+                    .child(StyledText::new(format!("{lead} {rest}")).with_highlights([(0..lead.len(), HighlightStyle { color: Some(p.ink), ..Default::default() })]))
                     .into_any_element()
             })
             .collect();
@@ -1346,10 +1362,12 @@ impl SettingsView {
                 .flex()
                 .flex_col()
                 .rounded(px(16.))
+                .relative()
                 .bg(linear_gradient(180., linear_color_stop(g.pane_top, 0.), linear_color_stop(g.pane_bottom, 1.)))
                 .border_1()
                 .border_color(g.rim)
                 .shadow(g.floating())
+                .child(g.inner_edge(16.))
                 // The traffic lights sit here, on the glass; it moves the window like a title bar.
                 .child(div().h(px(52.)).flex_none().window_control_area(WindowControlArea::Drag))
                 .child(items)
@@ -1413,7 +1431,7 @@ impl Focusable for SettingsView {
 }
 
 impl Render for SettingsView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let g = Glass::of(&p);
@@ -1423,7 +1441,7 @@ impl Render for SettingsView {
             Tab::Minds => self.minds(cx),
             Tab::NewMind => self.mind_form(cx),
             Tab::AboutYou => self.about(cx),
-            Tab::Model => self.model_tab(window, cx),
+            Tab::Model => self.model_tab(cx),
             Tab::Shortcuts => self.shortcuts_pane(cx),
             Tab::Help => self.help(cx),
         };
@@ -1482,7 +1500,7 @@ impl Render for SettingsView {
                                 .child(div().flex_1().min_w(px(0.)).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(p.ink).child(title))
                                 .children(extras),
                         )
-                        .child(div().mt(px(4.)).max_w(px(600.)).text_size(px(12.5)).line_height(px(18.)).text_color(p.graphite).child(self.tab.blurb())),
+                        .child(div().mt(px(4.)).max_w(px(600.)).text_size(px(12.)).line_height(px(17.)).text_color(p.graphite).child(self.tab.blurb())),
                 )
                 .child(
                     div()

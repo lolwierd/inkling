@@ -478,3 +478,25 @@ files and shows as "Socratic".
 
 Scenarios: `brain/test/e2e/scenarios/u01-ux-core.txt`, `u02-first-run.txt`, `u03-wait-while-typing.txt`
 (the last with `FAKE_DELAY_READ_MS=2500`).
+
+## Settings (6 Nov 2026)
+
+The owner asked for Settings to "think macos", with Liquid Glass, and every shortcut customizable.
+
+- **The default read**, kept on purpose: a System Settings window, a sidebar of panes and grouped
+  rows. It is what ⌘, opens in every Mac app, and the owner asked for exactly that. What makes it
+  Inkling's: the glass is linen, and choices are shown as the page they make.
+- **A window, not a sheet.** GPUI only blurs behind a window (NSVisualEffectView), so real glass
+  needs one. It also sits beside the note, so appearance, text size and thread colour show in the
+  note as you change them, and shortcuts are recorded where the note's keys cannot fire.
+- **Materials.** The desk is linen with the desktop showing through (62% cloth in linen, 72% in
+  lamplight); the sidebar is frost resting on it, lighter at the top, with a rim and an inner edge
+  of light; the page is flat paper, because words sit on flat paper. How much shows through the
+  sidebar is set by a test: its text keeps 4.5:1 over a black or a white desktop.
+- **Pictures of the choice.** "Where questions appear" shows three tiny pages (stitched words,
+  tags in either margin, in one, or marks only); Appearance shows linen, lamplight, and the two
+  split for System. The chosen tile is outlined in ink and ticked, so it reads without colour.
+- **One accent per job.** The thread colour marks where you are (the sidebar icon) and what is
+  listening (the recording keycap); ochre with a warning shape marks a clash.
+- **Shortcuts.** Grouped by where they work (anywhere, or while writing), keys drawn as macOS
+  draws them (⌃⌥⇧⌘), plain keys refused with the reason. Only changed shortcuts are saved.

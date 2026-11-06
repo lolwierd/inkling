@@ -43,6 +43,9 @@ launch. Notes are JSON files in `~/Library/Application Support/Inkling/`.
 | About you | A short profile every note starts with; optionally learned from what you say. |
 | Notes | Sidebar, folders, ⌘K find or start, ⌘⌫ delete, copy as Markdown (⌘⇧C), export Markdown / Word / HTML with the threads under their paragraphs (⌘⇧E), hide threads (⌘⇧.). |
 | Voice | Hold ⌥ to dictate (macOS speech recognition). |
+| Settings | ⌘, opens a Settings window: Reading, Appearance, Minds, About you, Model, Shortcuts, Help. Changes show in the note as you make them. |
+| Shortcuts | Every key is yours to change, the editor's included: click keys to record new ones, add or remove keys, clashes are flagged on both rows, reset one or all. New keys work at once, in the note and the menu bar. |
+| Models | The list comes from Claude Code (the Agent SDK's `supportedModels()`), with each model's effort levels; it is kept for when the brain is not running. Empty means Claude Code's own default. |
 
 ## How it's built
 
@@ -58,6 +61,9 @@ GPUI app (Rust, src/)                        brain sidecar (Bun + TypeScript, br
 - `src/margin.rs`: tag placement without overlaps.
 - `src/stitch.rs`: the thread (a small rope simulation), stitches, knots, the needle, the sampler border.
 - `src/drawing.rs`: parses the mind's SVG and draws it like ink, one step at a time.
+- `src/settings.rs` (and `src/settings/parts.rs`): the Settings window, its glass and controls.
+- `src/shortcuts.rs`: every shortcut, its default keys and yours (`shortcuts` in settings.json), the
+  keymap rebuild and the menu refresh.
 - `brain/src/prompts.ts`: every prompt Inkling sends; `brain/src/claude.ts`: the SDK calls.
 
 ## Testing hooks
@@ -76,6 +82,11 @@ commands (checks, scenarios with expectations, the page state as JSON, screensho
 | `INKLING_LOG_JSON=1` | Log one JSON object per line (`ms`, `level`, `target`, `msg`), for tools. |
 | `INKLING_BRAIN_ENTRY=<file.ts>` | Run another brain, e.g. the fake one in `brain/test/e2e/fake-brain.ts` (no model calls). |
 | `INKLING_CLAUDE_PATH=<path>` | Use a specific `claude` binary instead of the SDK's bundled one. |
+| `INKLING_SETTINGS_TAB=<pane>` | Open Settings on reading, appearance, minds, newmind, about, model, shortcuts or help (with `INKLING_OPEN=settings`). |
+| `INKLING_SETTINGS_RECORD=<action>` | Open Settings listening for new keys for that shortcut, e.g. `app::NewNote`. |
+| `INKLING_SETTINGS_KEYS="settings:<keys> main:<keys>"` | Press keys in Settings or in the note window, a second apart, through GPUI's own dispatch. |
+| `INKLING_SETTINGS_SEARCH=<text>` | Fill the shortcut search. |
+| `FAKE_MODELS=none` | The fake brain reports no model list (by default it reports the list the real SDK gave, `brain/test/fixtures/supported-models.json`). |
 
 `cargo test` covers the editor, margin placement, the rope, drawings, export, the store and the page's reading rules; `cd brain && bun test test/` covers the sidecar.
 

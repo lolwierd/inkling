@@ -88,6 +88,11 @@ impl Glass {
         vec![BoxShadow { color: self.lift, offset: point(px(0.), px(y)), blur_radius: px(blur), spread_radius: px(0.), inset: false }]
     }
 
+    /// The inner edge of thick glass: a hairline of light just inside the rim.
+    pub fn inner_edge(&self, radius: f32) -> Div {
+        div().absolute().top(px(1.)).left(px(1.)).right(px(1.)).bottom(px(1.)).rounded(px(radius - 1.)).border_1().border_color(self.sheen.opacity(0.5))
+    }
+
     /// A floating pane's shadow plus the highlight along its top edge.
     pub fn floating(&self) -> Vec<BoxShadow> {
         let mut s = self.float(8., 24.);
@@ -106,7 +111,7 @@ pub fn section(title: impl Into<SharedString>, aside: Option<SharedString>, t: &
         .flex()
         .items_baseline()
         .gap(px(12.))
-        .child(crate::ui::section_label(title, t).flex_1())
+        .child(crate::ui::section_label(title, t).flex_1().text_size(px(12.)))
         .children(aside.map(|a| div().text_size(px(11.)).text_color(p.faint).child(a)))
 }
 

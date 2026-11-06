@@ -1,7 +1,14 @@
 # Tags drop open: a tag unfolds only after the pointer rests on it, one at a time, and a
 # key in the note or Esc folds it again. A tag dragged as far as it goes stays on the
 # paper. Starts on the running plan (two open threads).
+# The runner plays a step every 250 ms and the rest is 120 ms, so the dump right after
+# `hover: 1` comes with the tag already dropping open; at full frame rate it was half open
+# by then, and the first check held only while a covered window drew slowly. The thread
+# animations run eight times slower here (the rest, on the wall clock, does not), so what
+# each dump sees no longer depends on the frame rate: just pointed, the tag has barely
+# begun; rested 900 ms later, it is open.
 # fixture: running-plan
+# env: INKLING_SLOWMO=8
 wait: 1500
 hover: 1
 dump: just-pointed

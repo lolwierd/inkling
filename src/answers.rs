@@ -25,11 +25,13 @@ pub fn thread_of(anchor: &str) -> Option<&str> {
     anchor.strip_suffix(SUFFIX)
 }
 
-/// Can words you write in the note answer this thread now? Any open thread a mind asked or
-/// answered in, whatever its kind: a question, a correction, something you asked. Never a
-/// thread of your own, which only you tie off.
+/// Can words you write in the note answer this thread now? An open thread a mind has said
+/// something in, whatever its kind: a question, a correction, something you asked. Never a
+/// thread still waiting for its first word from the mind (a loose thread being looked for,
+/// an ask on its way, one that failed and is about to go), so a note that waits to be asked
+/// spends no read on it; and never a thread of your own, which only you tie off.
 pub fn answerable(t: &Thread) -> bool {
-    t.status == ThreadStatus::Open && !t.own
+    t.status == ThreadStatus::Open && !t.own && t.messages.iter().any(|m| m.role == Role::Mind)
 }
 
 /// You asked for an explanation (an ask, a call by name, a sketch): it counts only once it
@@ -122,7 +124,13 @@ mod tests {
 
     #[std::prelude::v1::test]
     fn only_open_threads_can_be_answered() {
-        let mut t = thread(ThoughtKind::Question, &[]);
+        // a loose thread still being looked for (its probe in flight, or failed) has nothing to
+        // answer yet; nor has an ask whose answer has not come
+        assert!(!answerable(&thread(ThoughtKind::Question, &[])));
+        let mut asking = thread(ThoughtKind::Ask, &[]);
+        asking.messages.push(Message::new(Role::You, "What is VO2 max?"));
+        assert!(!answerable(&asking));
+        let mut t = thread(ThoughtKind::Question, &["Starting from how far?"]);
         assert!(answerable(&t));
         // a thread of your own only you tie off
         assert!(!answerable(&Thread { own: true, ..t.clone() }));

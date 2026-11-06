@@ -119,7 +119,9 @@ fn over_limit(text: &str) -> Option<String> {
 
 /// Effort levels offered when Claude Code has not said which a model takes.
 /// Under Look things up on the web: what leaves the Mac, and roughly what it costs.
-const LOOK_UP_NOTE: &str = "Searches built from your note go out through Claude, and Inkling opens a page it cites to check the quote. A read that searches costs about twice one that doesn\u{2019}t; most reads don\u{2019}t search.";
+/// Measured 7 Nov 2026 (Opus 5.5, low effort): about $1.55 a read that searched, $0.03 one
+/// that did not; the search results fill the model's context.
+const LOOK_UP_NOTE: &str = "Searches built from your note go out through Claude, and Inkling opens any page it cites to check the quote. A read that searches uses about 50 times what one that doesn\u{2019}t (about $1.60 against $0.03 at API prices) and takes about 25 seconds; most reads don\u{2019}t search.";
 
 const USUAL_EFFORTS: [&str; 3] = ["low", "medium", "high"];
 
@@ -1097,6 +1099,17 @@ impl SettingsView {
         let no_effort = levels.as_ref().is_some_and(|l| l.is_empty());
         div()
             .child(group(vec![claude.into_any_element()], &t).mt(px(4.)))
+            .child(section("The web", None, &t))
+            .child(group(
+                vec![row(
+                    "Look things up on the web",
+                    Some(LOOK_UP_NOTE.into()),
+                    ui::switch("look-up", s.look_up, &t).keyed_as("settings:look-up", 9., t.voice_ink, cx, |this, _, cx| this.update(cx, |s| s.look_up = !s.look_up)),
+                    &t,
+                )
+                .into_any_element()],
+                &t,
+            ))
             .child(section("Model", Some(source.into()), &t))
             .child(group(list, &t))
             .child(section("Effort", Some(format!("For {model_name}").into()), &t))
@@ -1107,17 +1120,6 @@ impl SettingsView {
                 } else {
                     "Reading along runs after every paragraph, so it defaults to low effort.".to_string()
                 },
-                &t,
-            ))
-            .child(section("The web", None, &t))
-            .child(group(
-                vec![row(
-                    "Look things up on the web",
-                    Some(LOOK_UP_NOTE.into()),
-                    ui::switch("look-up", s.look_up, &t).keyed_as("settings:look-up", 9., t.voice_ink, cx, |this, _, cx| this.update(cx, |s| s.look_up = !s.look_up)),
-                    &t,
-                )
-                .into_any_element()],
                 &t,
             ))
             .child(section("Coming next", None, &t))

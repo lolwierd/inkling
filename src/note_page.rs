@@ -4530,10 +4530,8 @@ impl Render for NotePage {
         if !self.typing_recently() {
             self.arrived.clear();
         }
-        // a thread between notes: its far end's side the first time it shows here, and the
-        // words of one just followed here brought into view
+        // a thread between notes: its far end's side the first time it shows here
         self.side_new_far_ends(cx);
-        self.reveal_followed(window, cx);
 
         // The paragraph being read, and words being looked at again: the needle works beside them.
         let thinking: Vec<usize> = {

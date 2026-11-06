@@ -28,8 +28,6 @@ pub(super) const LOOP_STEP: f32 = 5.;
 pub(super) struct Ends {
     /// The thread followed from the note just left: it opens once its other end is in.
     following: Option<String>,
-    /// Words to bring into view once the note is laid out: the followed thread's.
-    reveal: Option<String>,
 }
 
 impl NotePage {
@@ -78,48 +76,18 @@ impl NotePage {
         }
     }
 
-    /// A note has just opened (`open`). A thread followed here opens, the caret at its
-    /// words; once the note is laid out they come into view and its reply box takes the
-    /// keyboard (`reveal_followed`). The thread dismissed last, if it has an end here, is put
-    /// back on this note's words by Undo.
+    /// A note has just opened (`open`). A thread followed here is gone to as Loose ends goes
+    /// to one (`go_to_thread`): its words come into view once the note is laid out, its tag
+    /// open, and its reply box takes the keyboard. The thread dismissed last, if it has an
+    /// end here, is put back on this note's words by Undo.
     pub(super) fn arrive(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some((id, range, _)) = self.last_dismissed.as_mut() {
             if let Some(t) = self.note.threads.iter().find(|t| t.id == *id) {
                 *range = t.start..t.end;
             }
         }
-        let Some(id) = self.ends.following.take() else { return };
-        let Some(start) = self.editor.read(cx).anchor(&id).map(|a| a.range.start) else { return };
-        self.activate(Some(id.clone()), window, cx);
-        self.editor.update(cx, |e, cx| e.move_cursor_to(start, cx));
-        self.ends.reveal = Some(id);
-    }
-
-    /// Once the editor has laid out a note a thread was followed into (called as the page
-    /// renders), bring its words about a third of the way down the window, so its open tag
-    /// has room under them, and give its reply box the keyboard, as ⌥⌘↓ leaves it. (Before
-    /// the layout its tag is not drawn, and a box that is not drawn cannot keep the keyboard.)
-    pub(super) fn reveal_followed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.ends.reveal.clone() else { return };
-        let (origin, top) = {
-            let ed = self.editor.read(cx);
-            let origin = ed.layout.as_ref().map(|l| l.origin);
-            (origin, origin.and_then(|o| ed.anchor_rects(&id).first().map(|r| (o.y + r.origin.y).as_f32())))
-        };
-        if origin.is_none() {
-            // laid out in this frame: look again in the next
-            window.request_animation_frame();
-            return;
-        }
-        self.ends.reveal = None;
-        if let Some(dy) = top.and_then(|top| reveal_by(top, window.viewport_size().height.as_f32())) {
-            let offset = self.scroll.offset();
-            self.scroll.set_offset(point(offset.x, (offset.y + px(dy)).min(px(0.))));
-        }
-        if self.active.as_deref() == Some(id.as_str()) {
-            if let Some(input) = self.replies.get(&id).cloned() {
-                input.update(cx, |i, cx| i.focus(window, cx));
-            }
+        if let Some(id) = self.ends.following.take() {
+            self.go_to_thread(&id, window, cx);
         }
     }
 
@@ -330,7 +298,6 @@ impl NotePage {
         json!({
             "tags": tags,
             "following": self.ends.following.as_deref().map(short),
-            "reveal": self.ends.reveal.as_deref().map(short),
             "in_view": in_view,
             "sidebar": sidebar,
         })
@@ -378,16 +345,6 @@ fn with_far_line(text: &str, quote: &str, title: &str, other: &str) -> String {
     format!("{}\n> *Also in \u{201c}{title}\u{201d}:* \u{201c}{}\u{201d}{}", &text[..at], other.replace('\n', " "), &text[at..])
 }
 
-/// How far to move the page (down, when positive) so words whose top is `top` in a window
-/// `view` tall sit about a third of the way down; `None` when they already sit in the upper
-/// part of the page, clear of the cloth along the top.
-fn reveal_by(top: f32, view: f32) -> Option<f32> {
-    if top >= CHROME_H + 40. && top <= view * 0.55 {
-        return None;
-    }
-    Some(view * 0.32 - top)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,19 +379,6 @@ mod tests {
         // not a copied thread, or a quote that is not its start: left as it is
         assert_eq!(with_far_line("", "x", "T", "y"), "");
         assert_eq!(with_far_line("> é", "\u{e9}x", "T", "y"), "> é");
-    }
-
-    #[std::prelude::v1::test]
-    fn followed_words_come_to_a_third_of_the_window_unless_they_are_in_view() {
-        // already in the upper part of the page: stay
-        assert_eq!(reveal_by(200., 800.), None);
-        assert_eq!(reveal_by(CHROME_H + 40., 800.), None);
-        // far below: the page moves up to bring them to a third of the way down
-        assert_eq!(reveal_by(2000., 800.), Some(256. - 2000.));
-        // low in the window: up a little
-        assert_eq!(reveal_by(700., 800.), Some(256. - 700.));
-        // under the cloth along the top: down
-        assert_eq!(reveal_by(10., 800.), Some(246.));
     }
 
     #[std::prelude::v1::test]

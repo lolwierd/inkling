@@ -3,6 +3,7 @@ mod brain;
 mod drawing;
 mod editor;
 mod export;
+mod import;
 mod margin;
 mod note_page;
 mod palette;

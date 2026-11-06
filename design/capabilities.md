@@ -72,7 +72,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Find or start a note | ⌘K |
 | Copy a note | ⌘⇧C |
 | Export | ⌘⇧E: Markdown, HTML or Word, with the threads or without |
-| Import from Obsidian | a vault folder becomes notes and folders (on its own branch, not merged yet) |
+| Import from Obsidian | File > Import from Obsidian…: a vault's notes come in with their folders, as Obsidian shows them; their words are left unread, so only what you write afterwards is read |
 | Welcome guide | Help > Welcome Guide |
 
 ## Model and keys

@@ -93,6 +93,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped) | `Note`, `Thread`, `Settings` |
 | `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
 | `src/export.rs` | Markdown, HTML, Word (via `textutil`) with threads under paragraphs | |
+| `src/import.rs` | File > Import from Obsidian…: a vault's Markdown as notes and folders, as Obsidian shows it; every imported paragraph goes in `Note.left_alone`; the vault is only read | `convert` (one note), `read_vault`, `add_to_store` |
 | `src/welcome.rs` | the first-run note "Start here": a tour with real threads, whose own paragraphs are never read (`Note.left_alone`); the writer's first sentence is probed | `first_run_note` |
 | `src/theme.rs`, `src/ui.rs`, `src/palette.rs` | colours and fonts, small widgets, ⌘K | |
 | `src/settings.rs`, `src/settings/parts.rs` | the Settings window (its own window, ⌘,): sidebar of panes, the glass, grouped rows, the shortcut recorder, the model list from the brain's `status` | `open_window`, `Glass`, `INKLING_SETTINGS_*` |

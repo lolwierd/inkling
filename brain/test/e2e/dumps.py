@@ -16,5 +16,5 @@ for l in open(d + "/app.log", errors="replace"):
                 v = [f"{s['id'][:4]}:{s['side'][0]} a{s['anchor']:.0f} t{s['top']:.0f} h{s['h']:.0f}" for s in v]
             out[k] = v
         print(f"  [{m.group(1)}] note={x['note']['title']!r} " + json.dumps(out, ensure_ascii=False))
-    elif "script copy" in l or "script log" in l or "WARN" in l or "ERROR" in l or "panicked" in l:
+    elif "script copy" in l or "script log" in l or "inkling::import" in l or "WARN" in l or "ERROR" in l or "panicked" in l:
         print("  " + l.strip()[:300])

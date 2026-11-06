@@ -47,7 +47,7 @@ type: This paragraph is still being written when the pass starts [[silent]]
 read-through
 settle: 30000
 dump: failed
-expect: d.read_through === null && d.error.startsWith("Couldn’t read it through. You've reached your Claude usage limit")
+expect: d.read_through === null && d.error.startsWith("Couldn’t read it through. You’ve reached your Claude usage limit")
 expect: d.read_hashes === 4   // the failed paragraph stays unread, for the next pass
 expect: requests.filter(r => r.input.task === "read").length === 5 && requests.every(r => r.input.task !== "read" || r.input.through === true)
 quit

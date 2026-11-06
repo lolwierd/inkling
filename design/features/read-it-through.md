@@ -124,7 +124,7 @@ The page does not jump to the first new thread; ⌥⌘↓ already does that.
 | Toast | finished, new threads, threads hidden | "Inkling read it through. Show threads to see what it asked." |
 | Toast | you stopped it | "Stopped after 6 of 14. Read it through again to go on." |
 | Toast | you left the note | "Read it through stopped when you left “Draft”." |
-| Toast, problem (ochre) | a read failed | "Read it through stopped after 6 of 14. " followed by the usual sentence for the failure, e.g. "You've reached your Claude usage limit. It resets at 14:00." Before any paragraph was read: "Couldn’t read it through. " and the usual sentence. |
+| Toast, problem (ochre) | a read failed | "Read it through stopped after 6 of 14. " followed by the usual sentence for the failure, e.g. "You’ve reached your Claude usage limit. It resets at 14:00." Before any paragraph was read: "Couldn’t read it through. " and the usual sentence. |
 | Settings › Shortcuts | | **Read it through** (Threads), hint "Reads every paragraph not read yet, once. Press it again to stop." |
 
 Plain words on every control (DESIGN.md guardrail 3); none of Riddled's words.
@@ -327,7 +327,7 @@ does what ⇧⌘R does:
 
 | Scenario | What it proves |
 |---|---|
-| `u21-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; the mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass; a read that fails ends the pass with "Couldn’t read it through. You've reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
+| `u21-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; the mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass; a read that fails ends the pass with "Couldn’t read it through. You’ve reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
 | `u22-read-through-long` | The sixty-paragraph note (`hard-content`): the needle is on the paragraph being read; Stop keeps what was read and says "Stopped after N of 60…"; ⇧⌘R goes on with only what is left; opening another note stops it ("Read it through stopped when you left “A very long note”."); the last pass finishes, every paragraph read exactly once (60 distinct reads, two cancelled). |
 | `u23-read-through-imported` | The guide's words are left alone ("Nothing new to read."); the writer's first sentence in it still gets its question (`probe`, with `through`); an imported Obsidian note is read on request (6 of its units: not headings, not two-word code) and is marked `imported`. |
 | `u24-read-through-look` | The screenshots in `design/features/shots/`: the menu and a pass midway, in Linen and Lamplight, from the new `read-through` fixture (a six-paragraph draft in a waiting note with one open question). |

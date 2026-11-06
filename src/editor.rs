@@ -441,6 +441,10 @@ impl Fx {
 struct State {
     text: String,
     kinds: Vec<BlockKind>,
+    /// Where each line starts in `text` (one entry per line, so as many as `kinds`), kept by
+    /// `reindex` after every change to the text: a line's range and the line at an offset
+    /// are then lookups, not scans of the whole note.
+    starts: Vec<usize>,
     marks: Vec<MarkSpan>,
     anchors: Vec<Anchor>,
     selected: Range<usize>,
@@ -461,6 +465,7 @@ impl State {
         Self {
             text: "\n".into(),
             kinds: vec![BlockKind::Title, BlockKind::Paragraph],
+            starts: vec![0, 1],
             marks: vec![],
             anchors: vec![],
             selected: 0..0,
@@ -494,6 +499,7 @@ impl State {
                 (_, k) => k,
             })
             .collect();
+        self.reindex();
         // Stored offsets can be stale; keep them inside the text and on character boundaries.
         let text = &self.text;
         self.marks = marks
@@ -527,31 +533,37 @@ impl State {
     // ----- document access ------------------------------------------------
 
     fn lines(&self) -> Vec<(BlockKind, String)> {
-        self.text
-            .split('\n')
-            .zip(self.kinds.iter())
-            .map(|(t, k)| (*k, t.to_string()))
-            .collect()
+        (0..self.kinds.len()).map(|i| (self.kinds[i], self.text[self.line_range(i)].to_string())).collect()
     }
 
     fn title(&self) -> String {
-        self.text.split('\n').next().unwrap_or("").to_string()
+        self.text[self.line_range(0)].to_string()
     }
 
     fn line_count(&self) -> usize {
         self.kinds.len()
     }
 
+    /// Byte range of line `ix`, without its '\n' (empty, at the end, for a line past the last).
     fn line_range(&self, ix: usize) -> Range<usize> {
-        line_range_in(&self.text, ix)
+        match self.starts.get(ix) {
+            Some(&start) => start..self.starts.get(ix + 1).map_or(self.text.len(), |next| next - 1),
+            None => self.text.len()..self.text.len(),
+        }
+    }
+
+    /// The line index after every change to the text.
+    fn reindex(&mut self) {
+        self.starts = line_starts(&self.text);
     }
 
     fn line_kind(&self, ix: usize) -> BlockKind {
         self.kinds.get(ix).copied().unwrap_or_default()
     }
 
+    /// Number of the line holding `offset` (any offset is safe; past the end is the last line).
     fn line_of(&self, offset: usize) -> usize {
-        line_of(&self.text, offset)
+        self.starts.partition_point(|&s| s <= offset.min(self.text.len())).max(1) - 1
     }
 
     fn cursor(&self) -> usize {
@@ -713,6 +725,7 @@ impl State {
             .collect();
         self.text = s.text;
         self.kinds = s.kinds;
+        self.reindex();
         self.marks = s.marks;
         self.anchors = restored;
         let text = &self.text;
@@ -746,7 +759,9 @@ impl State {
     /// Replace `range` with `new_text`, keeping block kinds, marks and anchors aligned.
     /// `new_kind` is the kind for lines created by newlines in `new_text`.
     fn replace(&mut self, range: Range<usize>, new_text: &str, new_kind: Option<BlockKind>) -> usize {
-        apply_edit(&mut self.text, &mut self.kinds, &mut self.marks, &mut self.anchors, range, new_text, new_kind)
+        let end = apply_edit(&mut self.text, &mut self.kinds, &mut self.marks, &mut self.anchors, range, new_text, new_kind);
+        self.reindex();
+        end
     }
 
     fn place_after_edit(&mut self, end: usize) {
@@ -1354,7 +1369,12 @@ fn line_of(text: &str, offset: usize) -> usize {
     text.as_bytes()[..offset.min(text.len())].iter().filter(|&&b| b == b'\n').count()
 }
 
-/// Byte range of line `ix`, without its '\n'.
+/// Where each line of `text` starts: 0, then one past every '\n'.
+fn line_starts(text: &str) -> Vec<usize> {
+    std::iter::once(0).chain(text.match_indices('\n').map(|(i, _)| i + 1)).collect()
+}
+
+/// Byte range of line `ix` of `text`, without its '\n' (`State::line_range` is the lookup).
 fn line_range_in(text: &str, ix: usize) -> Range<usize> {
     let mut start = 0;
     for (i, l) in text.split('\n').enumerate() {
@@ -3709,6 +3729,7 @@ mod tests {
     fn check(s: &State) {
         let ok = |o: usize| o <= s.text.len() && s.text.is_char_boundary(o);
         assert_eq!(s.text.split('\n').count(), s.kinds.len(), "one kind per line in {:?}", s.text);
+        assert_eq!(s.starts, line_starts(&s.text), "the line index follows the text {:?}", s.text);
         assert!(s.kinds.len() >= 2, "a title and at least one body line");
         assert_eq!(s.kinds[0], K::Title);
         assert!(s.kinds[1..].iter().all(|k| *k != K::Title), "only line 0 is the title: {:?}", s.kinds);

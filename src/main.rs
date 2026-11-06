@@ -1,5 +1,6 @@
 mod app;
 mod brain;
+mod code;
 mod drawing;
 mod editor;
 mod export;
@@ -9,6 +10,7 @@ mod note_page;
 mod palette;
 mod script;
 mod settings;
+mod sewn;
 mod shortcuts;
 mod stitch;
 mod store;

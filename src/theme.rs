@@ -15,6 +15,12 @@ pub const SANS: &str = "Figtree";
 pub const SERIF: &str = "Fraunces Text";
 /// Titles and headings: Fraunces at its display optical size.
 pub const DISPLAY: &str = "Fraunces Display";
+/// Code blocks: Spline Sans Mono, whose weight on the page matches Fraunces Text, so a
+/// block of code is neither a grey hole nor a dark slab.
+pub const MONO: &str = "Spline Sans Mono";
+/// Inline code: the same face drawn at 0.86 of the size it is set at
+/// (`design/tools/fetch-app-fonts.py`), because a line of text has one size.
+pub const MONO_INLINE: &str = "Spline Sans Mono Inline";
 
 /// The interface's type scale, in Figtree: five sizes, so labels, rows and hints line up
 /// from one surface to the next. The writer's words follow the text-size setting
@@ -42,6 +48,8 @@ pub struct Palette {
     pub cloth: Hsla,
     /// The weave lines drawn on the cloth.
     pub weave: Hsla,
+    /// The ground under code: a step darker than the page in linen, a step lighter in
+    /// lamplight. Flat, with no edge.
     pub code: Hsla,
     /// Your words.
     pub ink: Hsla,
@@ -52,6 +60,9 @@ pub struct Palette {
     pub rule: Hsla,
     /// Behind the words of the thread you are looking at.
     pub wash: Hsla,
+    /// Tacking thread: a done checklist line is tacked through with it, and a quote's
+    /// seam is sewn in it.
+    pub tack: Hsla,
     /// Busy marks (the needle while reading).
     pub bulb: Hsla,
     /// Plain lines that are not thread.
@@ -88,6 +99,7 @@ impl Palette {
             faint: c(0x6f6862),
             rule: c(0xe3dacb),
             wash: ca(0xa63f3214),
+            tack: c(0x8c8276),
             bulb: c(0x57505c),
             line: ca(0x26232b4d),
             selection: ca(0x2e3f7a2e),
@@ -111,6 +123,7 @@ impl Palette {
             faint: c(0xa39a8f),
             rule: c(0x332f36),
             wash: ca(0xd9705e1f),
+            tack: c(0x948a80),
             bulb: c(0xbdb4a8),
             line: ca(0xede6da4d),
             selection: ca(0x8c9be047),
@@ -242,6 +255,9 @@ pub fn load_fonts(cx: &mut App) {
         Cow::Borrowed(include_bytes!("../assets/fonts/FrauncesText-BoldItalic.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/FrauncesDisplay-Medium.ttf")),
         Cow::Borrowed(include_bytes!("../assets/fonts/FrauncesDisplay-SemiBold.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/SplineSansMono-Regular.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/SplineSansMono-Medium.ttf")),
+        Cow::Borrowed(include_bytes!("../assets/fonts/SplineSansMonoInline-Regular.ttf")),
     ];
     if let Err(e) = cx.text_system().add_fonts(fonts) {
         log::error!("could not load bundled fonts: {e:#}");

@@ -21,8 +21,9 @@ use std::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::store::{BlockKind, Mark, MarkSpan};
-use crate::theme::{DISPLAY, Palette, SERIF, Theme};
+use crate::sewn::{self, Toggle};
+use crate::store::{BlockKind, Callout, Lang, Mark, MarkSpan};
+use crate::theme::{DISPLAY, MONO, MONO_INLINE, Palette, SANS, SERIF, Theme};
 
 gpui_kit::actions!(
     editor,
@@ -64,6 +65,7 @@ gpui_kit::actions!(
         ToggleUnderline,
         ToggleStrike,
         ToggleCode,
+        ToggleCheck,
         IndentList,
         OutdentList,
         Escape,
@@ -119,6 +121,7 @@ pub fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-u", ToggleUnderline, c),
         KeyBinding::new("cmd-shift-x", ToggleStrike, c),
         KeyBinding::new("cmd-e", ToggleCode, c),
+        KeyBinding::new("cmd-l", ToggleCheck, c),
         KeyBinding::new("tab", IndentList, c),
         KeyBinding::new("shift-tab", OutdentList, c),
         KeyBinding::new("escape", Escape, c),
@@ -184,6 +187,9 @@ pub struct LineBox {
     pub top: Pixels,
     pub line_height: Pixels,
     pub indent: Pixels,
+    /// How much further in the rows after the first start: a long line of code hangs
+    /// two characters past its own indentation. Zero for everything else.
+    pub hang: Pixels,
     pub font_size: Pixels,
     pub wrapped: WrappedLine,
     /// Local byte index where each visual row begins.
@@ -197,6 +203,11 @@ impl LineBox {
 
     pub fn height(&self) -> Pixels {
         self.line_height * self.rows() as f32
+    }
+
+    /// Where `row` starts, from the editor's left edge.
+    pub fn row_x(&self, row: usize) -> Pixels {
+        self.indent + if row > 0 { self.hang } else { px(0.) }
     }
 
     fn row_end(&self, row: usize) -> usize {
@@ -317,7 +328,7 @@ impl EditorLayout {
         let local = offset.saturating_sub(line.start).min(line.len);
         let row = line.row_for_caret(local, upstream);
         point(
-            line.indent + line.x_in_row(local, row),
+            line.row_x(row) + line.x_in_row(local, row),
             line.top + line.line_height * row as f32,
         )
     }
@@ -342,7 +353,7 @@ impl EditorLayout {
             return (line.start, false);
         }
         let row = (((p.y - line.top) / line.line_height) as usize).min(line.rows() - 1);
-        let (local, upstream) = line.local_for_x(row, p.x - line.indent);
+        let (local, upstream) = line.local_for_x(row, p.x - line.row_x(row));
         (line.start + local, upstream)
     }
 
@@ -365,8 +376,8 @@ impl EditorLayout {
                 if s > e || (s == e && !(range.is_empty() || line.len == 0)) {
                     continue;
                 }
-                let x0 = line.indent + line.x_in_row(s, row);
-                let x1 = line.indent + line.x_in_row(e, row);
+                let x0 = line.row_x(row) + line.x_in_row(s, row);
+                let x1 = line.row_x(row) + line.x_in_row(e, row);
                 let y = line.top + line.line_height * row as f32;
                 out.push(Bounds::from_corners(point(x0, y), point(x1, y + line.line_height)));
             }
@@ -763,28 +774,93 @@ impl State {
         Fx::edited(line)
     }
 
-    /// Apply a block kind to every line touched by the selection; if they all have it
-    /// already, they go back to paragraphs.
-    fn set_selection_kind(&mut self, kind: BlockKind) -> Fx {
+    /// The body lines the selection touches (the caret's line when nothing is selected).
+    /// The title keeps its kind, so a selection inside it touches none.
+    fn selected_lines(&self) -> Option<(usize, usize)> {
         let first = self.line_of(self.selected.start);
         let mut last = self.line_of(self.selected.end);
         // A selection that ends at the very start of a line does not reach into it.
         if last > first && self.selected.end == line_range_at(&self.text, self.selected.end).start {
             last -= 1;
         }
-        // The title keeps its kind; a selection inside it changes nothing.
-        let first = first.max(1);
-        let last = last.min(self.kinds.len() - 1);
-        if last < first || kind == BlockKind::Title {
+        let (first, last) = (first.max(1), last.min(self.kinds.len() - 1));
+        (first <= last).then_some((first, last))
+    }
+
+    /// Apply a block kind to every line touched by the selection; if they all have it
+    /// already, they go back to paragraphs. A checklist item keeps whether it is done.
+    fn set_selection_kind(&mut self, kind: BlockKind) -> Fx {
+        let Some((first, last)) = self.selected_lines().filter(|_| kind != BlockKind::Title) else {
             return Fx::default();
-        }
-        let all = (first..=last).all(|l| self.kinds[l] == kind);
+        };
+        let all = (first..=last).all(|l| self.kinds[l].same_kind(kind));
         let new = if all && kind != BlockKind::Paragraph { BlockKind::Paragraph } else { kind };
         self.push_undo(EditKind::Other);
         for l in first..=last {
-            self.kinds[l] = new;
+            self.kinds[l] = match (new, self.kinds[l]) {
+                (BlockKind::Check(_), BlockKind::Check(done)) => BlockKind::Check(done),
+                _ => new,
+            };
         }
         Fx::edited(first)
+    }
+
+    /// Check or uncheck the checklist items the selection touches (the caret's line):
+    /// all done unless they all are, then all undone. Lines that are not items become
+    /// unchecked items when none of them is one. Returns the lines whose box changed.
+    fn toggle_check(&mut self) -> (Fx, Vec<usize>) {
+        let Some((first, last)) = self.selected_lines() else { return (Fx::default(), vec![]) };
+        let items: Vec<usize> = (first..=last).filter(|l| matches!(self.kinds[*l], BlockKind::Check(_))).collect();
+        self.push_undo(EditKind::Other);
+        if items.is_empty() {
+            for l in first..=last {
+                self.kinds[l] = BlockKind::Check(false);
+            }
+            return (Fx::edited(first), vec![]);
+        }
+        let done = items.iter().any(|l| self.kinds[*l] == BlockKind::Check(false));
+        let changed: Vec<usize> = items.into_iter().filter(|l| self.kinds[*l] != BlockKind::Check(done)).collect();
+        for l in &changed {
+            self.kinds[*l] = BlockKind::Check(done);
+        }
+        (Fx::edited(first), changed)
+    }
+
+    /// A click on one item's box.
+    fn toggle_item(&mut self, line: usize) -> Fx {
+        let Some(BlockKind::Check(done)) = self.kinds.get(line).copied() else { return Fx::default() };
+        self.push_undo(EditKind::Other);
+        self.kinds[line] = BlockKind::Check(!done);
+        Fx::edited(line)
+    }
+
+    /// Clear `range` (on line `line`) and give the line `kind`, as one step.
+    fn make_line(&mut self, line: usize, range: Range<usize>, kind: BlockKind) -> Fx {
+        self.push_undo(EditKind::Other);
+        if !range.is_empty() {
+            self.replace(range.clone(), "", None);
+        }
+        self.kinds[line] = kind;
+        self.place_after_edit(range.start);
+        Fx::edited(line)
+    }
+
+    /// The lines that read as one: a block of code is read whole, any other line on
+    /// its own.
+    fn unit_of(&self, line: usize) -> Range<usize> {
+        let kind = self.line_kind(line);
+        if !kind.is_code() {
+            return line..line + 1;
+        }
+        let mut start = line;
+        while start > 1 && self.kinds[start - 1].joins(kind) {
+            start -= 1;
+        }
+        let mut end = line + 1;
+        while end < self.kinds.len() && kind.joins(self.kinds[end]) {
+            end += 1;
+        }
+        start..end
     }
 
     // ----- deletion ---------------------------------------------------------
@@ -795,8 +871,10 @@ impl State {
         }
         let cur = self.cursor();
         let line = self.line_of(cur);
-        // At the start of a block: first drop its formatting, then merge upward.
-        if line > 0 && cur == line_range_at(&self.text, cur).start && self.line_kind(line) != BlockKind::Paragraph {
+        // At the start of a block: first drop its formatting, then merge upward. Inside a
+        // block of code a line start joins the line above, as in any code editor.
+        let kind = self.line_kind(line);
+        if line > 0 && cur == line_range_at(&self.text, cur).start && kind != BlockKind::Paragraph && !self.kinds[line - 1].joins(kind) {
             return self.set_line_kind(line, BlockKind::Paragraph);
         }
         if cur == 0 {
@@ -849,27 +927,54 @@ impl State {
         let line = self.line_of(cur);
         let kind = self.line_kind(line);
         let lr = line_range_at(&self.text, cur);
-        let continues = matches!(kind, BlockKind::Bullet | BlockKind::Numbered | BlockKind::Quote);
-        // An empty list item or quote ends the list instead of adding another.
-        if lr.is_empty() && sel.is_empty() && continues {
-            return self.set_line_kind(line, BlockKind::Paragraph);
+        // Three backticks and maybe a language, alone on a line: Return opens a code block.
+        if line > 0 && sel.is_empty() && kind == BlockKind::Paragraph && cur == lr.end {
+            if let Some(lang) = fence_lang(&self.text[lr.clone()]) {
+                return self.make_line(line, lr, BlockKind::Code(lang));
+            }
+        }
+        let code = kind.is_code();
+        let continues = matches!(
+            kind,
+            BlockKind::Bullet | BlockKind::Numbered | BlockKind::Quote | BlockKind::Check(_) | BlockKind::Callout(_) | BlockKind::Code(_)
+        );
+        // An empty list item, quote or callout line ends it instead of adding another.
+        // Code keeps its blank lines: only a blank last line leaves the block, so Return
+        // twice at its end leaves it.
+        if sel.is_empty() && continues {
+            let blank = if code { self.text[lr.clone()].trim().is_empty() } else { lr.is_empty() };
+            let last = !self.kinds.get(line + 1).is_some_and(|k| kind.joins(*k));
+            if blank && (!code || last) {
+                return self.make_line(line, lr, BlockKind::Paragraph);
+            }
         }
         let heading = matches!(kind, BlockKind::H1 | BlockKind::H2 | BlockKind::H3);
         // Whether any text follows the selection on its last line (it moves down).
         let rest_empty = sel.end >= line_range_at(&self.text, sel.end).end;
+        // The next item of a checklist starts unchecked.
+        let next = match kind {
+            BlockKind::Check(_) => BlockKind::Check(false),
+            k => k,
+        };
         let (above, below) = if line > 0 && cur == lr.start && !lr.is_empty() {
             // Splitting at the very start of a block keeps the block on the new line. The
             // line left empty above is a paragraph, or another item of the same list or quote.
-            (if continues { kind } else { BlockKind::Paragraph }, kind)
+            (if continues { next } else { BlockKind::Paragraph }, kind)
         } else if continues || (heading && !rest_empty) {
             // Lists and quotes continue; a heading split in the middle stays a heading.
-            (kind, kind)
+            (kind, next)
         } else {
             // After a heading, the title or a paragraph comes a paragraph.
             (kind, BlockKind::Paragraph)
         };
+        // A new line of code starts as far in as the one it came from.
+        let indent: String = if code && cur > lr.start {
+            self.text[lr.start..cur].chars().take_while(|c| *c == ' ' || *c == '\t').collect()
+        } else {
+            String::new()
+        };
         self.push_undo(EditKind::Other);
-        let end = self.replace(sel, "\n", Some(below));
+        let end = self.replace(sel, &format!("\n{indent}"), Some(below));
         if line > 0 {
             self.kinds[line] = above;
         }
@@ -885,16 +990,33 @@ impl State {
             self.set_caret(r.start, false);
             return Fx::moved();
         }
-        if self.line_kind(line) == BlockKind::Paragraph {
-            return self.set_line_kind(line, BlockKind::Bullet);
+        match self.line_kind(line) {
+            BlockKind::Paragraph => self.set_line_kind(line, BlockKind::Bullet),
+            // in code, Tab is four spaces
+            BlockKind::Code(_) if self.selected.is_empty() => self.edit(self.selected.clone(), "    ", EditKind::Insert),
+            _ => Fx::default(),
         }
-        Fx::default()
     }
 
     fn outdent(&mut self) -> Fx {
         let line = self.line_of(self.cursor());
-        if self.line_kind(line).is_list() {
+        let kind = self.line_kind(line);
+        if kind.is_list() {
             return self.set_line_kind(line, BlockKind::Paragraph);
+        }
+        if kind.is_code() {
+            // up to four spaces (or a tab) come off the start of the line
+            let lr = self.line_range(line);
+            let lead = &self.text[lr.clone()];
+            let n = if lead.starts_with('\t') { 1 } else { lead.chars().take(4).take_while(|c| *c == ' ').count() };
+            if n == 0 {
+                return Fx::default();
+            }
+            let caret = self.cursor();
+            let fx = self.edit(lr.start..lr.start + n, "", EditKind::Other);
+            let c = caret.saturating_sub(n).max(lr.start);
+            self.selected = c..c;
+            return fx;
         }
         Fx::default()
     }
@@ -949,15 +1071,16 @@ impl State {
         Fx::edited(self.line_of(r.start))
     }
 
-    /// Markdown-style shortcuts at the start of a paragraph ("# ", "- ", "1. ", "> ").
+    /// Markdown-style shortcuts at the start of a paragraph ("# ", "- ", "1. ", "> ",
+    /// "[ ] ", "``` "), and on a line they made ("- " then "[ ] ", "> " then "[!tip] ").
     fn try_shortcut(&mut self) -> Fx {
         let cur = self.cursor();
         let line = self.line_of(cur);
-        if line == 0 || self.line_kind(line) != BlockKind::Paragraph {
+        if line == 0 {
             return Fx::default();
         }
         let lr = line_range_at(&self.text, cur);
-        let Some(kind) = shortcut_kind(&self.text[lr.start..cur]) else { return Fx::default() };
+        let Some(kind) = shortcut_kind(&self.text[lr.start..cur], self.line_kind(line)) else { return Fx::default() };
         self.push_undo(EditKind::Other);
         self.replace(lr.start..cur, "", None);
         self.kinds[line] = kind;
@@ -1328,7 +1451,7 @@ fn vertical_target(
     let line = &layout.lines[li];
     let local = offset.saturating_sub(line.start).min(line.len);
     let row = line.row_for_caret(local, upstream);
-    let x = goal_x.unwrap_or_else(|| line.indent + line.x_in_row(local, row));
+    let x = goal_x.unwrap_or_else(|| line.row_x(row) + line.x_in_row(local, row));
     let target = if down {
         if row + 1 < line.rows() {
             Some((li, row + 1))
@@ -1343,7 +1466,7 @@ fn vertical_target(
     match target {
         Some((tl, tr)) => {
             let t = &layout.lines[tl];
-            let (local, up) = t.local_for_x(tr, x - t.indent);
+            let (local, up) = t.local_for_x(tr, x - t.row_x(tr));
             (t.start + local, up, Some(x))
         }
         None if down => (text.len(), false, Some(x)),
@@ -1386,17 +1509,48 @@ fn row_bounds(text: &str, layout: Option<&EditorLayout>, offset: usize, upstream
     (start..snap_grapheme(text, line.start + end).max(start), up)
 }
 
-/// The block kind a markdown shortcut typed at the start of a paragraph asks for.
-fn shortcut_kind(prefix: &str) -> Option<BlockKind> {
-    Some(match prefix {
-        "# " => BlockKind::H1,
-        "## " => BlockKind::H2,
-        "### " => BlockKind::H3,
-        "- " | "* " => BlockKind::Bullet,
-        "1. " | "1) " => BlockKind::Numbered,
-        "> " => BlockKind::Quote,
-        _ => return None,
-    })
+/// The block kind a markdown shortcut typed at the start of a line of kind `current`
+/// asks for. A paragraph takes them all; a bullet can become a checklist item
+/// ("- [ ] "), and a quote a callout ("> [!note] ", warning or tip, or another of
+/// Obsidian's names for them).
+fn shortcut_kind(prefix: &str, current: BlockKind) -> Option<BlockKind> {
+    let check = match prefix {
+        "[ ] " | "[] " => Some(BlockKind::Check(false)),
+        "[x] " | "[X] " => Some(BlockKind::Check(true)),
+        _ => None,
+    };
+    match current {
+        BlockKind::Paragraph => {
+            if check.is_some() {
+                return check;
+            }
+            if let Some(lang) = prefix.strip_suffix(' ').and_then(fence_lang) {
+                return Some(BlockKind::Code(lang));
+            }
+            Some(match prefix {
+                "# " => BlockKind::H1,
+                "## " => BlockKind::H2,
+                "### " => BlockKind::H3,
+                "- " | "* " => BlockKind::Bullet,
+                "1. " | "1) " => BlockKind::Numbered,
+                "> " => BlockKind::Quote,
+                _ => return None,
+            })
+        }
+        BlockKind::Bullet => check,
+        BlockKind::Quote => {
+            let name = prefix.strip_prefix("[!")?.strip_suffix("] ")?;
+            Callout::from_obsidian(name).map(BlockKind::Callout)
+        }
+        _ => None,
+    }
+}
+
+/// The language of a code fence typed alone at a line start: three backticks and
+/// maybe one word (```` ```rust ````).
+fn fence_lang(line: &str) -> Option<Lang> {
+    let rest = line.strip_prefix("```")?.trim();
+    (!rest.contains(char::is_whitespace) && !rest.contains('`')).then(|| Lang::new(rest))
 }
 
 /// Line breaks from other apps ("\r\n", "\r", Unicode line and paragraph separators) as '\n'.
@@ -1496,7 +1650,8 @@ pub(crate) fn apply_edit(
     let end_line = line_of(text, range.end);
     let inserted_lines = new_text.matches('\n').count();
     let continue_kind = match kinds.get(start_line).copied().unwrap_or_default() {
-        k @ (BlockKind::Bullet | BlockKind::Numbered | BlockKind::Quote) => k,
+        k @ (BlockKind::Bullet | BlockKind::Numbered | BlockKind::Quote | BlockKind::Callout(_) | BlockKind::Code(_)) => k,
+        BlockKind::Check(_) => BlockKind::Check(false),
         _ => BlockKind::Paragraph,
     };
     let kind = new_kind.unwrap_or(continue_kind);
@@ -1631,6 +1786,12 @@ pub struct NoteEditor {
     pub placeholder_hint: Option<String>,
     pub layout: Option<Rc<EditorLayout>>,
     layout_sig: Vec<(f32, f32)>,
+    /// Checklist items checked or unchecked a moment ago, by line: they sew in or come out.
+    toggles: HashMap<usize, Toggle>,
+    /// Where the pointer is over the editor, for the Copy button on the code block under it.
+    pointer: Option<Point<Pixels>>,
+    /// The code block (by its first line) whose Copy was just pressed: it reads Copied.
+    copied: Option<(usize, Instant)>,
     cursor_on: bool,
     blink_epoch: usize,
     _blink: Option<Task<()>>,
@@ -1658,6 +1819,9 @@ impl NoteEditor {
             placeholder_hint: None,
             layout: None,
             layout_sig: vec![],
+            toggles: HashMap::new(),
+            pointer: None,
+            copied: None,
             cursor_on: true,
             blink_epoch: 0,
             _blink: None,
@@ -1878,6 +2042,37 @@ impl NoteEditor {
 
     pub fn current_line_kind(&self) -> BlockKind {
         self.line_kind(self.line_of(self.cursor()))
+    }
+
+    /// Check or uncheck the checklist items under the selection (the caret's line); any
+    /// other line becomes an item. The boxes that change sew in or come out.
+    pub fn toggle_check(&mut self, cx: &mut Context<Self>) {
+        let (fx, changed) = self.st.toggle_check();
+        for line in changed {
+            self.animate_toggle(line);
+        }
+        self.apply(fx, cx);
+    }
+
+    fn animate_toggle(&mut self, line: usize) {
+        if let Some(BlockKind::Check(done)) = self.st.kinds.get(line).copied() {
+            self.toggles.retain(|_, t| sewn::since(t.at) < 2.);
+            self.toggles.insert(line, Toggle { at: Instant::now(), done });
+        }
+    }
+
+    /// The lines that are read as one with `line`: its whole code block, or itself.
+    pub fn unit_of(&self, line: usize) -> Range<usize> {
+        self.st.unit_of(line)
+    }
+
+    /// The words of the lines `lines`, joined by line breaks.
+    pub fn lines_text(&self, lines: Range<usize>) -> String {
+        if lines.is_empty() {
+            return String::new();
+        }
+        let (a, b) = (self.st.line_range(lines.start), self.st.line_range(lines.end - 1));
+        self.st.text[a.start..b.end].to_string()
     }
 
     pub fn has_mark(&self, mark: Mark) -> bool {
@@ -2112,6 +2307,9 @@ impl NoteEditor {
     fn toggle_code(&mut self, _: &ToggleCode, _: &mut Window, cx: &mut Context<Self>) {
         self.toggle_mark(Mark::Code, cx);
     }
+    fn toggle_check_action(&mut self, _: &ToggleCheck, _: &mut Window, cx: &mut Context<Self>) {
+        self.toggle_check(cx);
+    }
 
     fn show_character_palette(&mut self, _: &ShowCharacterPalette, window: &mut Window, _: &mut Context<Self>) {
         window.show_character_palette();
@@ -2127,6 +2325,34 @@ impl NoteEditor {
 
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
+        // a checklist's box toggles it, and a code block's Copy copies it; neither moves the caret
+        if let Some(layout) = self.layout.clone() {
+            let at = ev.position - layout.origin;
+            if let Some(line) = check_box_at(&layout, at) {
+                let fx = self.st.toggle_item(line);
+                self.animate_toggle(line);
+                self.apply(fx, cx);
+                return;
+            }
+            if let Some(block) = code_blocks(&layout).into_iter().find(|b| sewn::copy_hit(b.ground).contains(&at)) {
+                let code = self.lines_text(block.lines.clone());
+                cx.write_to_clipboard(ClipboardItem::new_string(code));
+                self.copied = Some((block.lines.start, Instant::now()));
+                cx.notify();
+                let epoch = self.copied;
+                cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(sewn::COPIED_FOR).await;
+                    let _ = this.update(cx, |ed, cx| {
+                        if ed.copied.map(|c| c.1) == epoch.map(|c| c.1) {
+                            ed.copied = None;
+                        }
+                        cx.notify();
+                    });
+                })
+                .detach();
+                return;
+            }
+        }
         let Some(hit) = self.hit(ev.position) else {
             return;
         };
@@ -2134,7 +2360,25 @@ impl NoteEditor {
         self.apply(fx, cx);
     }
 
+    /// The code block under a window point, by its first line.
+    fn code_block_under(&self, at: Option<Point<Pixels>>) -> Option<usize> {
+        let (layout, at) = (self.layout.as_ref()?, at?);
+        code_blocks(layout).into_iter().find(|b| b.ground.contains(&(at - layout.origin))).map(|b| b.lines.start)
+    }
+
+    fn on_hover_change(&mut self, hovered: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        if !*hovered && self.pointer.take().is_some() {
+            cx.notify();
+        }
+    }
+
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        // Copy shows on the code block under the pointer
+        let before = self.code_block_under(self.pointer);
+        self.pointer = Some(ev.position);
+        if self.code_block_under(self.pointer) != before {
+            cx.notify();
+        }
         if self.st.drag.is_none() {
             return;
         }
@@ -2328,7 +2572,9 @@ impl Render for NoteEditor {
             .on_action(cx.listener(Self::toggle_underline))
             .on_action(cx.listener(Self::toggle_strike))
             .on_action(cx.listener(Self::toggle_code))
+            .on_action(cx.listener(Self::toggle_check_action))
             .on_action(cx.listener(Self::show_character_palette))
+            .on_hover(cx.listener(Self::on_hover_change))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -2347,6 +2593,8 @@ pub struct LineStyle {
     pub italic: bool,
     pub line_height: Pixels,
     pub indent: Pixels,
+    /// Kept clear on the right (a callout's patch and a code block's ground have sides).
+    pub right: Pixels,
     pub gap_before: Pixels,
     pub gap_after: Pixels,
     pub color: Hsla,
@@ -2361,6 +2609,7 @@ pub fn line_style(kind: BlockKind, note: Pixels, p: &Palette) -> LineStyle {
         italic: false,
         line_height: px((n * 1.62).round()),
         indent: px(0.),
+        right: px(0.),
         gap_before: px(0.),
         gap_after: px((n * 0.68).round()),
         color: p.ink,
@@ -2411,7 +2660,56 @@ pub fn line_style(kind: BlockKind, note: Pixels, p: &Palette) -> LineStyle {
             color: p.graphite,
             ..base
         },
+        // the words of a done item step back to graphite; a tacking line runs through them
+        BlockKind::Check(done) => LineStyle {
+            indent: px(sewn::CHECK_INDENT),
+            gap_after: px((n * 0.25).round()),
+            color: if done { p.graphite } else { p.ink },
+            ..base
+        },
+        // the gaps around a run of lines (the patch, the ground) are added in `layout_doc`
+        BlockKind::Callout(_) => LineStyle {
+            indent: px(sewn::CALLOUT_INSET),
+            right: px(sewn::CALLOUT_INSET),
+            line_height: px((n * 1.53).round()),
+            gap_after: px((n * 0.35).round()),
+            ..base
+        },
+        BlockKind::Code(_) => {
+            let size = code_size(note);
+            LineStyle {
+                family: MONO,
+                size,
+                line_height: px((size.as_f32() * 1.63).round()),
+                indent: px(sewn::CODE_INDENT),
+                right: px(sewn::CODE_RIGHT),
+                gap_after: px(0.),
+                ..base
+            }
+        }
         BlockKind::Paragraph => base,
+    }
+}
+
+/// Code is set a little smaller than the words around it (13.5 px beside 17), in half
+/// pixels.
+pub fn code_size(note: Pixels) -> Pixels {
+    px((note.as_f32() * 0.8 * 2.).round() / 2.)
+}
+
+/// The gaps before and after a line, with the room a callout's patch or a code block's
+/// ground takes when the line opens or closes one (`opens`, `closes`).
+fn gaps(kind: BlockKind, st: &LineStyle, opens: bool, closes: bool) -> (Pixels, Pixels) {
+    match kind {
+        BlockKind::Callout(_) => (
+            if opens { st.gap_before + px(sewn::CALLOUT_MARGIN + sewn::CALLOUT_PAD_TOP + sewn::CALLOUT_LABEL) } else { st.gap_before },
+            if closes { px(sewn::CALLOUT_PAD_BOTTOM + sewn::CALLOUT_AFTER) } else { st.gap_after },
+        ),
+        BlockKind::Code(_) => (
+            if opens { px(sewn::CODE_MARGIN + sewn::CODE_HEAD) } else { px(0.) },
+            if closes { px(sewn::CODE_PAD + sewn::CODE_AFTER) } else { px(0.) },
+        ),
+        _ => (st.gap_before, st.gap_after),
     }
 }
 
@@ -2499,14 +2797,15 @@ fn runs_for_line(snap: &DocSnapshot, start: usize, end: usize, style: &LineStyle
         runs.push(TextRun {
             len: b - a,
             font: Font {
-                family: if code { "Menlo".into() } else { style.family.into() },
-                features: FontFeatures::default(),
+                // inline code: the code face at 0.86 of the note, on a chip painted under it
+                family: if code { MONO_INLINE.into() } else { style.family.into() },
+                features: if code { crate::code::features() } else { FontFeatures::default() },
                 fallbacks: None,
                 weight: if bold { FontWeight::BOLD } else { style.weight },
                 style: if italic { FontStyle::Italic } else { FontStyle::Normal },
             },
             color,
-            background_color: code.then_some(snap.palette.code),
+            background_color: None,
             underline,
             strikethrough,
         });
@@ -2530,16 +2829,93 @@ fn runs_for_line(snap: &DocSnapshot, start: usize, end: usize, style: &LineStyle
     runs
 }
 
+/// A line of code as runs: each token in its thread, the rest in ink, all in the code
+/// face with the dotted zero. Marks stay in the note but are not drawn in code, which
+/// is read one character at a time.
+fn code_runs(snap: &DocSnapshot, start: usize, end: usize, style: &LineStyle, tokens: &[(Range<usize>, crate::code::Token)]) -> Vec<TextRun> {
+    let mut cuts = vec![start, end];
+    for (r, _) in tokens {
+        cuts.push(start + r.start);
+        cuts.push(start + r.end);
+    }
+    if let Some(mk) = snap.marked.as_ref().filter(|mk| mk.end > start && mk.start < end) {
+        cuts.push(mk.start.max(start));
+        cuts.push(mk.end.min(end));
+    }
+    cuts.retain(|c| (start..=end).contains(c));
+    cuts.sort_unstable();
+    cuts.dedup();
+    let font = Font { family: style.family.into(), features: crate::code::features(), fallbacks: None, weight: FontWeight::NORMAL, style: FontStyle::Normal };
+    let mut runs: Vec<TextRun> = cuts
+        .windows(2)
+        .filter(|w| w[0] < w[1])
+        .map(|w| {
+            let (a, b) = (w[0], w[1]);
+            let token = tokens.iter().find(|(r, _)| start + r.start <= a && start + r.end >= b).map(|(_, t)| *t);
+            let marked = snap.marked.as_ref().is_some_and(|mk| mk.start <= a && mk.end >= b);
+            TextRun {
+                len: b - a,
+                font: font.clone(),
+                color: token.map_or(style.color, |t| crate::code::color(t, &snap.palette)),
+                background_color: None,
+                underline: marked.then_some(UnderlineStyle { thickness: px(1.), color: None, wavy: false }),
+                strikethrough: None,
+            }
+        })
+        .collect();
+    if runs.is_empty() {
+        runs.push(TextRun { len: 0, font, color: style.color, background_color: None, underline: None, strikethrough: None });
+    }
+    runs
+}
+
+/// The tokens of every line of code, each block lexed from its first line, so a
+/// comment or a string carries across its lines.
+fn code_tokens(texts: &[&str], kinds: &[BlockKind]) -> Vec<Vec<(Range<usize>, crate::code::Token)>> {
+    let mut out = vec![vec![]; texts.len()];
+    let mut i = 0;
+    while i < texts.len() {
+        let Some(BlockKind::Code(lang)) = kinds.get(i).copied() else {
+            i += 1;
+            continue;
+        };
+        let mut end = i + 1;
+        while end < texts.len() && kinds.get(end).is_some_and(|k| BlockKind::Code(lang).joins(*k)) {
+            end += 1;
+        }
+        for (k, tokens) in crate::code::lex_block(lang, &texts[i..end]).into_iter().enumerate() {
+            out[i + k] = tokens;
+        }
+        i = end;
+    }
+    out
+}
+
 fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem) -> EditorLayout {
     let mut lines = vec![];
     let mut y = px(0.);
     let mut start = 0;
-    for (i, line_text) in snap.text.split('\n').enumerate() {
-        let kind = snap.kinds.get(i).copied().unwrap_or_default();
+    let texts: Vec<&str> = snap.text.split('\n').collect();
+    let kind_of = |i: usize| snap.kinds.get(i).copied().unwrap_or_default();
+    let tokens = code_tokens(&texts, &snap.kinds);
+    for (i, line_text) in texts.iter().copied().enumerate() {
+        let kind = kind_of(i);
         let st = line_style(kind, snap.note_size, &snap.palette);
+        let opens = i == 0 || !kind_of(i - 1).joins(kind);
+        let closes = i + 1 >= texts.len() || !kind.joins(kind_of(i + 1));
+        let (gap_before, gap_after) = gaps(kind, &st, opens, closes);
         let end = start + line_text.len();
-        let runs = runs_for_line(snap, start, end, &st);
-        let wrap = (width - st.indent).max(px(40.));
+        let runs = if kind.is_code() { code_runs(snap, start, end, &st, &tokens[i]) } else { runs_for_line(snap, start, end, &st) };
+        let column = (width - st.indent - st.right).max(px(40.));
+        // A long line of code wraps, and the rest of it hangs two characters past its own
+        // indentation (the code face is 0.6 of its size wide).
+        let hang = if kind.is_code() {
+            let lead: usize = line_text.chars().take_while(|c| *c == ' ' || *c == '\t').map(|c| if c == '\t' { 4 } else { 1 }).sum();
+            (st.size * 0.6 * (lead + 2) as f32).min(column / 2.)
+        } else {
+            px(0.)
+        };
+        let wrap = (column - hang).max(px(40.));
         let shaped = text_system
             .shape_text(SharedString::from(line_text.to_string()), st.size, &runs, Some(wrap), None)
             .ok()
@@ -2550,7 +2926,7 @@ fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem)
             let run = &shaped.unwrapped_layout.runs[b.run_ix];
             row_starts.push(run.glyphs[b.glyph_ix].index);
         }
-        y += st.gap_before;
+        y += gap_before;
         let lb = LineBox {
             start,
             len: line_text.len(),
@@ -2558,15 +2934,96 @@ fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem)
             top: y,
             line_height: st.line_height,
             indent: st.indent,
+            hang,
             font_size: st.size,
             wrapped: shaped,
             row_starts,
         };
-        y += lb.height() + st.gap_after;
+        y += lb.height() + gap_after;
         lines.push(lb);
         start = end + 1;
     }
     EditorLayout { origin: point(px(0.), px(0.)), width, height: y, lines }
+}
+
+/// Runs of lines that make one block (a callout's patch, a code block), as line ranges.
+fn joined_runs(layout: &EditorLayout) -> Vec<Range<usize>> {
+    let mut out = vec![];
+    let mut i = 0;
+    while i < layout.lines.len() {
+        let kind = layout.lines[i].kind;
+        let mut end = i + 1;
+        if matches!(kind, BlockKind::Callout(_) | BlockKind::Code(_)) {
+            while end < layout.lines.len() && kind.joins(layout.lines[end].kind) {
+                end += 1;
+            }
+            out.push(i..end);
+        }
+        i = end;
+    }
+    out
+}
+
+/// The box a run of lines sits in, relative to the editor: a callout's patch, or a code
+/// block's ground, with its head band above the first line.
+fn run_box(layout: &EditorLayout, run: &Range<usize>) -> Bounds<Pixels> {
+    let (first, last) = (&layout.lines[run.start], &layout.lines[run.end - 1]);
+    let (above, below) = if first.kind.is_code() {
+        (sewn::CODE_HEAD, sewn::CODE_PAD)
+    } else {
+        (sewn::CALLOUT_PAD_TOP + sewn::CALLOUT_LABEL, sewn::CALLOUT_PAD_BOTTOM)
+    };
+    Bounds::from_corners(point(px(0.), first.top - px(above)), point(layout.width, last.top + last.height() + px(below)))
+}
+
+/// A code block as laid out: its lines, its language and its ground.
+pub struct CodeBlock {
+    pub lines: Range<usize>,
+    pub lang: Lang,
+    pub ground: Bounds<Pixels>,
+}
+
+fn code_blocks(layout: &EditorLayout) -> Vec<CodeBlock> {
+    joined_runs(layout)
+        .into_iter()
+        .filter_map(|r| match layout.lines[r.start].kind {
+            BlockKind::Code(lang) => Some(CodeBlock { ground: run_box(layout, &r), lines: r, lang }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The checklist item whose box is at `at` (relative to the editor).
+fn check_box_at(layout: &EditorLayout, at: Point<Pixels>) -> Option<usize> {
+    layout
+        .lines
+        .iter()
+        .position(|l| matches!(l.kind, BlockKind::Check(_)) && sewn::box_hit(l.top, l.line_height).contains(&at))
+}
+
+/// Where a row's baseline is, from the top of its line box, as GPUI places it.
+fn baseline(line: &LineBox) -> Pixels {
+    let l = &line.wrapped.unwrapped_layout;
+    (line.line_height - l.ascent - l.descent) / 2. + l.ascent
+}
+
+/// The stitches that tack a done item's words through, at mid x-height, row by row.
+fn tack_stitches(layout: &EditorLayout, i: usize) -> Vec<sewn::Stitch> {
+    let line = &layout.lines[i];
+    if line.len == 0 {
+        return vec![];
+    }
+    // Fraunces' x-height is 0.48 of its size
+    let mid = baseline(line) - line.font_size * 0.241;
+    layout
+        .rects(line.start..line.start + line.len)
+        .into_iter()
+        .enumerate()
+        .flat_map(|(row, r)| {
+            let y = (r.origin.y + mid).as_f32();
+            sewn::lay_run((r.origin.x - px(2.)).as_f32(), (r.origin.x + r.size.width + px(2.)).as_f32(), y, 10., 3., 0.5, 5 + row as u64)
+        })
+        .collect()
 }
 
 struct EditorElement {
@@ -2582,6 +3039,8 @@ impl IntoElement for EditorElement {
 
 struct Prepaint {
     layout: Rc<EditorLayout>,
+    /// Checklist boxes and Copy buttons: the pointer is a hand over them.
+    hands: Vec<Hitbox>,
 }
 
 impl Element for EditorElement {
@@ -2654,7 +3113,17 @@ impl Element for EditorElement {
         if changed {
             cx.defer(move |cx| editor.update(cx, |_, cx| cx.emit(EditorEvent::LayoutChanged)));
         }
-        Prepaint { layout }
+        let at = |b: Bounds<Pixels>| Bounds::new(bounds.origin + b.origin, b.size);
+        let mut hands: Vec<Hitbox> = layout
+            .lines
+            .iter()
+            .filter(|l| matches!(l.kind, BlockKind::Check(_)))
+            .map(|l| window.insert_hitbox(at(sewn::box_hit(l.top, l.line_height)), HitboxBehavior::Normal))
+            .collect();
+        for b in code_blocks(&layout) {
+            hands.push(window.insert_hitbox(at(sewn::copy_hit(b.ground)), HitboxBehavior::Normal));
+        }
+        Prepaint { layout, hands }
     }
 
     fn paint(
@@ -2683,10 +3152,42 @@ impl Element for EditorElement {
         let active = ed.active_anchor.clone();
         let thinking = ed.thinking.clone();
         let last_line = ed.st.kinds.len() - 1;
+        let marks = ed.st.marks.clone();
+        let toggles = ed.toggles.clone();
+        let pointer = ed.pointer;
+        let copied = ed.copied.filter(|(_, at)| at.elapsed() < sewn::COPIED_FOR).map(|(line, _)| line);
         let layout = pre.layout.clone();
         let origin = bounds.origin;
 
         window.handle_input(&focus, ElementInputHandler::new(bounds, self.editor.clone()), cx);
+        for hand in &pre.hands {
+            window.set_cursor_style(CursorStyle::PointingHand, hand);
+        }
+
+        // Your blocks' grounds go down first: a code block's flat ground, a callout's
+        // patch with its stitched edge and its kind's name.
+        let runs = joined_runs(&layout);
+        let mut numbers: HashMap<usize, usize> = HashMap::new();
+        for run in &runs {
+            let b = run_box(&layout, run);
+            let on_page = Bounds::new(origin + b.origin, b.size);
+            match layout.lines[run.start].kind {
+                BlockKind::Code(_) => {
+                    window.paint_quad(fill(on_page, p.code).corner_radii(px(8.)));
+                    numbers.extend(run.clone().map(|l| (l, l - run.start + 1)));
+                }
+                BlockKind::Callout(kind) => {
+                    let thread = sewn::callout_thread(kind, &p);
+                    sewn::patch(window, on_page, thread, 7 + run.start as u64);
+                    let label = kind.label();
+                    let r = TextRun { len: label.len(), font: Font { weight: FontWeight::SEMIBOLD, ..font(SANS) }, color: thread, background_color: None, underline: None, strikethrough: None };
+                    let shaped = window.text_system().shape_line(label.into(), px(crate::theme::ts::SMALL), &[r], None);
+                    let at = on_page.origin + point(px(sewn::CALLOUT_INSET), px(sewn::CALLOUT_PAD_TOP));
+                    let _ = shaped.paint(at, px(sewn::CALLOUT_LABEL), TextAlign::Left, None, window, cx);
+                }
+                _ => {}
+            }
+        }
 
         // Active thread: wash its words.
         if let Some(active) = &active {
@@ -2704,6 +3205,22 @@ impl Element for EditorElement {
             for r in layout.rects(selected.clone()) {
                 let w = if r.size.width < px(4.) { px(4.) } else { r.size.width };
                 window.paint_quad(fill(Bounds::new(origin + r.origin, size(w, r.size.height)), color));
+            }
+        }
+
+        // Inline code sits on a small chip of ink, as tall as the code face it holds.
+        for m in marks.iter().filter(|m| m.mark == Mark::Code) {
+            for line in layout.lines.iter().filter(|l| !l.kind.is_code() && m.start < l.start + l.len && m.end > l.start) {
+                let base = baseline(line);
+                let s = line.font_size * 0.86;
+                for r in layout.rects(m.start.max(line.start)..m.end.min(line.start + line.len)) {
+                    let y = r.origin.y + base;
+                    let chip = Bounds::from_corners(
+                        origin + point(r.origin.x - px(3.), y - s * 0.96 - px(1.)),
+                        origin + point(r.origin.x + r.size.width + px(3.), y + s * 0.24 + px(1.)),
+                    );
+                    window.paint_quad(fill(chip, sewn::chip(&p)).corner_radii(px(4.)));
+                }
             }
         }
 
@@ -2737,8 +3254,38 @@ impl Element for EditorElement {
                 }
                 BlockKind::Quote => {
                     number = 0;
-                    let bar = Bounds::new(origin + point(px(2.), line.top + px(3.)), size(px(2.), line.height() - px(6.)));
-                    window.paint_quad(fill(bar, p.rule));
+                    // a back-stitched seam in tacking thread, where the 2 px bar was
+                    let (y0, y1) = (origin.y + line.top + px(3.), origin.y + line.top + line.height() - px(3.));
+                    sewn::seam(window, origin.x + px(3.), y0, y1, p.tack, 17 + i as u64);
+                }
+                BlockKind::Check(done) => {
+                    number = 0;
+                    // a stitched square in graphite; done, a cross-stitch in your ink
+                    let at = origin + point(px(0.), line.top + line.line_height / 2. - px(sewn::BOX / 2.));
+                    sewn::check_box(window, at, p.graphite);
+                    let moving = toggles.get(&i).filter(|t| t.done == done && sewn::moving(sewn::since(t.at), 0, t.done));
+                    let (k1, k2) = match moving {
+                        Some(t) => sewn::cross_at(sewn::since(t.at), done),
+                        None if done => (1., 1.),
+                        None => (0., 0.),
+                    };
+                    sewn::cross(window, at, p.ink, k1, k2);
+                }
+                BlockKind::Code(_) => {
+                    number = 0;
+                    // its number, right-aligned before the code; wrapped rows get none
+                    let label = numbers.get(&i).copied().unwrap_or(1).to_string();
+                    let run = TextRun {
+                        len: label.len(),
+                        font: Font { features: crate::code::features(), ..font(MONO) },
+                        color: p.faint,
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    };
+                    let shaped = window.text_system().shape_line(label.into(), px(crate::theme::ts::SMALL), &[run], None);
+                    let x = px(sewn::NUMBER_END) - shaped.width;
+                    let _ = shaped.paint(origin + point(x, line.top), line.line_height, TextAlign::Left, None, window, cx);
                 }
                 _ => number = 0,
             }
@@ -2768,8 +3315,81 @@ impl Element for EditorElement {
                         y += line.line_height * (row.wrap_boundaries().len() + 1) as f32;
                     }
                 }
+            } else if line.hang > px(0.) && line.rows() > 1 {
+                // the rows after the first hang further in: the line is painted twice, each
+                // time showing only its own rows
+                let first = Bounds::new(point(origin.x, origin.y + line.top), size(bounds.size.width, line.line_height));
+                window.with_content_mask(Some(ContentMask { bounds: first }), |window| {
+                    let _ = line.wrapped.paint(line_origin, line.line_height, TextAlign::Left, None, window, cx);
+                });
+                let rest = Bounds::new(point(origin.x, origin.y + line.top + line.line_height), size(bounds.size.width, line.height() - line.line_height));
+                window.with_content_mask(Some(ContentMask { bounds: rest }), |window| {
+                    let _ = line.wrapped.paint(line_origin + point(line.hang, px(0.)), line.line_height, TextAlign::Left, None, window, cx);
+                });
             } else {
                 let _ = line.wrapped.paint(line_origin, line.line_height, TextAlign::Left, None, window, cx);
+            }
+        }
+
+        // A done item's words are tacked through, left to right, once its cross is in;
+        // unchecking unpicks them, last stitch first.
+        let mut animating = false;
+        for (i, line) in layout.lines.iter().enumerate() {
+            let BlockKind::Check(done) = line.kind else { continue };
+            let toggle = toggles.get(&i).filter(|t| t.done == done);
+            if !done && toggle.is_none() {
+                continue;
+            }
+            let stitches = tack_stitches(&layout, i);
+            let n = stitches.len();
+            let t = toggle.map(|t| sewn::since(t.at)).filter(|t| sewn::moving(*t, n, done));
+            animating |= t.is_some();
+            for (j, st) in stitches.into_iter().enumerate() {
+                let k = match t {
+                    Some(t) => sewn::tack_at(j, n, t, done),
+                    None if done => 1.,
+                    None => 0.,
+                };
+                if k > 0.01 {
+                    let grown = sewn::Stitch { a: st.a, b: point(st.a.x + (st.b.x - st.a.x) * k, st.b.y) };
+                    sewn::stitch(window, origin, grown, 1.3, p.tack);
+                }
+            }
+        }
+        if animating {
+            window.request_animation_frame();
+        }
+
+        // A code block's head: its language at the left, and Copy at the right while the
+        // pointer is on the block (Copied for a moment after).
+        let under = pointer.map(|at| at - origin);
+        for block in code_blocks(&layout) {
+            let g = Bounds::new(origin + block.ground.origin, block.ground.size);
+            if !block.lang.is_empty() {
+                let label = block.lang.as_str().to_string();
+                let run = TextRun { len: label.len(), font: font(SANS), color: p.faint, background_color: None, underline: None, strikethrough: None };
+                let shaped = window.text_system().shape_line(label.into(), px(crate::theme::ts::SMALL), &[run], None);
+                let _ = shaped.paint(g.origin + point(px(14.), px(0.)), px(sewn::CODE_HEAD), TextAlign::Left, None, window, cx);
+            }
+            let was_copied = copied == Some(block.lines.start);
+            if was_copied || under.is_some_and(|at| block.ground.contains(&at)) {
+                let label = if was_copied { "Copied" } else { "Copy" };
+                let run = TextRun {
+                    len: label.len(),
+                    font: Font { weight: FontWeight::MEDIUM, ..font(SANS) },
+                    color: p.ink,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                let shaped = window.text_system().shape_line(label.into(), px(crate::theme::ts::SMALL), &[run], None);
+                let w = shaped.width + px(16.);
+                let b = Bounds::new(
+                    point(g.origin.x + g.size.width - px(sewn::COPY_INSET) - w, g.origin.y + px(sewn::COPY_INSET)),
+                    size(w, px(sewn::COPY_H)),
+                );
+                window.paint_quad(fill(b, p.card).corner_radii(px(6.)).border_widths(px(1.)).border_color(p.line));
+                let _ = shaped.paint(b.origin + point(px(8.), px(0.)), px(sewn::COPY_H), TextAlign::Left, None, window, cx);
             }
         }
 

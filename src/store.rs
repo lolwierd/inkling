@@ -18,6 +18,9 @@ pub fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// What a line of a note is. Most kinds are a word in the JSON (`"paragraph"`); the
+/// three that carry a value are an object (`{"check": true}`, `{"callout": "tip"}`,
+/// `{"code": "rust"}`), so notes saved before them still load as they are.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BlockKind {
@@ -30,11 +33,133 @@ pub enum BlockKind {
     Bullet,
     Numbered,
     Quote,
+    /// A checklist item, `true` once it is done.
+    Check(bool),
+    /// A line of a callout. Lines of one kind in a row share one patch.
+    Callout(Callout),
+    /// A line of code. Lines in one language in a row make one block.
+    Code(Lang),
 }
 
 impl BlockKind {
     pub fn is_list(self) -> bool {
-        matches!(self, BlockKind::Bullet | BlockKind::Numbered)
+        matches!(self, BlockKind::Bullet | BlockKind::Numbered | BlockKind::Check(_))
+    }
+
+    pub fn is_code(self) -> bool {
+        matches!(self, BlockKind::Code(_))
+    }
+
+    /// Lines of these kinds in a row make one block: a callout's patch, a code block.
+    pub fn joins(self, next: BlockKind) -> bool {
+        match (self, next) {
+            (BlockKind::Callout(a), BlockKind::Callout(b)) => a == b,
+            (BlockKind::Code(a), BlockKind::Code(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    /// The same kind, as the selection menu sees it: a done item is still a checklist
+    /// item, and code is code in any language.
+    pub fn same_kind(self, other: BlockKind) -> bool {
+        match (self, other) {
+            (BlockKind::Check(_), BlockKind::Check(_)) | (BlockKind::Code(_), BlockKind::Code(_)) => true,
+            (a, b) => a == b,
+        }
+    }
+}
+
+/// The three kinds of callout. Each is sewn in its own thread: indigo for a note, ochre
+/// for a warning, sage for a tip. Never madder, which is Inkling's.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Callout {
+    #[default]
+    Note,
+    Warning,
+    Tip,
+}
+
+impl Callout {
+    pub const ALL: [Callout; 3] = [Callout::Note, Callout::Warning, Callout::Tip];
+
+    /// The name on the patch and in the selection menu.
+    pub fn label(self) -> &'static str {
+        match self {
+            Callout::Note => "Note",
+            Callout::Warning => "Warning",
+            Callout::Tip => "Tip",
+        }
+    }
+
+    /// As Markdown writes it: `> [!note]`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Callout::Note => "note",
+            Callout::Warning => "warning",
+            Callout::Tip => "tip",
+        }
+    }
+
+    /// One of Obsidian's callout types (any case, its aliases too) as one of the three:
+    /// what informs is a note, what cautions is a warning, what helps or is done is a
+    /// tip. `None` for a type Obsidian does not have.
+    pub fn from_obsidian(kind: &str) -> Option<Callout> {
+        Some(match kind.trim().to_lowercase().as_str() {
+            "note" | "abstract" | "summary" | "tldr" | "info" | "todo" | "question" | "help" | "faq" | "example" | "quote" | "cite" => Callout::Note,
+            "warning" | "caution" | "attention" | "failure" | "fail" | "missing" | "danger" | "error" | "bug" => Callout::Warning,
+            "tip" | "hint" | "important" | "success" | "check" | "done" => Callout::Tip,
+            _ => return None,
+        })
+    }
+}
+
+/// A code block's language as written after its fence (```` ```rust ````): its first
+/// word, lower case, ASCII letters, digits and `+#._-`, at most [`Lang::MAX`] bytes.
+/// Kept inline so a block kind stays `Copy`. Empty when the fence names none.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Lang {
+    len: u8,
+    bytes: [u8; Lang::MAX],
+}
+
+impl Lang {
+    pub const MAX: usize = 15;
+
+    pub fn new(written: &str) -> Lang {
+        let mut lang = Lang::default();
+        let word = written.split_whitespace().next().unwrap_or("");
+        for c in word.chars().take_while(|c| c.is_ascii_alphanumeric() || "+#._-".contains(*c)).take(Lang::MAX) {
+            lang.bytes[lang.len as usize] = c.to_ascii_lowercase() as u8;
+            lang.len += 1;
+        }
+        lang
+    }
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.bytes[..self.len as usize]).unwrap_or("")
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl std::fmt::Debug for Lang {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.as_str())
+    }
+}
+
+impl Serialize for Lang {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Lang {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(Lang::new(&String::deserialize(d)?))
     }
 }
 
@@ -58,8 +183,16 @@ pub struct MarkSpan {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Block {
+    /// A kind this build does not know (one a newer build wrote) reads as a paragraph,
+    /// so the note still opens with its words.
+    #[serde(default, deserialize_with = "kind_or_paragraph")]
     pub kind: BlockKind,
+    #[serde(default)]
     pub text: String,
+}
+
+fn kind_or_paragraph<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BlockKind, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).unwrap_or_default())
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -255,21 +388,81 @@ pub fn plain_text_of(blocks: &[Block]) -> String {
 /// marks, for an export). `after(i)` may add text under block `i`, such as its threads.
 /// Items of one list sit on consecutive lines; whatever follows a list starts after a
 /// blank line, because Markdown reads a line right under an item as more of that item.
+/// Checklist items are `- [ ]` and `- [x]` items of a dash list. A callout is Obsidian's
+/// `> [!note]` with a line for each of its lines, and code is fenced with its language,
+/// as written (no marks); what goes under any of their lines comes after the whole block.
 pub(crate) fn markdown_blocks(
     blocks: &[Block],
     heading_shift: usize,
     mut text_of: impl FnMut(usize) -> String,
     mut after: impl FnMut(usize) -> Option<String>,
 ) -> String {
+    // bullets and checklist items are both dash lists; numbered lists are their own
+    let family = |k: BlockKind| match k {
+        BlockKind::Bullet | BlockKind::Check(_) => Some(0),
+        BlockKind::Numbered => Some(1),
+        _ => None,
+    };
     let mut out = String::new();
     let mut number = 0;
-    let mut list: Option<BlockKind> = None;
-    for (i, b) in blocks.iter().enumerate().skip(1) {
+    let mut list: Option<u8> = None;
+    let mut i = 1;
+    while i < blocks.len() {
+        let b = &blocks[i];
+        if matches!(b.kind, BlockKind::Callout(_) | BlockKind::Code(_)) {
+            let mut end = i + 1;
+            while end < blocks.len() && b.kind.joins(blocks[end].kind) {
+                end += 1;
+            }
+            let shown: Vec<usize> = (i..end).filter(|&j| !blocks[j].text.trim().is_empty()).collect();
+            let (Some(&first), Some(&last)) = (shown.first(), shown.last()) else {
+                i = end;
+                continue;
+            };
+            if list.take().is_some() {
+                out.push('\n');
+            }
+            number = 0;
+            match b.kind {
+                BlockKind::Callout(kind) => {
+                    out.push_str(&format!("> [!{}]\n", kind.name()));
+                    for (n, &j) in shown.iter().enumerate() {
+                        if n > 0 {
+                            out.push_str(">\n");
+                        }
+                        out.push_str(&format!("> {}\n", text_of(j)));
+                    }
+                }
+                BlockKind::Code(lang) => {
+                    // a fence longer than any run of backticks inside the code
+                    let longest = blocks[first..=last].iter().map(|c| longest_run(&c.text, '`')).max().unwrap_or(0);
+                    let fence = "`".repeat(longest.max(2) + 1);
+                    out.push_str(&format!("{fence}{}\n", lang.as_str()));
+                    for c in &blocks[first..=last] {
+                        out.push_str(&c.text);
+                        out.push('\n');
+                    }
+                    out.push_str(&fence);
+                    out.push('\n');
+                }
+                _ => {}
+            }
+            out.push('\n');
+            for j in i..end {
+                if let Some(extra) = after(j) {
+                    out.push_str(&extra);
+                }
+            }
+            i = end;
+            continue;
+        }
+        let at = i;
+        i += 1;
         if b.text.trim().is_empty() {
             continue;
         }
-        let text = &text_of(i);
-        if list.is_some_and(|k| k != b.kind) {
+        let text = &text_of(at);
+        if list.is_some_and(|f| Some(f) != family(b.kind)) {
             out.push('\n');
         }
         if b.kind != BlockKind::Numbered {
@@ -281,15 +474,16 @@ pub(crate) fn markdown_blocks(
             BlockKind::H2 => out.push_str(&format!("{} {text}\n\n", heading(2))),
             BlockKind::H3 => out.push_str(&format!("{} {text}\n\n", heading(3))),
             BlockKind::Bullet => out.push_str(&format!("- {text}\n")),
+            BlockKind::Check(done) => out.push_str(&format!("- [{}] {text}\n", if done { 'x' } else { ' ' })),
             BlockKind::Numbered => {
                 number += 1;
                 out.push_str(&format!("{number}. {text}\n"));
             }
             BlockKind::Quote => out.push_str(&format!("> {text}\n\n")),
-            BlockKind::Title | BlockKind::Paragraph => out.push_str(&format!("{text}\n\n")),
+            BlockKind::Title | BlockKind::Paragraph | BlockKind::Callout(_) | BlockKind::Code(_) => out.push_str(&format!("{text}\n\n")),
         }
-        list = b.kind.is_list().then_some(b.kind);
-        if let Some(extra) = after(i) {
+        list = family(b.kind);
+        if let Some(extra) = after(at) {
             if list.take().is_some() {
                 out.push('\n');
             }
@@ -297,6 +491,11 @@ pub(crate) fn markdown_blocks(
         }
     }
     out
+}
+
+/// The longest run of `c` in `s`.
+fn longest_run(s: &str, c: char) -> usize {
+    s.split(|x| x != c).map(|run| run.len()).max().unwrap_or(0)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

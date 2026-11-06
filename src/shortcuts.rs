@@ -117,6 +117,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("editor::ToggleUnderline", "Underline", Group::Formatting, None),
     ("editor::ToggleStrike", "Strikethrough", Group::Formatting, None),
     ("editor::ToggleCode", "Code", Group::Formatting, None),
+    ("editor::ToggleCheck", "Check or uncheck a checklist item", Group::Formatting, Some("Any other line becomes a checklist item.")),
     ("editor::IndentList", "Indent a list item", Group::Formatting, None),
     ("editor::OutdentList", "Outdent a list item", Group::Formatting, None),
     ("editor::Undo", "Undo", Group::Editing, None),

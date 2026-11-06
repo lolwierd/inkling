@@ -314,9 +314,12 @@ imported note is marked.
 **Brain**: `brain/test/read-through.test.ts` checks that reading along's prompt is
 unchanged, that a pass's prompt has its opening and silence line and not the note, that
 every rule of a read is kept in the same order, and that `throughSystemPrompt` is
-`systemPrompt` with the note and its margin after it, the same for every paragraph.
-`protocol.test.ts` drives the real `main.ts` (fake SDK): a `read` with `through: true`
-answers like a read, and its note is no longer in the prompt. `parity.test.ts` needs
+`systemPrompt` with the note and its margin after it, the same for every paragraph, and
+that a pass carries the points the writer let stand (they ride in `systemPrompt`) and the
+read's working rules (check, question, repeats, no sources). `protocol.test.ts` drives the
+real `main.ts` (fake SDK): a `read` with `through: true` answers like a read, its note is
+no longer in the prompt, a note that repeats a let-stand point is held back, and a
+correction arrives with its checked sum. `parity.test.ts` needs
 nothing (no new task).
 
 **Scenarios** (fake brain), tagged `read-through`, with a script step `read-through` that
@@ -324,10 +327,10 @@ does what ⇧⌘R does:
 
 | Scenario | What it proves |
 |---|---|
-| `u12-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; the mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass; a read that fails ends the pass with "Couldn’t read it through. You've reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
-| `u13-read-through-long` | The sixty-paragraph note (`hard-content`): the needle is on the paragraph being read; Stop keeps what was read and says "Stopped after N of 60…"; ⇧⌘R goes on with only what is left; opening another note stops it ("Read it through stopped when you left “A very long note”."); the last pass finishes, every paragraph read exactly once (60 distinct reads, two cancelled). |
-| `u14-read-through-imported` | The guide's words are left alone ("Nothing new to read."); the writer's first sentence in it still gets its question (`probe`, with `through`); an imported Obsidian note is read on request (6 of its units: not headings, not two-word code) and is marked `imported`. |
-| `u15-read-through-look` | The screenshots in `design/features/shots/`: the menu and a pass midway, in Linen and Lamplight, from the new `read-through` fixture (a six-paragraph draft in a waiting note with one open question). |
+| `u21-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; the mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass; a read that fails ends the pass with "Couldn’t read it through. You've reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
+| `u22-read-through-long` | The sixty-paragraph note (`hard-content`): the needle is on the paragraph being read; Stop keeps what was read and says "Stopped after N of 60…"; ⇧⌘R goes on with only what is left; opening another note stops it ("Read it through stopped when you left “A very long note”."); the last pass finishes, every paragraph read exactly once (60 distinct reads, two cancelled). |
+| `u23-read-through-imported` | The guide's words are left alone ("Nothing new to read."); the writer's first sentence in it still gets its question (`probe`, with `through`); an imported Obsidian note is read on request (6 of its units: not headings, not two-word code) and is marked `imported`. |
+| `u24-read-through-look` | The screenshots in `design/features/shots/`: the menu and a pass midway, in Linen and Lamplight, from the new `read-through` fixture (a six-paragraph draft in a waiting note with one open question). |
 
 ## Files and functions
 
@@ -341,7 +344,7 @@ does what ⇧⌘R does:
 | `src/store.rs`, `src/import.rs` | `Note.imported`; set on import; tests |
 | `brain/src/protocol.ts`, `prompts.ts`, `main.ts` | `through`; `throughSystemPrompt`; `readPrompt(…, through)`; picking them |
 | `brain/test/read-through.test.ts` (new), `protocol.test.ts` | the tests above |
-| `brain/test/e2e/scenarios/u12…u15`, `fixtures/read-through` (new) | four scenarios, one fixture |
+| `brain/test/e2e/scenarios/u21…u24`, `fixtures/read-through` (new) | four scenarios, one fixture |
 | `design/capabilities.md`, `AGENTS.md` | the capability; the import row amended; the new module on the map |
 
 Not touched: `src/welcome.rs` (the film agent's). The guide needs one sentence about Read it

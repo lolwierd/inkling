@@ -1,6 +1,6 @@
 //! One note on the page: the header row (mind, brief, mode), the editor, and the
 //! margin where the mind's threads live. Also the reading loop, the selection
-//! toolbar, Ask, Visualize, and the chat panel.
+//! toolbar, Ask, Sketch it, and the chat panel.
 
 use chrono::Utc;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -84,6 +84,20 @@ fn mind_thread(mind_name: &str, own: &str, chosen: crate::store::InkColor, t: &T
         others[(stitch::seed_of(mind_name) % others.len() as u64) as usize]
     });
     crate::theme::ink_color(pick, &t.p)
+}
+
+/// `text` as a title of at most `max` characters: whole words, then an ellipsis.
+fn short_title(text: &str, max: usize) -> String {
+    let text = text.trim();
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let cut: String = text.chars().take(max).collect();
+    let words = match cut.rfind(char::is_whitespace) {
+        Some(at) if at > max / 2 => &cut[..at],
+        _ => cut.as_str(),
+    };
+    format!("{}\u{2026}", words.trim_end_matches(|c: char| c.is_whitespace() || c == ',' || c == ';' || c == ':'))
 }
 
 /// `INKLING_SLOWMO=<factor>` slows every thread animation down, for screenshots and the
@@ -1845,9 +1859,10 @@ impl NotePage {
     fn make_note_from_thread(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(t) = self.note.threads.iter().find(|t| t.id == id).cloned() else { return };
         let mode = cx.global::<Store>().settings.default_mode;
-        // A quote can span paragraphs; blocks are single lines.
+        // A quote can span paragraphs; blocks are single lines. A long one makes a title
+        // cut at a word, with an ellipsis, rather than mid-word.
         let quote = t.quote.replace('\n', " ");
-        let title: String = quote.chars().take(60).collect();
+        let title = short_title(&quote, 60);
         let mut note = Note::new(&title, mode, self.note.folder.clone());
         note.blocks = vec![Block { kind: BlockKind::Title, text: title }];
         note.blocks.push(Block { kind: BlockKind::Quote, text: quote });
@@ -4186,6 +4201,16 @@ impl Render for NotePage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[std::prelude::v1::test]
+    fn a_long_quote_makes_a_title_cut_at_a_word() {
+        assert_eq!(short_title("  Short quote ", 60), "Short quote");
+        let long = "If I hold 5:30 for the whole race, I'll come in just under 50 and then some";
+        let t = short_title(long, 60);
+        assert_eq!(t, "If I hold 5:30 for the whole race, I'll come in just under\u{2026}");
+        assert!(t.chars().count() <= 61);
+        assert_eq!(short_title(&"x".repeat(80), 10), format!("{}\u{2026}", "x".repeat(10)));
+    }
 
     #[std::prelude::v1::test]
     fn a_paragraph_is_read_once_it_is_finished() {

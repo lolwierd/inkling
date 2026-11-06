@@ -489,6 +489,10 @@ pub struct Elsewhere {
     /// while this note is open (`between::add_visitors`). Never saved.
     #[serde(skip)]
     pub visiting: bool,
+    /// The far end has been shown in its note, so `side` and `tag_offset` are its own from
+    /// now on. While it is false, the app picks the far end's side the first time it lays
+    /// it out (and sets this on the visiting end); the next save carries both home.
+    pub placed: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

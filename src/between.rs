@@ -633,6 +633,8 @@ pub fn add_visitors(note: &mut Note, notes: &[Note]) {
             side: t.side,
             tag_offset: t.tag_offset,
             visiting: true,
+            // whether the far end (this one) has its own side yet: the app reads it here
+            placed: e.placed,
         });
     }
 }
@@ -658,11 +660,15 @@ pub fn send_home(note: &Note, notes: &mut [Note]) -> (Note, Vec<String>) {
         (far.start, far.end, far.quote, far.side, far.tag_offset) = (end.start, end.end, end.quote.clone(), end.side, end.tag_offset);
         let thread_changed = serde_json::to_value(&thread).ok() != serde_json::to_value(&home.threads[i]).ok();
         let words_changed = words != (far.start, far.end, far.quote.clone(), far.side, far.tag_offset) || far.title != note.title;
-        if thread_changed || words_changed {
+        // the app laid the far end out for the first time: its side is now its own, even
+        // when it is the side it had by default
+        let placed_now = v.placed && !far.placed;
+        if thread_changed || words_changed || placed_now {
             // the title and date as last seen go home with any other change, so typing in a
             // note does not rewrite every note that links to it
             far.title = note.title.clone();
             far.edited = note.updated_at;
+            far.placed = true;
             home.threads[i] = thread;
             home.elsewhere[j] = far;
             if !changed.contains(&home.id) {
@@ -982,7 +988,7 @@ mod tests {
         assert_eq!(&cal.joined_text()[end.start..end.end], "Friday 13 March");
         assert_eq!(end.messages.len(), 1);
         let back = &cal.elsewhere[0];
-        assert!(back.visiting);
+        assert!(back.visiting && !back.placed, "not laid out yet: the app picks its side");
         assert_eq!((back.note.as_str(), back.quote.as_str(), back.title.as_str()), ("plan", "Saturday 14 March", "Race-week plan"));
         assert_eq!(open_here(&notes, &notes[0]), 1, "the sidebar counts the visiting end");
 
@@ -1009,6 +1015,27 @@ mod tests {
         assert_eq!((home.status, home.messages.len(), home.quote.as_str(), home.side, home.tag_offset), (ThreadStatus::Resolved, 2, "Saturday 14 March", Side::Right, (0., 0.)));
         let far = plan.elsewhere_of("b1").unwrap();
         assert_eq!((far.start, far.quote.as_str(), far.tag_offset, far.side), (cal.joined_text().find("Friday 13 March").unwrap(), "Friday 13 March", (9., -3.), Side::Left));
+        assert!(far.placed, "written home: its side and offset are its own now");
+        let mut again = notes[0].clone();
+        add_visitors(&mut again, &notes);
+        assert!(again.elsewhere[0].placed);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_far_end_laid_out_on_its_default_side_still_goes_home_placed() {
+        let mut notes = linked();
+        notes[1].elsewhere[0].side = Side::Right;
+        notes[1].elsewhere[0].tag_offset = (0., 0.);
+        let mut cal = notes[0].clone();
+        add_visitors(&mut cal, &notes);
+        // shown and saved without being laid out: nothing to write
+        assert!(send_home(&cal, &mut notes).1.is_empty());
+        assert!(!notes[1].elsewhere[0].placed);
+        // the app picks Right, the side it already had, and says so
+        cal.elsewhere[0].placed = true;
+        let (_, changed) = send_home(&cal, &mut notes);
+        assert_eq!(changed, ["plan"]);
+        assert!(notes[1].elsewhere[0].placed && notes[1].elsewhere[0].side == Side::Right);
     }
 
     #[std::prelude::v1::test]

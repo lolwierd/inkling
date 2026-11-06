@@ -361,6 +361,11 @@ pub struct Elsewhere {
     /// Only on a visiting end (see below): never saved.
     #[serde(skip)]
     pub visiting: bool,
+    /// The far end has been shown in its note, so `side` and `tag_offset` are its own from
+    /// now on. While it is false, the app picks the far end's side the first time it lays
+    /// it out and sets `placed` on the visiting end; the next save carries side, offset and
+    /// `placed` home. (Without it, "Right at (0, 0)" could not tell a default from a choice.)
+    pub placed: bool,
 }
 ```
 
@@ -387,7 +392,8 @@ added to the page's copy of the note as a **visiting end**: a clone of the home 
 id, messages, status, kind, mind, drawing, and any field other features add to `Thread`)
 with `start`, `end`, `quote`, `side` and `tag_offset` taken from the far end; and an
 `Elsewhere` with `visiting: true` that points back at the home note's words (`note` = home
-id, its range, quote, title, edited, the home thread's side and offset). Dismissed threads
+id, its range, quote, title, edited, the home thread's side and offset, and the far end's
+`placed`). Dismissed threads
 come too, so Turn it over and Let it stand see them; the margin hides them as it hides any
 dismissed thread.
 
@@ -396,7 +402,9 @@ numbers, the gutter knot, jumping, Hide threads, Marks only, the open count) the
 the far end with no change. When the page saves, the visiting ends are taken out of what is
 saved for this note, and each one's state goes home: the far end's range, quote, side and
 offset into the home note's `Elsewhere`, and everything else (status, messages, drawing,
-any new field) into the home thread. A home note is written to disk only if it changed.
+any new field) into the home thread. Writing a far end home sets its `placed`; a visiting
+end the app has just placed goes home even when its side is the one it had by default. A
+home note is written to disk only if it changed.
 So status and conversation have one source, the home note, and either end can change them.
 
 Rule for everyone: **build notebook-wide lists from `Store.notes`** (each thread once, in its

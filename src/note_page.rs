@@ -3094,7 +3094,12 @@ impl NotePage {
         let tag = if enlarged { "big" } else { "tag" };
         let control = |name: &'static str, glyph: &'static str, id: &str, cx: &mut Context<Self>, f: fn(&mut Playback)| {
             let tid = id.to_string();
-            ui::icon_button(SharedString::from(format!("{name}-{tag}-{id}")), glyph, 12., &t).on_click(cx.listener(move |this, _, _, cx| {
+            let what = match name {
+                "prev" => "Previous step",
+                "next" => "Next step",
+                _ => "Play it again",
+            };
+            ui::icon_button(SharedString::from(format!("{name}-{tag}-{id}")), glyph, 12., &t).tooltip(crate::app::tip(what, None)).on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(pb) = this.playbacks.get_mut(&tid) {
                     f(pb);
                 }
@@ -4155,7 +4160,7 @@ impl NotePage {
                                     .child(ui::ghost_button("chat-clear", "Clear", &t).keyed_as("chat:clear", 4., t.voice_ink, cx, |this, _, cx| this.clear_chat(cx)))
                                 }
                             })
-                            .child(div().mr(px(-4.)).child(ui::icon_button("chat-close", "x", 13., &t).keyed_as("chat:close", 5., t.voice_ink, cx, |this, window, cx| this.toggle_chat(window, cx)))),
+                            .child(div().mr(px(-4.)).child(ui::icon_button("chat-close", "x", 13., &t).tooltip(crate::app::tip("Close", Some(&crate::app::ToggleChat))).keyed_as("chat:close", 5., t.voice_ink, cx, |this, window, cx| this.toggle_chat(window, cx)))),
                     )
                     .child(
                         div()
@@ -4247,7 +4252,7 @@ impl NotePage {
                                     .mr(px(-16.))
                                     .flex()
                                     .justify_end()
-                                    .child(ui::icon_button("enlarged-close", "x", 14., &t).keyed_as("sketch:close", 5., t.voice_ink, cx, move |this, _, cx| close(this, cx))),
+                                    .child(ui::icon_button("enlarged-close", "x", 14., &t).tooltip(crate::app::tip("Close", None)).keyed_as("sketch:close", 5., t.voice_ink, cx, move |this, _, cx| close(this, cx))),
                             )
                             .child(block),
                     ),

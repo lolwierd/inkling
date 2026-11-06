@@ -385,7 +385,7 @@ pub fn stack<V: 'static>(
                         cx.global_mut::<Toasts>().close_id(id, Instant::now());
                         cx.notify();
                     }))
-                    .child(ui::icon_button(("toast-close", id as usize), "x", 12., &t).on_click(cx.listener(move |_, _, _, cx| {
+                    .child(ui::icon_button(("toast-close", id as usize), "x", 12., &t).tooltip(crate::app::tip("Close", None)).on_click(cx.listener(move |_, _, _, cx| {
                         cx.stop_propagation();
                         cx.global_mut::<Toasts>().close_id(id, Instant::now());
                         cx.notify();

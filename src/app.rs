@@ -309,6 +309,19 @@ fn export_file_name(title: &str, ext: &str) -> String {
     format!("{base}.{ext}")
 }
 
+/// A tooltip for an icon that has no words of its own: what it does, and its keys as the
+/// keymap has them now.
+pub(crate) fn tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |window, cx| {
+        let t = gpui_kit::component::tooltip::Tooltip::new(name);
+        match keys {
+            Some(a) => t.action(a, None),
+            None => t,
+        }
+        .build(window, cx)
+    }
+}
+
 /// Script steps that act on the window itself, as the platform would: keystrokes and
 /// the pointer.
 fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
@@ -1129,6 +1142,7 @@ impl AppView {
                         .rounded(px(5.))
                         .cursor_pointer()
                         .hover(move |s| s.bg(p.hover))
+                        .tooltip(tip("Notes", Some(&ToggleSidebar)))
                         .child(icon("menu", 14., p.graphite))
                         // first in the Tab order (no part of the window comes before it)
                         .keyed_as("chrome:sidebar", 5., t.voice_ink, cx, |this, _, cx| {
@@ -1165,6 +1179,7 @@ impl AppView {
                                     .text_color(p.ink)
                                     .cursor_pointer()
                                     .hover(move |s| s.border_color(p.faint))
+                                    .tooltip(tip("Chat about this note", Some(&ToggleChat)))
                                     .child(ui::small_dot(t.voice_ink, 5.))
                                     .child("Chat")
                                     .keyed_as("chrome:chat", 12., t.voice_ink, cx, |this, window, cx| {
@@ -1369,7 +1384,7 @@ impl AppView {
                             .pr(px(10.))
                             .child(ui::wordmark(&t, 18.))
                             // 1 px above the row's middle: on the traffic lights' line
-                            .child(ui::icon_button("sidebar-close", "x", 13., &t).mb(px(2.)).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
+                            .child(ui::icon_button("sidebar-close", "x", 13., &t).mb(px(2.)).tooltip(tip("Close", Some(&ToggleSidebar))).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
                                 this.sidebar_open = false;
                                 cx.notify();
                             })),

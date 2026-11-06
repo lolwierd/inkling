@@ -1,3 +1,5 @@
+# A personal chat line teaches About you even after switching notes.
+# fixture: beta
 note: Learner
 chat: I am a staff engineer at a payments company.
 switch: Beta

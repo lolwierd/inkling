@@ -1,0 +1,165 @@
+# Inkling, for agents
+
+A personal macOS notebook: you write, and a model reads along and stitches questions
+into the margin. Two processes: the app (Rust + GPUI, `src/`) and the brain (Bun +
+TypeScript, `brain/`), which reaches Claude through the Agent SDK on the owner's Claude
+Code login. They speak JSON lines. This file is the map; `docs/agents/` has the
+reasoning (`README.md`), recipes (`recipes.md`) and the test layers (`testing.md`).
+
+## Rules
+
+1. **Never touch the owner's notebook**, `~/Library/Application Support/Inkling/`. Every
+   run of the app gets a scratch `INKLING_DATA_DIR`; `scripts/dev` makes one for you, and
+   the app refuses a script without one.
+2. **Never call the real model unless the owner asked.** It spends their subscription.
+   Runs use the fake brain (`brain/test/e2e/fake-brain.ts`); `--real`, `REAL=1` and
+   `brain/test/live.ts` are the only ways to the model.
+3. **Never take focus.** The app opens in the background (`INKLING_BACKGROUND=1`) with
+   the window titled `Inkling Agents`. Do not drive it with clicks or keystrokes; use a
+   script.
+4. **None of Riddled's words**, in any string a person or the model can see: no riddle,
+   riddled, riddler, visualize, "thinks with you", "when you ask", "just my words". Say
+   Find a loose thread, Sketch it, Reads along, Waits to be asked, Hide threads, mind.
+   `scripts/dev lint` checks it. (`docs/spec.md` describes Riddled on purpose.)
+5. **Other agents work in this repo at the same time.** Work in your own worktree under
+   `.worktrees/`, commit early (an uncommitted worktree has been lost before), keep
+   diffs in `src/note_page.rs` and `src/app.rs` small, and never reformat a file:
+   rustfmt is not installed and the code is not rustfmt-shaped.
+6. No `rm -rf` on a computed path. Runs leave their folders under `$TMPDIR/inkling-agent`.
+
+## Commands
+
+All checks go through one door. Every command is non-interactive, exits non-zero on
+failure, and those that report take `--json`.
+
+| To | Run | Takes |
+|---|---|---|
+| Check everything before a commit | `scripts/dev check` | ~20 s |
+| ... plus the smoke scenarios in the app | `scripts/dev check --e2e` | ~1 min |
+| Run scenarios (all, by name, prefix or tag) | `scripts/dev e2e`, `scripts/dev e2e u01 t02`, `scripts/dev e2e smoke` | all: ~6 min |
+| List scenarios, their fixtures and expects | `scripts/dev e2e --list` | |
+| Page state as JSON after some steps | `scripts/dev state --fixture running-plan --step "jump: next"` | ~5 s |
+| Screenshot of that state | `scripts/dev shot --fixture running-plan --step "activate: 1"` → prints a PNG path; read it | ~6 s |
+| What a run left (notes, threads, dumps, brain traffic, log) | `scripts/dev show <notebook dir>` | |
+| Banned words | `scripts/dev lint` | |
+| One Rust test / one brain test file | `cargo test <name>` / `cd brain && bun test test/<file>` | |
+| Build the bundle (for the owner, not for checks) | `./scripts/bundle.sh` | |
+
+`scripts/dev` builds the debug binary first (a no-op build is under a second), so a run
+never tests a stale binary. `brain/test/e2e/run.sh` is the older runner; it does not
+build, check expectations or take screenshots.
+
+## Verify a change
+
+| You changed | Run at least |
+|---|---|
+| `brain/src/*` | `cd brain && bun test test/` and `bun run check`; the scenarios that use the task |
+| Editor logic (`State` in `src/editor.rs`) | `cargo test editor`, then `scripts/dev e2e` for typing scenarios (r08, r09, r15, u03) |
+| The reading loop, threads, margin (`src/note_page.rs`) | `cargo test`, `scripts/dev e2e` (all) |
+| Anything drawn | `scripts/dev shot ...` and look at the PNG; light and dark (`--appearance dark`) |
+| Store fields (`src/store.rs`) | `cargo test store`; open an old fixture with `scripts/dev state --fixture beta` |
+| Words on screen or in prompts | `scripts/dev lint` |
+
+A new behaviour gets a scenario with `expect:` lines (`docs/agents/testing.md`), and
+unit tests where the logic is pure.
+
+## Map
+
+```
+app (Rust, GPUI)                                brain (Bun, brain/src)
+  main.rs → app.rs (window, overlays)             main.ts    requests → tasks → events
+    note_page.rs (page, reading loop, threads)    prompts.ts every prompt and JSON schema
+      editor.rs (text, anchors, layout)           claude.ts  Agent SDK calls, errors, limits
+      margin.rs  stitch.rs  drawing.rs            output.ts  snap quotes, clean SVG
+    brain.rs  ⇄ JSON lines on stdin/stdout ⇄      protocol.ts the wire types
+  store.rs: notes/<id>.json, settings.json, minds.json, folders.json in INKLING_DATA_DIR
+```
+
+| File | Owns | Look here for |
+|---|---|---|
+| `src/main.rs` | logging, the notebook guard, the one window | `INKLING_LOG_JSON`, window options |
+| `src/app.rs` | top bar, sidebar, ⌘K palette, settings and export overlays, key bindings, hold-⌥ dictation, script runner (`run_script`) and app-level steps | actions and keys (`init`), `INKLING_OPEN`, `INKLING_JIGGLE` |
+| `src/note_page.rs` | one note: header, editor, margin cards, threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
+| `src/editor.rs` | the document as one string with `\n` between blocks; block kinds, marks, undo, IME, layout, painting; `Anchor`s (thread ranges) that follow edits; gutter marks | `State` (pure, tested headless), `map_anchor`, `NoteEditor` API |
+| `src/margin.rs` | where cards go without overlapping (`place`) | |
+| `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
+| `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
+| `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
+| `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped) | `Note`, `Thread`, `Settings` |
+| `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
+| `src/export.rs` | Markdown, HTML, Word (via `textutil`) with threads under paragraphs | |
+| `src/theme.rs`, `src/ui.rs`, `src/palette.rs`, `src/settings.rs`, `src/welcome.rs` | colours and fonts, small widgets, ⌘K, the settings window, the first-run note | |
+| `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `live.ts` (real model, by hand) | |
+| `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
+| `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
+| `design/` | the brand, the three directions, the video; `design/directions/DESIGN.md` is the design record | |
+
+## How a question gets to the margin
+
+1. You type: `editor.rs` emits `EditorEvent::Edited { line }`; `note_page.rs`
+   `on_editor_event` remembers the line (`note_edit`) and schedules a pause (2.2 s, or
+   4.6 s on the slow pace).
+2. The pause (`on_pause`) looks at the caret's line, the edited line and lines kept
+   from before, and `judge` decides each: Read (finished: ends a sentence or the caret
+   left, at least four words, nothing else reading), Answer (it calls the mind by name),
+   Later, or Skip. A paragraph's hash goes into `note.read_hashes` so it is read once.
+3. `read_line` sends `{"task":"read"}` (or `probe` for a new notebook's first
+   sentence) through `send_task` → `Brain::run` → one JSON line to the brain.
+4. The brain (`main.ts` `run`) builds the prompt (`prompts.ts`), calls the SDK
+   (`claude.ts runStructured`), snaps the quote onto the paragraph (`output.ts`), and
+   answers with exactly one `done` or `error`.
+5. The page anchors the quote in the paragraph (`add_thought` / `locate_thought`), opens
+   a `Thread`, tells the editor (`Anchor`), and the margin places a card (`margin.rs`).
+   A question that lands while you type waits, folded, until a 2 s pause.
+
+## Invariants
+
+- Thread `start`/`end`, mark spans and anchor ranges are **byte** offsets into the
+  note's blocks joined by `\n`, title included; they must sit on char boundaries.
+- A quote from the brain is always a substring of the text it was asked about
+  (`snapQuote`); the app anchors by searching for it verbatim.
+- Every `run` request ends in exactly one `done` or `error`, and never `done` after a
+  cancel; the Rust `Pending` delivers nothing after the end. Tests hold both sides to it.
+- One read in flight per page (`reading`); reads time out after 120 s, other tasks after 600 s.
+- The page never calls back into an entity it is updating: brain callbacks are deferred
+  (`send_task`, `later`). GPUI panics on a nested update of the same entity.
+- Store files load tolerantly: missing fields default, unknown ones are ignored, one bad
+  entry costs that entry. New fields need `#[serde(default)]`.
+- The brain's working folder is `<notebook>/brain-cwd`, so the runtime never sees a project.
+- Task names agree across `brain/src/protocol.ts`, the app's requests and the fake
+  brain; `brain/test/parity.test.ts` fails when they drift.
+
+## GPUI and platform quirks
+
+- A window that is covered or in the background stops drawing. Anything computed while
+  painting is then stale: editor layout, the margin slots in a dump, which side a new
+  thread goes (`pick_side`), scroll-to-words. `INKLING_JIGGLE=<ms>` nudges the window so
+  it keeps drawing; `scripts/dev` turns it on (the width then wobbles by 1 px).
+- Rust 2024: `impl IntoElement` in a return type captures every lifetime in scope, so
+  view helpers return `AnyElement` (`.into_any_element()`).
+- `gpui_kit::*` brings in GPUI's `test` macro, which shadows std's: write
+  `#[std::prelude::v1::test]`.
+- Only the Command Line Tools are installed (no Xcode), hence `runtime_shaders` in
+  `Cargo.toml`: shaders compile at launch. No `xcrun metal`, no Instruments.
+- `Hsla::opacity(f)` multiplies the alpha it already has; it does not set it.
+- Bun is found at `~/.bun/bin`, `/opt/homebrew/bin`, `/usr/local/bin` or on `PATH`
+  (`INKLING_BUN` overrides). Brain edits apply on the next launch, no rebuild.
+- Window screenshots use `screencapture -l <window id>`, which needs Screen Recording
+  permission for whatever runs it.
+
+## Environment
+
+| Variable | Effect |
+|---|---|
+| `INKLING_DATA_DIR` | the notebook folder (required with a script) |
+| `INKLING_SCRIPT` | play a script (`src/script.rs`) |
+| `INKLING_BRAIN_ENTRY` | another brain entry, e.g. the fake one |
+| `INKLING_BACKGROUND=1` | do not take focus |
+| `INKLING_WINDOW_TITLE` | the window title (`Inkling Agents` for agent runs) |
+| `INKLING_JIGGLE=<ms>` | keep a covered window drawing |
+| `INKLING_LOG_JSON=1` | JSON log lines (`ms`, `level`, `target`, `msg`) |
+| `INKLING_OPEN=chat,sidebar,...` | panels open at launch |
+| `INKLING_SLOWMO=<factor>` | slow every thread animation |
+| `INKLING_BUN`, `INKLING_BRAIN_DIR`, `INKLING_CLAUDE_PATH`, `INKLING_USE_API_KEY=1` | where Bun, the brain and `claude` are; keep an API key in the brain's env |
+| `FAKE_*` | the fake brain's delays and failures (its header) |
+| `INKLING_AGENT_OUT` | where `scripts/dev` keeps its runs |

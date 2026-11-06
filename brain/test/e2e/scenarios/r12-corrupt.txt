@@ -1,2 +1,4 @@
+# A note with an impossible thread range still opens.
+# fixture: corrupt
 dump: loaded
 quit

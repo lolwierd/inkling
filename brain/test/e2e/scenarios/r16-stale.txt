@@ -1,3 +1,5 @@
+# A stored quote that appears twice anchors nearest where it was.
+# fixture: stale
 dump: loaded
 keys: \sx
 wait: 800

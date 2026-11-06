@@ -1,5 +1,6 @@
 # UX core on the running-plan note (design/tools/demo_notebook.py): jump, undo dismiss,
 # ask the room, and fix the words (the fake brain resolves when the message says [[resolved]])
+# fixture: running-plan
 wait: 1500
 jump: next
 dump: jumped-1

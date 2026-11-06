@@ -38,6 +38,20 @@
 //! drag: 1 -40 120 (move thread 1's tag by that many pixels, as a finished drag would)
 //! ```
 //!
+//! The note, the reader and the room:
+//!
+//! ```text
+//! mode: ask                 # this note: `ask` waits to be asked, anything else reads along
+//! brief: What it is for     # Tell Inkling (empty clears it)
+//! mind: Skeptic             # this note's mind, by name
+//! room: Inkling, Skeptic    # minds for the next `ask:` (Ask the room, up to three)
+//! undo-dismiss              # put back the last dismissed thread
+//! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
+//! open: settings            # sidebar|palette|settings|minds|newmind|model|about|export|jmw
+//! close                     # close the sidebar and every overlay
+//! quit                      # every script should end with it
+//! ```
+//!
 //! And a few for checking state without a screen:
 //!
 //! ```text
@@ -48,7 +62,20 @@
 //! width: 900                # resize the window to this width
 //! dump: label               # log the page's state as one JSON line
 //! log: anything             # write a marker into the log
+//! shot: label               # a screenshot, for the runner: the app only logs the step
+//!                           # and holds still for SHOT_HOLD_MS while `scripts/dev`
+//!                           # captures the window into <notebook>/shots/label.png
+//! expect: d.threads.length === 1   # skipped here: `scripts/dev e2e` checks it after
+//!                                  # the run against the dump above it
 //! ```
+//!
+//! A step that cannot do anything (an unknown step, a phrase or thread that is not
+//! there) logs a warning starting `script` and the script goes on; `scripts/dev e2e`
+//! fails the scenario on such a warning unless the scenario allows it.
+
+/// How long the app holds still after a `shot:` step, so the runner's capture (about
+/// half a second) sees the state the shot was asked for.
+pub const SHOT_HOLD_MS: u64 = 1000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
@@ -95,6 +122,9 @@ pub enum Step {
     Hover(usize),
     /// Move a thread's tag by (dx, dy) pixels.
     Drag(usize, f32, f32),
+    /// A screenshot named by the label. Nothing happens in the app: the runner sees the
+    /// step in the log and captures the window (parse adds a `Wait` so it holds still).
+    Shot(String),
 }
 
 pub fn parse(src: &str) -> Vec<Step> {
@@ -173,11 +203,18 @@ pub fn parse(src: &str) -> Vec<Step> {
                         }
                     }
                 }
+                "shot" => Step::Shot(arg),
+                // for the runner, which checks it after the run
+                "expect" => return None,
                 _ => {
                     log::warn!("script: unknown step {l:?}");
                     return None;
                 }
             })
+        })
+        .flat_map(|step| match step {
+            Step::Shot(_) => vec![step, Step::Wait(SHOT_HOLD_MS)],
+            step => vec![step],
         })
         .collect()
 }
@@ -200,7 +237,9 @@ mod tests {
              resolve\n\
              wait: soon\n\
              bogus: step\n\
-             edit: no arrow\n",
+             edit: no arrow\n\
+             expect: d.threads.length === 1\n\
+             shot: after tie\n",
         );
         assert_eq!(
             steps,
@@ -214,6 +253,8 @@ mod tests {
                 Step::Dismiss(2),
                 Step::Resolve(1),
                 Step::Wait(1000),
+                Step::Shot("after tie".into()),
+                Step::Wait(SHOT_HOLD_MS),
             ]
         );
     }

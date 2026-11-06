@@ -1,3 +1,6 @@
+# The real model reads a wrong claim and answers a probe. Costs two model calls.
+# brain: real
+# timeout: 120
 note: Real check
 type: The Moon has no gravity at all, so astronauts there just float around the whole time.
 wait: 30000

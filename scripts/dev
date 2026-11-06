@@ -1,0 +1,225 @@
+#!/usr/bin/env bun
+// One door for every check and every look at the running app. `scripts/dev help`.
+// Written for agents first: no prompts, no focus stealing, never the real notebook,
+// never the real model unless asked, exit codes that mean something, --json on the
+// commands that report.
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { REPO, build, dumpsOf, fixtureNames, launch, outRoot, prepareNotebook, problems, readLog, sh, stamp } from "./lib/app.ts";
+import { compactDump, listScenarios, runSuite } from "./lib/e2e.ts";
+import { lintMap, lintScenarios, lintWords, runLint } from "./lib/lint.ts";
+import { doctor, makeWorktree, missing } from "./lib/setup.ts";
+import { show } from "./lib/show.ts";
+
+const HELP = `scripts/dev <command> [options]
+
+  check [--e2e] [--json]       build, cargo test, brain tests, brain types, banned words
+                               (~20 s); --e2e adds the smoke scenarios. Run before a commit.
+  e2e [name|prefix|tag ...]    play scenarios against the app with the fake brain and check
+                               their expect: lines. Default: all. Tags: smoke.
+      --list                   list scenarios with their fixtures, env and expects
+      --jobs N                 run N at a time (default 1; timing-sensitive under load)
+      --real                   also run scenarios marked "# brain: real" (model calls!)
+      --no-lock                do not wait for another e2e run on this machine
+      --json                   machine-readable summary on stdout
+  state [notebook] [steps]     launch the app, play steps, print the page state as JSON
+  shot  [notebook] [steps]     same, and screenshot the window; prints the PNG path
+      --fixture NAME           start from brain/test/e2e/fixtures/NAME (scripts/dev fixtures)
+      --from DIR               start from a copy of another notebook folder (never in place)
+      --step "type: Hello."    a script step (repeatable; steps: src/script.rs)
+      --script FILE            steps from a file
+      --open chat,sidebar      panels to open at launch (INKLING_OPEN)
+      --width PX               window width before the dump
+      --appearance light|dark  (shot; default light) --out FILE (shot) --slowmo N (shot)
+  show DIR [notes|dumps|brain|log|all] [--json]
+                               what a run left: notes and threads, dumps, brain traffic, log
+  lint [--json]                banned words (the Riddled rule) in app and brain strings,
+                               AGENTS.md map drift, unknown scenario steps, bad expects
+  fixtures                     list notebook fixtures
+  worktree NAME                new branch + worktree in .worktrees/NAME with the main
+                               checkout's target/ and brain/node_modules cloned in (seconds)
+  doctor                       tools, missing pieces, running apps, the e2e lock
+
+Runs keep their notebooks under ${outRoot()}
+(INKLING_AGENT_OUT moves it). The app never runs against ~/Library/Application Support/Inkling.`;
+
+// ----- arguments -----------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+const cmd = argv[0] ?? "help";
+const rest = argv.slice(1);
+const flags = new Map<string, string[]>();
+const positional: string[] = [];
+const BOOLEAN = new Set(["--e2e", "--json", "--list", "--real", "--no-lock"]);
+for (let i = 0; i < rest.length; i++) {
+  const a = rest[i];
+  if (a.startsWith("--")) {
+    const [k, inline] = a.split(/=(.*)/s);
+    const v = BOOLEAN.has(k) ? "1" : inline ?? rest[++i];
+    if (v === undefined) die(`${k} needs a value`);
+    flags.set(k, [...(flags.get(k) ?? []), v]);
+  } else positional.push(a);
+}
+const flag = (k: string) => flags.get(k)?.at(-1);
+const has = (k: string) => flags.has(k);
+
+function die(msg: string): never {
+  console.error(msg);
+  process.exit(2);
+}
+
+// ----- commands ----------------------------------------------------------------------
+
+async function check(): Promise<number> {
+  const json = has("--json");
+  const brain = join(REPO, "brain");
+  type Step = { name: string; ok: boolean; ms: number; detail: string; tail: string };
+  const tail = (s: string, n = 40) => s.trimEnd().split("\n").slice(-n).join("\n");
+  const run = async (name: string, cmd: string[], cwd: string, detail: (out: string) => string): Promise<Step> => {
+    const r = await sh(cmd, { cwd, env: { ...process.env, CARGO_TERM_COLOR: "never", NO_COLOR: "1" } });
+    const out = r.out + r.err;
+    return { name, ok: r.code === 0, ms: r.ms, detail: detail(out), tail: r.code === 0 ? "" : tail(out) };
+  };
+  const cargoTests = (out: string) => {
+    const passed = [...out.matchAll(/test result: \w+\. (\d+) passed; (\d+) failed/g)];
+    return passed.length ? `${passed.reduce((a, m) => a + Number(m[1]), 0)} passed, ${passed.reduce((a, m) => a + Number(m[2]), 0)} failed` : "";
+  };
+  const bunTests = (out: string) => {
+    const p = /(\d+) pass/.exec(out)?.[1];
+    const f = /(\d+) fail/.exec(out)?.[1];
+    return p ? `${p} passed, ${f ?? 0} failed` : "";
+  };
+  const warnings = (out: string) => {
+    const m = /generated (\d+) warnings?/.exec(out);
+    return m ? `${m[1]} warnings` : "no warnings";
+  };
+  const rust = (async () => {
+    const b = await run("cargo build", ["cargo", "build"], REPO, warnings);
+    if (!b.ok) return [b];
+    return [b, await run("cargo test", ["cargo", "test"], REPO, cargoTests)];
+  })();
+  const others = Promise.all([
+    run("brain tests", ["bun", "test", "test/"], brain, bunTests),
+    run("brain types", ["bun", "run", "check"], brain, () => "tsc --noEmit"),
+    (async (): Promise<Step> => {
+      const found = lintWords().map((f) => `${f.file}:${f.line}: "${f.word}" in ${JSON.stringify(f.text)} -> say: ${f.use}`);
+      const rest = [...lintMap(), ...lintScenarios()];
+      const all = [...found, ...rest];
+      return { name: "lint", ok: all.length === 0, ms: 0, detail: `${found.length} banned words, ${rest.length} map/scenario problems`, tail: all.join("\n") };
+    })(),
+  ]);
+  const steps: Step[] = [...(await rust), ...(await others)];
+  let e2eCode = 0;
+  if (has("--e2e") && steps.every((s) => s.ok)) {
+    if (!json) console.log("e2e smoke:");
+    e2eCode = await runSuite({ names: ["smoke"], jobs: 1, real: false, lock: !has("--no-lock"), json: false });
+  }
+  const ok = steps.every((s) => s.ok) && e2eCode === 0;
+  if (json) console.log(JSON.stringify({ ok, steps, e2e: has("--e2e") ? e2eCode === 0 : null }, null, 1));
+  else {
+    for (const s of steps) console.log(`${s.ok ? "ok  " : "FAIL"}  ${s.name.padEnd(13)} ${(s.ms / 1000).toFixed(1).padStart(5)}s  ${s.detail}`);
+    for (const s of steps.filter((s) => !s.ok)) console.log(`\n--- ${s.name} (last lines)\n${s.tail}`);
+    console.log(ok ? "check: all green" : "check: FAILED");
+  }
+  return ok ? 0 : 1;
+}
+
+/** `state` and `shot`: one launch with a generated script. */
+async function look(kind: "state" | "shot"): Promise<number> {
+  const b = await build();
+  if (!b.ok) {
+    console.error("cargo build failed:\n" + b.output.split("\n").slice(-60).join("\n"));
+    return 2;
+  }
+  const dir = join(outRoot(), `${kind}-${stamp()}-${process.pid}`);
+  const from = flag("--from");
+  if (from && !existsSync(from)) die(`no folder ${from}`);
+  const appearance = kind === "shot" ? flag("--appearance") ?? "light" : flag("--appearance");
+  prepareNotebook(dir, { fixture: flag("--fixture") ?? positional[0], notebook: from ? resolve(from) : undefined, settings: appearance ? { appearance } : undefined });
+
+  const steps: string[] = [];
+  if (flag("--script")) steps.push(...readFileSync(flag("--script")!, "utf8").split("\n"));
+  steps.push(...(flags.get("--step") ?? []));
+  if (flag("--width")) steps.push(`width: ${flag("--width")}`);
+  steps.push("wait: 900");
+  if (kind === "shot") steps.push("shot: shot");
+  steps.push("dump: state", "quit");
+  const script = join(dir, "script.txt");
+  writeFileSync(script, steps.join("\n") + "\n");
+
+  const env: Record<string, string> = {};
+  if (flag("--slowmo")) env.INKLING_SLOWMO = flag("--slowmo")!;
+  const run = await launch({ script, dir, env, timeoutMs: Number(flag("--timeout") ?? 120) * 1000, open: flag("--open") });
+  const log = readLog(join(dir, "app.log"));
+  const dumps = dumpsOf(log);
+  const p = problems(log);
+  console.error(`notebook: ${dir}`);
+  for (const w of [...p.scriptWarnings, ...p.errors, ...p.panics]) console.error(`problem: ${w}`);
+  if (run.timedOut) console.error("problem: timed out (a step hung, or the waits add up to more than --timeout)");
+  const state = dumps.at(-1)?.state;
+  if (kind === "state") {
+    if (state) console.log(JSON.stringify(state, null, 1));
+  } else {
+    let shot = run.shots.at(-1);
+    if (shot?.path && flag("--out")) {
+      const out = resolve(flag("--out")!);
+      mkdirSync(join(out, ".."), { recursive: true });
+      writeFileSync(out, readFileSync(shot.path));
+      shot = { ...shot, path: out };
+    }
+    if (shot?.path) console.log(shot.path);
+    else console.error(`problem: no screenshot (${shot?.error ?? "the shot step never ran"})`);
+    if (state) console.error(compactDump(state));
+  }
+  const ok = !!state && !run.timedOut && run.exit === 0 && p.panics.length === 0 && (kind === "state" || !!run.shots.at(-1)?.path);
+  return ok ? 0 : 1;
+}
+
+async function main(): Promise<number> {
+  if (["check", "e2e", "state", "shot"].includes(cmd)) {
+    const gaps = await missing();
+    for (const g of gaps) console.error(`setup: ${g}`);
+    if (cmd === "check" && gaps.some((g) => g.startsWith("brain/node_modules"))) return 2;
+  }
+  switch (cmd) {
+    case "help":
+    case "--help":
+    case "-h":
+      console.log(HELP);
+      return 0;
+    case "check":
+      return check();
+    case "e2e":
+      if (has("--list")) {
+        listScenarios(has("--json"));
+        return 0;
+      }
+      return runSuite({ names: positional, jobs: Number(flag("--jobs") ?? 1), real: has("--real"), lock: !has("--no-lock"), json: has("--json") });
+    case "state":
+    case "shot":
+      return look(cmd);
+    case "show":
+      if (!positional[0]) die("usage: scripts/dev show DIR [notes|dumps|brain|log|all] [--json]");
+      return show(resolve(positional[0]), positional[1] ?? "all", has("--json"));
+    case "lint":
+      return runLint(has("--json"));
+    case "fixtures": {
+      // One line per fixture in brain/test/e2e/fixtures/README.md: "- `name`: what it is".
+      const readme = join(REPO, "brain/test/e2e/fixtures/README.md");
+      const text = existsSync(readme) ? readFileSync(readme, "utf8") : "";
+      for (const f of fixtureNames()) console.log(`${f.padEnd(14)} ${new RegExp("^- `" + f + "`: (.*)$", "m").exec(text)?.[1] ?? ""}`);
+      return 0;
+    }
+    case "worktree":
+      if (!positional[0]) die("usage: scripts/dev worktree NAME");
+      return makeWorktree(positional[0]);
+    case "doctor":
+      return doctor();
+    default:
+      console.error(`unknown command ${cmd}\n\n${HELP}`);
+      return 2;
+  }
+}
+
+process.exit(await main());

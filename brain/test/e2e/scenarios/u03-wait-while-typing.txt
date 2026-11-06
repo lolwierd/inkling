@@ -1,5 +1,6 @@
 # A question that lands while you are typing waits, folded, until you pause.
-# Run with FAKE_DELAY_READ_MS=2500 so the read comes back mid-typing.
+# The read is slowed (FAKE_DELAY_READ_MS) so it comes back mid-typing.
+# env: FAKE_DELAY_READ_MS=2500
 wait: 1200
 keys: The first claim needs checking right now.
 caret: end

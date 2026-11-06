@@ -1,3 +1,5 @@
+# Typing in one note, then switching away before its read comes back.
+# fixture: beta
 note: Alpha
 type: Alpha paragraph is finished and long enough here.
 switch: Beta

@@ -1,3 +1,5 @@
+# A read that never answers is given up after READ_TIMEOUT (120 s) and frees the slot.
+# timeout: 150
 note: Timeout
 type: The first paragraph hangs forever in the brain [[hang]].
 wait: 3500

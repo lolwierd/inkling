@@ -1,3 +1,5 @@
+# Requests in flight when the page switches notes land on the right note.
+# fixture: beta
 note: Source
 type: A paragraph read slowly by the brain here [[delay:3000]].
 wait: 2500

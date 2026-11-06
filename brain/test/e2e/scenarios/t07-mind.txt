@@ -1,3 +1,5 @@
+# Calling a custom mind by name, in both modes.
+# fixture: mind
 note: Minds
 mind: Skeptic
 keys: Skeptic, is this claim true?

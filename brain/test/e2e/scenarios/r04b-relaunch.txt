@@ -1,3 +1,5 @@
+# Relaunch on the notebook r04a left: a paragraph read silently stays read.
+# after: r04a-silent
 caret: end
 enter
 wait: 3500

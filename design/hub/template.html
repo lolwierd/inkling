@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where Inkling stands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..650&family=Figtree:wght@400..700&display=swap">
+<style>
+/* Inkling's own cloth: linen paper and ink, madder only for Inkling's voice; status threads
+   are ochre (waiting on you), indigo (running) and sage (done). One column, for a phone. */
+:root {
+  --paper: #fbf8f2;
+  --cloth: #efe8db;
+  --ink: #26232b;
+  --faint: #6f6862;
+  --rule: #e3dacb;
+  --madder: #a63f32;
+  --ochre: #8f6214;
+  --indigo: #2e3f7a;
+  --sage: #4f7350;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "Figtree", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1f1d22; --cloth: #18161a; --ink: #ede6da; --faint: #a39a8f; --rule: #3a353d;
+    --madder: #d9705e; --ochre: #d9a548; --indigo: #8c9be0; --sage: #8db88e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1f1d22; --cloth: #18161a; --ink: #ede6da; --faint: #a39a8f; --rule: #3a353d;
+  --madder: #d9705e; --ochre: #d9a548; --indigo: #8c9be0; --sage: #8db88e; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--cloth);
+  color: var(--ink);
+  font: 16px/1.55 var(--body);
+}
+.sheet {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 28px 18px 56px;
+  background: var(--paper);
+  min-height: 100%;
+}
+@media (min-width: 720px) { .sheet { margin: 24px auto; border-radius: 6px; padding: 40px 36px 64px; box-shadow: 0 12px 32px -18px rgba(38, 35, 43, .35); } }
+
+/* the sampler border along the top: a running stitch in madder */
+.border {
+  height: 2px;
+  margin: 0 0 22px;
+  background: repeating-linear-gradient(90deg, var(--madder) 0 9px, transparent 9px 15px);
+  border-radius: 2px;
+  opacity: .8;
+}
+.eyebrow { margin: 0; font-size: 13px; color: var(--faint); letter-spacing: .01em; }
+h1 {
+  margin: 6px 0 10px;
+  font: 600 34px/1.08 var(--display);
+  font-variation-settings: "opsz" 72;
+  text-wrap: balance;
+}
+.lede { margin: 0 0 16px; color: var(--ink); max-width: 36em; }
+nav.jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+nav.jump a {
+  font-size: 13px; color: var(--ink); text-decoration: none;
+  padding: 5px 10px; border-radius: 7px; border: 1px dashed var(--rule); background: var(--paper);
+}
+nav.jump a:focus-visible, .tag-link:focus-visible { outline: 2px dashed var(--madder); outline-offset: 3px; }
+
+section { margin-top: 34px; }
+h2 {
+  margin: 0 0 4px;
+  font: 600 24px/1.2 var(--display);
+  font-variation-settings: "opsz" 48;
+  text-wrap: balance;
+}
+.count { font: 500 14px var(--body); color: var(--faint); margin-left: 6px; }
+.section-note { margin: 0 0 14px; color: var(--faint); font-size: 14px; }
+.stitch-rule { height: 1px; margin: 34px 0 0; background: repeating-linear-gradient(90deg, var(--rule) 0 7px, transparent 7px 12px); }
+
+.cards { display: grid; gap: 12px; }
+.card {
+  position: relative;
+  padding: 16px 16px 14px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  /* a stitched edge inside the tag, like the margin tags in the app */
+  outline: 1px dashed var(--rule);
+  outline-offset: -6px;
+}
+.card h3 { margin: 8px 0 4px; font: 600 18px/1.3 var(--display); }
+.card p { margin: 0; font-size: 15px; }
+.chip {
+  display: inline-block;
+  font: 600 11.5px/1 var(--body);
+  letter-spacing: .02em;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px dashed currentColor;
+}
+.chip.wait { color: var(--ochre); }
+.chip.run { color: var(--indigo); }
+.chip.done { color: var(--sage); }
+.tag-link {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--madder);
+  color: var(--madder);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+}
+.meta { color: var(--faint); font-size: 14px; margin: 8px 0 0; }
+
+/* logos */
+.pick {
+  display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center;
+  padding: 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper);
+}
+.pick img { width: 112px; height: 112px; display: block; }
+.pick .wm { width: 100%; max-width: 260px; height: auto; margin-top: 8px; }
+.pick h3 { margin: 0; font: 600 19px/1.25 var(--display); }
+.pick p { margin: 4px 0 0; font-size: 14px; }
+.logos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; margin-top: 14px; }
+@media (min-width: 560px) { .logos { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.logo { margin: 0; }
+.logo img { width: 100%; max-width: 150px; height: auto; display: block; margin: 0 auto 6px; }
+.logo figcaption { text-align: center; font-size: 13px; line-height: 1.35; }
+.logo figcaption strong { display: block; font-weight: 600; }
+.logo figcaption span { color: var(--faint); }
+.dots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.dot { margin: 0; padding: 10px; border: 1px dashed var(--rule); border-radius: 8px; background: #fbf8f2; }
+.dot img { width: 100%; height: auto; display: block; }
+.dot figcaption { font-size: 12.5px; color: #6f6862; margin-top: 4px; }
+
+.only-dark { display: none !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .only-dark { display: block !important; }
+  :root:not([data-theme="light"]) .only-light { display: none !important; }
+}
+:root[data-theme="dark"] .only-dark { display: block !important; }
+:root[data-theme="dark"] .only-light { display: none !important; }
+
+/* screens */
+.shots { display: grid; gap: 18px; margin-top: 12px; }
+.shot { margin: 0; }
+.shot img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--rule); background: var(--cloth); }
+.shot figcaption { font-size: 14px; color: var(--faint); margin-top: 6px; }
+
+/* done */
+ul.done { margin: 8px 0 0; padding-left: 20px; }
+ul.done li { margin: 0 0 8px; font-size: 15px; }
+ul.done li::marker { color: var(--sage); content: "✓  "; }
+
+/* boards */
+.boards { display: grid; gap: 10px; }
+.boards a {
+  display: block; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--rule);
+  color: var(--ink); text-decoration: none; background: var(--paper);
+}
+.boards a strong { display: block; font: 600 17px var(--display); }
+.boards a span { color: var(--faint); font-size: 14px; }
+
+/* manifesto */
+.manifesto { font-family: var(--display); font-size: 17px; line-height: 1.6; }
+.manifesto h3 { font: 600 20px/1.3 var(--display); margin: 26px 0 8px; }
+.manifesto p { margin: 0 0 12px; }
+.manifesto ol, .manifesto ul { padding-left: 22px; margin: 0 0 14px; }
+.manifesto li { margin: 0 0 10px; }
+.manifesto li ul { margin: 6px 0 0; font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.manifesto code { font-size: .86em; background: color-mix(in srgb, var(--ink) 6%, transparent); padding: 1px 4px; border-radius: 4px; }
+
+footer { margin-top: 40px; color: var(--faint); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <div class="border" aria-hidden="true"></div>
+  <p class="eyebrow">Inkling · updated {{UPDATED}}</p>
+  <h1>Where Inkling stands</h1>
+  <p class="lede">Today's work on Inkling, for your phone: what is waiting on you, what is still running, the logo, the app as it looks now, and the manifesto. I add to this page as work lands; the film gets a page of its own.</p>
+  <nav class="jump" aria-label="Sections">
+    <a href="#waiting">Waiting on you</a><a href="#running">Running</a><a href="#logos">Logo</a><a href="#screens">Screens</a><a href="#done">Done</a><a href="#film">Film</a><a href="#boards">Boards</a><a href="#manifesto">Manifesto</a>
+  </nav>
+
+  <section id="waiting">
+    <h2>Waiting on you<span class="count">{{N_WAIT}}</span></h2>
+    <p class="section-note">Answer in chat, in any order.</p>
+    <div class="cards">{{WAITING}}</div>
+  </section>
+
+  <section id="running">
+    <h2>Running now<span class="count">{{N_RUN}}</span></h2>
+    <p class="section-note">Each is on a branch of its own; I review and merge as they report.</p>
+    <div class="cards">{{RUNNING}}</div>
+  </section>
+
+  <div class="stitch-rule" aria-hidden="true"></div>
+  <section id="logos">
+    <h2>The logo</h2>
+    <p class="section-note">Picked from round 2. The other round-2 marks are below for comparison.</p>
+    <div class="pick">
+      <div>
+        <img class="only-light" src="logos/{{PICK_SLUG}}.svg" alt="The picked icon, light">
+        <img class="only-dark" src="logos/{{PICK_SLUG}}-dark.svg" alt="The picked icon, dark">
+      </div>
+      <div>
+        <span class="chip done">Your pick · now the app icon</span>
+        <h3>{{PICK_NAME}}</h3>
+        <p>A page whose border is a row of darns, one for every question answered, each in a different weave, the newest still on the needle. A finished note shows its mends. The dot on the i is one cross-stitch.</p>
+        <img class="wm" src="dots/cross.svg" alt="The wordmark with a cross-stitch for the dot">
+      </div>
+    </div>
+    <div class="logos">{{LOGOS}}</div>
+    <h3 style="font: 600 18px var(--display); margin: 26px 0 0;">Six answers for the dot on the i</h3>
+    <div class="dots">{{DOTS}}</div>
+    <a class="tag-link" href="{{LOGO_URL}}" target="_blank" rel="noopener">Open the full logo board</a>
+    <p class="meta">The board has every mark down to 16 px, a Dock to try them in, what each one means, One thread drawn into the app, and round 1 below.</p>
+  </section>
+
+  <div class="stitch-rule" aria-hidden="true"></div>
+  <section id="screens">
+    <h2>The app, as it looks today</h2>
+    <p class="section-note">Screens from today's builds, light and dark.</p>
+    <div class="shots">{{SHOTS}}</div>
+  </section>
+
+  <div class="stitch-rule" aria-hidden="true"></div>
+  <section id="done">
+    <h2>Done today</h2>
+    <p class="section-note">All of it is on master in <code>~/Projects/inkling</code>. Nothing is pushed.</p>
+    <ul class="done">{{DONE}}</ul>
+  </section>
+
+  <section id="film">
+    <h2>The film</h2>
+    <p class="section-note">The walkthrough, re-cut to show everything Inkling can do.</p>
+    {{FILM}}
+  </section>
+
+  <section id="boards">
+    <h2>Boards</h2>
+    <div class="boards">
+      <a href="{{LOGO_URL}}" target="_blank" rel="noopener"><strong>Logo directions</strong><span>Round 2 on top, round 1 folded below.</span></a>
+      <a href="{{MOTION_URL}}" target="_blank" rel="noopener"><strong>Loose Threads, in motion</strong><span>Drop, the motion rules, diagrams sewn, code, and sewn blocks.</span></a>
+      <a href="{{DIRECTIONS_URL}}" target="_blank" rel="noopener"><strong>The three directions</strong><span>Where Loose Threads was picked.</span></a>
+    </div>
+  </section>
+
+  <div class="stitch-rule" aria-hidden="true"></div>
+  <section id="manifesto">
+    <h2>The manifesto</h2>
+    <p class="section-note">What Inkling believes, the features that follow, and what in today's app it argues against.</p>
+    <div class="manifesto">{{MANIFESTO}}</div>
+  </section>
+
+  <footer>Built from <code>design/hub/build.py</code> in the repo. The same link updates as work lands.</footer>
+</main>
+</body>
+</html>

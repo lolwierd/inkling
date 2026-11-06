@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 02:55 IST"
+UPDATED = "7 Nov 2026, 04:52 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -19,28 +19,25 @@ LINKS = {
 }
 
 WAITING = [
-    ("Say which of the manifesto's six to change",
-     "The manifesto argues against six things the app does today: Make a note copies Inkling's words into your note; "
-     "Copy and export carry the threads unless you turn them off; About you learns quietly; the border grows only when you go "
-     "along with a question; a dismissed thread vanishes; and chat has no anchor. The full text is at the bottom of this page.",
+    ("One tap: let the new film upload",
+     "The new 73-second film (1080p, 60 fps, no jitter) is finished and merged, but every file upload failed after you went to sleep, "
+     "even small ones, so the film page still shows the first cut. Approve the upload when it asks, or tell me to try again.",
+     None),
+    ("Which of the manifesto's six to change",
+     "The manifesto argues against six things the app still does; nothing changed there tonight. The full text is at the bottom of this page.",
      ("Read the manifesto", "#manifesto")),
 ]
 
-RUNNING = [
-    ("The rest of the new features",
-     "Being built, each on its own branch: Answer in the note, Write it in, Turn it over, Loose ends, Read it through, and Threads between notes "
-     "(one agent on the brain and data, one on the page). Threads of your own is built and catching up with master before it merges."),
-    ("Real sources from the web",
-     "Your call: Inkling looks things up by default. A correction shows a source only if its search found the page and the quoted words are on it; "
-     "otherwise it shows the arithmetic or your words, or asks instead. A switch in Settings turns it off."),
-    ("Code health",
-     "The drag jitter is found and fixed on its branch: the page never heard the pointer while you held a tag. It is catching up with master, with a steadier side for open tags while you drag."),
-    ("UI polish, continuing", "More small fixes in every screen; the first twenty are on master."),
-    ("An icon that follows the system", "Waiting for Xcode: a layered Initial icon in light, dark, tinted and clear."),
-    ("The film, second cut", "Once the features land, they go into the film, re-rendering only the chapters that change."),
-]
+RUNNING = []
 
 DONE = [
+    ("All nine features from the manifesto", "Answer in the note, Write it in, Let it stand, Turn it over, Threads of your own, Show its working, Loose ends, Read it through and Threads between notes, each built by its own agent, merged one at a time and checked against the others."),
+    ("Web sources, when you ask", "Inkling can look things up for what you ask it; reading along never searches. A source shows only when the page really says what it quotes. Capped at $2.50 a call."),
+    ("Code health", "The drag now follows every pointer move (before: 1 move in 36). On a long note, idle CPU fell from 95% to 7.5% and typing from 94% to 7.6%; threads are 20 times cheaper to draw; the tag's five hover maps became one state."),
+    ("The film, core cut", "73 seconds, one note, 1080p at 60 fps. The jitter was the camera itself: up to 398 px a frame, overshoots and cuts. Now 17 px a frame at most, none of either. Waiting on the upload."),
+    ("The icon follows the system", "Initial in light, dark, clear and tinted, compiled with Xcode, so the Dock and Finder switch with your Mac even while Inkling is closed."),
+    ("Start here, complete", "The guide teaches all ten new things, with real examples each feature's own checks accept."),
+    ("Polish", "An Edit menu, tags that never cover your words, the sidebar's slide, the narrow tag's row, and ⌃Tab reaching Chat after you type."),
     ("The film, first technical cut", "One note about VM cold starts from start to finish, real model words, a quiet score at -20 LUFS (the old one was -16 with constant clicks), and it ends on Initial. On the film's page."),
     ("Show its working", "A correction only reaches the page with a check you can do yourself: the sum laid out from your own numbers, or your own words quoted. A check that does not hold up becomes a question."),
     ("Let it stand", "Dismiss becomes Let stand, with an optional reason; no mind raises that point again, in any words."),

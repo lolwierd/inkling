@@ -575,6 +575,7 @@ impl Playback {
         }
     }
 
+    #[cfg(test)]
     pub fn animating(&self) -> bool {
         self.state().1 < 1.
     }

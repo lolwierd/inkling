@@ -68,8 +68,6 @@ pub struct Palette {
     /// Tacking thread: a done checklist line is tacked through with it, and a quote's
     /// seam is sewn in it.
     pub tack: Hsla,
-    /// Busy marks (the needle while reading).
-    pub bulb: Hsla,
     /// Plain lines that are not thread.
     pub line: Hsla,
     pub selection: Hsla,
@@ -106,7 +104,6 @@ impl Palette {
             wash: ca(0xa63f3214),
             hover: ca(0x26232b12),
             tack: c(0x8c8276),
-            bulb: c(0x57505c),
             line: ca(0x26232b4d),
             selection: ca(0x2e3f7a2e),
             dim: ca(0x26232b40),
@@ -131,7 +128,6 @@ impl Palette {
             wash: ca(0xd9705e1f),
             hover: ca(0xede6da17),
             tack: c(0x948a80),
-            bulb: c(0xbdb4a8),
             line: ca(0xede6da4d),
             selection: ca(0x8c9be047),
             dim: ca(0x00000080),

@@ -11,7 +11,6 @@
 //! events, layout and painting.
 
 use gpui_kit::*;
-use gpui_kit::prelude::*;
 use std::collections::HashMap;
 use std::{
     cell::RefCell,
@@ -2028,18 +2027,6 @@ impl NoteEditor {
         self.focus.is_focused(window)
     }
 
-    pub fn set_anchors(&mut self, anchors: Vec<Anchor>, cx: &mut Context<Self>) {
-        let text = &self.st.text;
-        self.st.anchors = anchors
-            .into_iter()
-            .map(|mut a| {
-                a.range = snap_range(text, a.range);
-                a
-            })
-            .collect();
-        cx.notify();
-    }
-
     pub fn add_anchor(&mut self, mut anchor: Anchor, cx: &mut Context<Self>) {
         anchor.range = snap_range(&self.st.text, anchor.range);
         self.st.anchors.retain(|a| a.id != anchor.id);
@@ -2145,11 +2132,6 @@ impl NoteEditor {
         let Some(fx) = self.st.remove_paragraph(line) else { return false };
         self.apply(fx, cx);
         true
-    }
-
-    pub fn set_line_kind(&mut self, line: usize, kind: BlockKind, cx: &mut Context<Self>) {
-        let fx = self.st.set_line_kind(line, kind);
-        self.apply(fx, cx);
     }
 
     /// Apply a block kind to every line touched by the selection.

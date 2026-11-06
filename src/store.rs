@@ -1284,10 +1284,6 @@ impl Store {
         self.notes.iter().find(|n| n.id == id)
     }
 
-    pub fn note_mut(&mut self, id: &str) -> Option<&mut Note> {
-        self.notes.iter_mut().find(|n| n.id == id)
-    }
-
     pub fn mind(&self, id: &str) -> Mind {
         self.minds
             .iter()
@@ -1385,6 +1381,21 @@ mod tests {
 
     fn block(kind: BlockKind, text: &str) -> Block {
         Block { kind, text: text.into() }
+    }
+
+    #[std::prelude::v1::test]
+    fn every_choice_has_its_own_label() {
+        fn distinct(labels: &[&str]) -> bool {
+            labels.iter().all(|l| !l.trim().is_empty()) && labels.iter().collect::<HashSet<_>>().len() == labels.len()
+        }
+        assert!(distinct(&Pace::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert!(distinct(&Placement::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert!(distinct(&Appearance::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert!(distinct(&TextSize::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert!(distinct(&Lettering::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert!(distinct(&InkColor::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert!(distinct(&Callout::ALL.iter().map(|v| v.label()).collect::<Vec<_>>()));
+        assert_eq!(InkColor::ALL.len(), 7, "a thread colour for every known mind and one to spare");
     }
 
     #[std::prelude::v1::test]

@@ -34,6 +34,8 @@
 //! resolve: 1      reopen: 1      dismiss: 2      mark: 1   (the "?" in Marks only)
 //! copy: 1         (logs what Copy would put on the clipboard; the clipboard is left alone)
 //! makenote: 1
+//! hover: 2        (the pointer rests on thread 2's tag, which unfolds; `hover: 0` moves away)
+//! drag: 1 -40 120 (move thread 1's tag by that many pixels, as a finished drag would)
 //! ```
 //!
 //! And a few for checking state without a screen:
@@ -89,6 +91,10 @@ pub enum Step {
     UndoDismiss,
     /// Jump to the next (`jump: next`) or previous (`jump: prev`) open thread.
     Jump(bool),
+    /// Rest the pointer on a thread's tag (0 = on none).
+    Hover(usize),
+    /// Move a thread's tag by (dx, dy) pixels.
+    Drag(usize, f32, f32),
 }
 
 pub fn parse(src: &str) -> Vec<Step> {
@@ -156,6 +162,17 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "room" => Step::Room(arg.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect()),
                 "undo-dismiss" => Step::UndoDismiss,
                 "jump" => Step::Jump(arg != "prev"),
+                "hover" => Step::Hover(arg.parse().unwrap_or(0)),
+                "drag" => {
+                    let v: Vec<&str> = arg.split_whitespace().collect();
+                    match (v.first().and_then(|n| n.parse().ok()), v.get(1).and_then(|x| x.parse().ok()), v.get(2).and_then(|y| y.parse().ok())) {
+                        (Some(n), Some(dx), Some(dy)) => Step::Drag(n, dx, dy),
+                        _ => {
+                            log::warn!("script: drag needs `n dx dy`: {l:?}");
+                            return None;
+                        }
+                    }
+                }
                 _ => {
                     log::warn!("script: unknown step {l:?}");
                     return None;

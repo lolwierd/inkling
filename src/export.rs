@@ -232,6 +232,7 @@ mod tests {
             status,
             side: Side::Right,
             mind_name: "Editor".into(),
+            tag_offset: (0., 0.),
             created_at: chrono::Utc::now(),
         }
     }

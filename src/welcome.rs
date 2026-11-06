@@ -63,6 +63,7 @@ pub fn welcome_note(mode: Mode) -> Note {
         status: ThreadStatus::Open,
         side: Side::Left,
         mind_name: "Inkling".into(),
+        tag_offset: (0., 0.),
         created_at: Utc::now(),
     });
     for b in note.blocks.iter().skip(1) {

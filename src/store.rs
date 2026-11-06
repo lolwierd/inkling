@@ -143,6 +143,9 @@ pub struct Thread {
     pub side: Side,
     #[serde(default)]
     pub mind_name: String,
+    /// Where you dragged its tag, relative to where the margin would put it.
+    #[serde(default)]
+    pub tag_offset: (f32, f32),
     #[serde(default)]
     pub created_at: DateTime<Utc>,
 }

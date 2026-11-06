@@ -41,6 +41,27 @@ const UNDO_FOR: Duration = Duration::from_secs(8);
 const QUIET_WHILE_TYPING: Duration = Duration::from_millis(2000);
 /// The most minds that can answer one question side by side.
 const ROOM_MAX: usize = 3;
+/// A folded tag: just its tab.
+const TAB_W: f32 = 54.;
+const TAB_H: f32 = 26.;
+/// After the pointer leaves a tag, it stays open this long (moving onto its panel).
+const FOLD_DELAY: Duration = Duration::from_millis(220);
+
+fn ease_out_cubic(t: f32) -> f32 {
+    let t = t.clamp(0., 1.);
+    1. - (1. - t).powi(3)
+}
+
+/// A tag being moved around the margin.
+#[derive(Clone, Debug)]
+struct TagDrag {
+    id: String,
+    start: Point<Pixels>,
+    origin: (f32, f32),
+    moved: bool,
+    /// Where the tab sat in the window when the drag began, to keep it on screen.
+    tab: Option<Bounds<Pixels>>,
+}
 
 /// A thread's colour. The note's own mind wears the thread you chose; every other mind
 /// has its own, the same one every time, so you can see at a glance who asked what.
@@ -116,16 +137,18 @@ struct Metrics {
 }
 
 impl Metrics {
+    /// The writing column takes about half the window, up to a readable 760 px (about
+    /// 75 characters of Fraunces at 17 px); tags sit folded, so the margins can be slim.
     fn for_width(available: f32) -> Self {
-        let gap = 40.;
+        let gap = 36.;
         let avail = (available - 48.).max(0.);
-        let column = (avail * 0.42).clamp(400., 560.);
-        let margin = ((avail - column - 2. * gap) / 2.).clamp(170., 268.);
+        let column = (avail * 0.52).clamp(420., 760.);
+        let margin = ((avail - column - 2. * gap) / 2.).clamp(200., 280.);
         if column + 2. * (margin + gap) <= avail {
             return Self { column, margin, gap, both: true };
         }
-        let margin = ((avail - gap) * 0.36).clamp(170., 268.);
-        let column = (avail - gap - margin).clamp(300., 560.);
+        let margin = ((avail - gap) * 0.32).clamp(200., 280.);
+        let column = (avail - gap - margin).clamp(300., 760.);
         Self { column, margin, gap, both: false }
     }
     fn page(&self) -> f32 {
@@ -341,7 +364,6 @@ pub struct NotePage {
     /// Open threads numbered in reading order (the gutter and the tags agree).
     numbers: HashMap<String, usize>,
     /// The tag under the pointer: its thread comes up a little from the background.
-    hovered: Option<String>,
     /// The last thread dismissed, its words and when: Undo puts it back for a while.
     last_dismissed: Option<(String, Range<usize>, std::time::Instant)>,
     /// The last keystroke in the note.
@@ -356,6 +378,20 @@ pub struct NotePage {
     settle_task: Option<Task<()>>,
     /// Minds a script seats for its next ask.
     pending_room: Vec<String>,
+    /// How far each tag is unfolded (0 folded, 1 open), eased toward its target each frame.
+    unfold: HashMap<String, f32>,
+    /// Tags under the pointer, and when the pointer last left each.
+    /// Which parts of which tags the pointer is over: "<id>:tab" or "<id>:panel".
+    hover_tag: HashSet<String>,
+    hover_left: HashMap<String, std::time::Instant>,
+    /// A tag being dragged, and when the last drag ended (so its click is ignored).
+    drag: Option<TagDrag>,
+    last_drag_end: Option<std::time::Instant>,
+    /// Natural height of each unfolded tag, measured, to unfold toward.
+    panel_heights: Heights,
+    /// Each tab's bounds in the window at the last paint: where its panel has room to open.
+    tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
     _subs: Vec<Subscription>,
 }
@@ -418,7 +454,6 @@ impl NotePage {
             tying: HashMap::new(),
             snipped: vec![],
             numbers: HashMap::new(),
-            hovered: None,
             last_dismissed: None,
             last_typed: None,
             arrived: HashMap::new(),
@@ -426,6 +461,14 @@ impl NotePage {
             rechecking: HashSet::new(),
             settle_task: None,
             pending_room: vec![],
+            unfold: HashMap::new(),
+            hover_tag: HashSet::new(),
+            hover_left: HashMap::new(),
+            drag: None,
+            last_drag_end: None,
+            panel_heights: Rc::new(RefCell::new(HashMap::new())),
+            tab_bounds: Rc::new(RefCell::new(HashMap::new())),
+            viewport: size(px(1200.), px(800.)),
             last_frame: None,
             _subs: subs,
         };
@@ -1166,6 +1209,7 @@ impl NotePage {
             status: ThreadStatus::Open,
             side,
             mind_name: self.mind.name.clone(),
+            tag_offset: (0., 0.),
             created_at: Utc::now(),
         });
         self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.clone(), range, open: true }, cx));
@@ -2008,6 +2052,25 @@ impl NotePage {
             Step::Room(names) => self.pending_room = names.clone(),
             Step::UndoDismiss => self.undo_dismiss(cx),
             Step::Jump(forward) => self.jump_to_open(*forward, window, cx),
+            Step::Hover(n) => {
+                let ids: Vec<String> = self.hover_tag.drain().filter_map(|k| k.split_once(':').map(|(id, _)| id.to_string())).collect();
+                for id in ids {
+                    self.hover_left.insert(id, std::time::Instant::now());
+                }
+                if let Some(id) = (*n > 0).then(|| self.nth_thread(*n)).flatten() {
+                    self.set_tag_hover(&id, "tab", true, cx);
+                }
+            }
+            Step::Drag(n, dx, dy) => {
+                // the same path a pointer drag takes, so it is kept on screen the same way
+                if let Some(id) = (*n > 0).then(|| self.nth_thread(*n)).flatten() {
+                    let origin = self.note.threads.iter().find(|t| t.id == id).map(|t| t.tag_offset).unwrap_or_default();
+                    let tab = self.tab_bounds.borrow().get(&id).copied();
+                    self.drag = Some(TagDrag { id, start: point(px(0.), px(0.)), origin, moved: false, tab });
+                    self.drag_tag_by(point(px(*dx), px(*dy)), cx);
+                    self.end_tag_drag(cx);
+                }
+            }
             Step::Log(text) => log::info!("script log: {text}"),
             _ => {}
         }
@@ -2064,6 +2127,9 @@ impl NotePage {
             "undo": self.last_dismissed.as_ref().filter(|(_, _, at)| at.elapsed() < UNDO_FOR).map(|(id, _, _)| short(id)),
             "first_run": self.note.first_run,
             "statuses": self.note.threads.iter().map(|t| format!("{}:{:?}:{}", short(&t.id), t.status, t.mind_name)).collect::<Vec<_>>(),
+            // tags more than half unfolded, and tags moved from where the margin puts them
+            "unfolded": self.unfold.iter().filter(|(_, u)| **u > 0.5).map(|(id, _)| short(id)).collect::<Vec<_>>(),
+            "moved_tags": self.note.threads.iter().filter(|t| t.tag_offset != (0., 0.)).map(|t| format!("{}:{:.0},{:.0}", short(&t.id), t.tag_offset.0, t.tag_offset.1)).collect::<Vec<_>>(),
         })
         .to_string()
     }
@@ -2509,22 +2575,139 @@ impl NotePage {
         )
     }
 
-    /// A thread's tag in the margin: a woven label with a stitched edge and a loop the
-    /// thread is tied to. Words are plain and readable; the thread colour is only in
-    /// the mind's name, the stitched edge and the loop.
+    /// A thread's tag in the margin. Folded, it is a small stitched tab (the loop the
+    /// thread is tied to, its number, ? for a question, × for a correction), so the margin
+    /// stays quiet. Pointing at it unfolds the whole tag; clicking keeps it open with the
+    /// reply box. Drag the tab (or an open tag's top row) to move it anywhere in the
+    /// margin; the thread follows.
     fn card(&mut self, thread: &Thread, side: Side, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let id = thread.id.clone();
         let is_active = self.active.as_deref() == Some(id.as_str());
-        let faded = self.active.is_some() && !is_active;
+        let tied = thread.status == ThreadStatus::Resolved;
+        let thread_color = mind_thread(&thread.mind_name, &self.mind.name, cx.global::<Store>().settings.ink, &t);
+        let unfold = self.unfold.get(&id).copied().unwrap_or(0.);
+        let since = self.tying.get(&id).map(|at| anim_since(*at, std::time::Instant::now()));
+        let fade = if tied && !is_active { tag_fade(since) } else { 1. };
+        let number = self.numbers.get(&id).copied();
+        let correction = thread.kind == ThoughtKind::Correction;
+        let right = side == Side::Right;
+
+        // ---- the folded tab ----
+        let glyph: AnyElement = if tied {
+            div().size(px(7.)).rounded_full().bg(thread_color).into_any_element()
+        } else {
+            div()
+                .text_size(px(13.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(thread_color)
+                .child(if correction { "\u{d7}" } else { "?" })
+                .into_any_element()
+        };
+        let label = div()
+            .absolute()
+            .top(px(4.))
+            .when(right, |d| d.left(px(22.)))
+            .when(!right, |d| d.right(px(22.)))
+            .h(px(18.))
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .font_family(SANS)
+            .children(number.map(|n| div().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(p.graphite).child(n.to_string())))
+            .child(glyph);
+        let tab = div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .rounded(px(8.))
+            .bg(p.card)
+            .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(0.), px(1.)), blur_radius: px(4.), spread_radius: px(0.), inset: false }])
+            .child(
+                div()
+                    .absolute()
+                    .top(px(3.))
+                    .left(px(3.))
+                    .right(px(3.))
+                    .bottom(px(3.))
+                    .rounded(px(6.))
+                    .border_1()
+                    .border_dashed()
+                    .border_color(thread_color.opacity(0.4)),
+            )
+            .child(Self::tag_ring(right, thread_color))
+            .child(label);
+
+        let panel = (unfold > 0.01).then(|| self.tag_panel(thread, side, thread_color, unfold, cx));
+
+        let id_hover = id.clone();
+        let id_down = id.clone();
+        let id_click = id.clone();
+        let offset = thread.tag_offset;
+        let bounds_of = self.tab_bounds.clone();
+        let id_bounds = id.clone();
+        let where_am_i = canvas(move |b, _, _| {
+            bounds_of.borrow_mut().insert(id_bounds, b);
+        }, |_, _, _, _| {})
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
+        div()
+            .id(SharedString::from(format!("card-{id}")))
+            .relative()
+            .w(px(TAB_W))
+            .h(px(TAB_H))
+            .when(!right, |d| d.ml(px(self.m.margin - TAB_W)))
+            .opacity(fade)
+            .cursor_pointer()
+            // a tag dragged over your words must not put the caret under it
+            .occlude()
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                this.set_tag_hover(&id_hover, "tab", *hovered, cx);
+            }))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, _| {
+                let tab = this.tab_bounds.borrow().get(&id_down).copied();
+                this.drag = Some(TagDrag { id: id_down.clone(), start: ev.position, origin: offset, moved: false, tab });
+            }))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if this.drag_moved_recently() {
+                    return;
+                }
+                this.toggle_tag(&id_click, window, cx);
+            }))
+            .child(where_am_i)
+            .child(tab)
+            .children(panel)
+            .into_any_element()
+    }
+
+    /// The loop at the tag's corner: where its thread is tied on.
+    fn tag_ring(right: bool, color: Hsla) -> Div {
+        div()
+            .absolute()
+            .top(px(9.))
+            .when(right, |d| d.left(px(9.)))
+            .when(!right, |d| d.right(px(9.)))
+            .size(px(8.))
+            .rounded_full()
+            .border(px(1.5))
+            .border_color(color.opacity(0.9))
+    }
+
+    /// The unfolded tag, drawn over its neighbours. It grows out of the tab: the stitched
+    /// edge widens and lengthens with it, and the words fade in once there is room.
+    fn tag_panel(&mut self, thread: &Thread, side: Side, thread_color: Hsla, unfold: f32, cx: &mut Context<Self>) -> AnyElement {
+        let t = Theme::get(cx).clone();
+        let p = t.p;
+        let id = thread.id.clone();
+        let is_active = self.active.as_deref() == Some(id.as_str());
         let pending = self.pending.get(&id).map(|(_, s)| s.clone());
         // an asked thread starts with your question and its answer; replies are what follows
         let replies = thread.messages.len().saturating_sub(if thread.kind == ThoughtKind::Ask { 2 } else { 1 });
-        let thread_color = mind_thread(&thread.mind_name, &self.mind.name, cx.global::<Store>().settings.ink, &t);
         let mind = if thread.mind_name.is_empty() { "Inkling".to_string() } else { thread.mind_name.clone() };
-        // A question that arrived while you were typing waits, folded, until you pause.
-        let waiting = !is_active && self.arrived.contains_key(&id) && self.typing_recently();
         let kind = match thread.kind {
             ThoughtKind::Correction => "correction",
             ThoughtKind::Sketch => "sketch",
@@ -2532,19 +2715,63 @@ impl NotePage {
             ThoughtKind::Answer => "answer",
             ThoughtKind::Question => "question",
         };
-        let since = self.tying.get(&id).map(|at| anim_since(*at, std::time::Instant::now()));
         let tied = thread.status == ThreadStatus::Resolved;
+        let right = side == Side::Right;
+        let width = self.m.margin;
+        let natural = self.panel_heights.borrow().get(&id).copied().unwrap_or(px(120.));
+        let e = ease_out_cubic(unfold);
 
+        // A tag opens away from the words, unless that runs off the window: then it opens
+        // the other way, and it slides up when it would hang below the bottom edge.
+        let mut open_right = right;
+        let mut lift = px(0.);
+        if let Some(b) = self.tab_bounds.borrow().get(&id).copied() {
+            let vp = self.viewport;
+            let room_right = vp.width - px(8.) - b.origin.x;
+            let room_left = b.origin.x + b.size.width - px(8.);
+            if open_right && room_right < px(width) && room_left > room_right {
+                open_right = false;
+            } else if !open_right && room_left < px(width) && room_right > room_left {
+                open_right = true;
+            }
+            let below = vp.height - px(8.) - b.origin.y;
+            if natural > below {
+                lift = (natural - below).min((b.origin.y - px(44.)).max(px(0.)));
+            }
+        }
+        let lift = lift * e;
+        // the tab's loop, in the panel's coordinates
+        let w = TAB_W + (width - TAB_W) * e;
+        let ring_x = if right { 13. } else { TAB_W - 13. } - if open_right { 0. } else { TAB_W - w };
+        let ring_on_left = ring_x < w / 2.;
+        // the header keeps clear of the loop: 12 px past it, less the tag's own padding
+        let ring_pad = if lift < px(6.) { (if ring_on_left { ring_x } else { w - ring_x }) + 1. } else { 0. };
+
+        // the top row: name and kind, number; it is also where an open tag is dragged from
+        let id_down = id.clone();
+        let id_head = id.clone();
+        let offset = thread.tag_offset;
         let mut body = div().flex().flex_col().gap(px(8.));
-        // name and kind on the left, the thread's number on the right
         body = body.child(
             div()
+                .id(SharedString::from(format!("tag-top-{id}")))
                 .flex()
                 .items_center()
                 .justify_between()
                 .gap(px(8.))
-                .when(side == Side::Left, |d| d.pr(px(14.)))
-                .when(side == Side::Right, |d| d.pl(px(14.)))
+                .when(!ring_on_left, |d| d.pr(px(ring_pad)))
+                .when(ring_on_left, |d| d.pl(px(ring_pad)))
+                .cursor_grab()
+                .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, _| {
+                    let tab = this.tab_bounds.borrow().get(&id_down).copied();
+                this.drag = Some(TagDrag { id: id_down.clone(), start: ev.position, origin: offset, moved: false, tab });
+                }))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    if !this.drag_moved_recently() {
+                        this.toggle_tag(&id_head, window, cx);
+                    }
+                }))
                 .child(
                     div()
                         .flex()
@@ -2552,20 +2779,16 @@ impl NotePage {
                         .gap(px(5.))
                         .text_size(px(12.5))
                         .child(div().font_weight(FontWeight::SEMIBOLD).text_color(thread_color).child(mind))
-                        .child(div().text_color(p.faint).child(if tied { "· tied off".to_string() } else { format!("· {kind}") })),
+                        .child(div().text_color(p.faint).child(if tied { "\u{b7} tied off".to_string() } else { format!("\u{b7} {kind}") })),
                 )
                 .children(self.numbers.get(&id).map(|n| div().text_size(px(12.5)).text_color(p.faint).child(n.to_string()))),
         );
-        if waiting {
-            body = body.child(div().text_size(px(13.)).text_color(p.faint).child("Opens when you pause"));
-        } else if tied && !is_active {
-            // folded: one line of what it asked
+        if tied && !is_active {
             let first = thread.messages.first().map(|m| m.text.clone()).unwrap_or_default();
-            let short: String = first.chars().take(64).collect::<String>() + if first.chars().count() > 64 { "…" } else { "" };
+            let short: String = first.chars().take(64).collect::<String>() + if first.chars().count() > 64 { "\u{2026}" } else { "" };
             body = body.child(div().text_size(px(13.)).line_height(px(18.)).text_color(p.faint).child(short));
         } else {
-            // Folded, a tag shows what it says: a question's question, an asked mind's answer
-            // (so the room's answers sit side by side without opening each one).
+            // Folded, a tag shows what it says: a question's question, an asked mind's answer.
             let messages: Vec<&Message> = if is_active {
                 thread.messages.iter().collect()
             } else if thread.kind == ThoughtKind::Ask {
@@ -2579,7 +2802,7 @@ impl NotePage {
             if let Some(Pending::Streaming(s)) = &pending {
                 body = body.child(self.message_view(&Message::new(Role::Mind, s.clone()), &t, false));
             }
-            if let Some(d) = self.drawing_block(&id, self.m.margin - 36., cx) {
+            if let Some(d) = self.drawing_block(&id, width - 36., cx) {
                 body = body.child(d);
             }
             match &pending {
@@ -2592,7 +2815,7 @@ impl NotePage {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(div().text_size(px(13.)).text_color(p.faint).child("Stitching a sketch…"))
+                            .child(div().text_size(px(13.)).text_color(p.faint).child("Stitching a sketch\u{2026}"))
                             .child(Self::thinking_dot(&t, SharedString::from(format!("sketch-{id}")))),
                     );
                 }
@@ -2655,84 +2878,179 @@ impl NotePage {
                     )
                     .child(div().flex_1())
                     .child(
-                        ui::ghost_button(SharedString::from(format!("copy-{id_copy}")), "Copy", &t)
+                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
+                            .on_click(cx.listener(move |this, _, _, cx| this.make_note_from_thread(&id_note, cx))),
+                    )
+                    // Copy is the least used of the four: an icon, so the row fits a margin
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("copy-{id_copy}")))
+                            .cursor_pointer()
+                            .child(icon("copy", 12., p.faint))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 let text = this.thread_text(&id_copy);
                                 cx.write_to_clipboard(ClipboardItem::new_string(text));
                             })),
-                    )
-                    .child(
-                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
-                            .on_click(cx.listener(move |this, _, _, cx| this.make_note_from_thread(&id_note, cx))),
                     ),
             );
         }
 
-        let id_click = id.clone();
+        // the words, laid out at full width and revealed as the tag grows
+        let owner: AnyView = cx.entity().into();
+        let content = div().w(px(width)).px(px(15.)).pt(px(9.)).pb(px(13.)).font_family(SANS).child(body);
+        let h = px(TAB_H) + (natural.max(px(TAB_H)) - px(TAB_H)) * e;
+        let words = ((unfold - 0.32) / 0.68).clamp(0., 1.);
         let id_hover = id.clone();
-        let opacity = if tied && !is_active { tag_fade(since) } else if faded { 0.5 } else { 1. };
-        // the loop the thread ties onto, at the corner nearest the words
-        let ring = div()
-            .absolute()
-            .top(px(6.))
-            .when(side == Side::Right, |d| d.left(px(9.)))
-            .when(side == Side::Left, |d| d.right(px(9.)))
-            .size(px(8.))
-            .rounded_full()
-            .border(px(1.5))
-            .border_color(thread_color.opacity(0.9));
-        div()
-            .id(SharedString::from(format!("card-{id}")))
-            .relative()
-            .w(px(self.m.margin))
-            .rounded(px(10.))
-            .bg(p.card)
-            .shadow(vec![BoxShadow {
-                color: p.shadow,
-                offset: point(px(0.), px(2.)),
-                blur_radius: px(8.),
-                spread_radius: px(0.),
-                inset: false,
-            }])
-            .opacity(opacity)
-            .hover(|s| s.opacity(1.))
-            .cursor_pointer()
-            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                // a touch on the tag sways its thread and brings it up from the background
-                if *hovered {
-                    this.hovered = Some(id_hover.clone());
-                    if let Some(r) = this.ropes.get_mut(&id_hover) {
-                        r.nudge(2.6);
+        let id_open = id.clone();
+        deferred(
+            div()
+                .id(SharedString::from(format!("panel-{id}")))
+                .occlude()
+                .cursor_pointer()
+                .absolute()
+                .top(-lift)
+                .when(open_right, |d| d.left_0())
+                .when(!open_right, |d| d.right_0())
+                .w(px(w))
+                .h(h)
+                .overflow_hidden()
+                .rounded(px(8. + 2. * e))
+                .bg(p.card)
+                .shadow(vec![BoxShadow {
+                    color: p.shadow.opacity(0.6 + 0.4 * e),
+                    offset: point(px(0.), px(1. + 3. * e)),
+                    blur_radius: px(4. + 10. * e),
+                    spread_radius: px(0.),
+                    inset: false,
+                }])
+                .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                    this.set_tag_hover(&id_hover, "panel", *hovered, cx);
+                }))
+                // a click on a tag that only unfolded under the pointer opens it for a reply
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if this.active.as_deref() != Some(id_open.as_str()) && !this.drag_moved_recently() {
+                        this.toggle_tag(&id_open, window, cx);
                     }
-                } else if this.hovered.as_deref() == Some(id_hover.as_str()) {
-                    this.hovered = None;
-                }
-                cx.notify();
-            }))
-            .on_click(cx.listener(move |this, _, window, cx| {
-                if this.active.as_deref() != Some(id_click.as_str()) {
-                    this.activate(Some(id_click.clone()), window, cx);
-                    if let Some(input) = this.replies.get(&id_click).cloned() {
-                        input.update(cx, |i, cx| i.focus(window, cx));
-                    }
-                }
-            }))
-            // the stitched edge of the label
-            .child(
-                div()
-                    .absolute()
-                    .top(px(4.))
-                    .left(px(4.))
-                    .right(px(4.))
-                    .bottom(px(4.))
-                    .rounded(px(7.))
-                    .border_1()
-                    .border_dashed()
-                    .border_color(thread_color.opacity(0.42)),
-            )
-            .child(ring)
-            .child(div().relative().px(px(15.)).pt(px(9.)).pb(px(13.)).font_family(SANS).child(body))
-            .into_any_element()
+                }))
+                // the stitched edge grows with the tag
+                .child(
+                    div()
+                        .absolute()
+                        .top(px(4.))
+                        .left(px(4.))
+                        .right(px(4.))
+                        .bottom(px(4.))
+                        .rounded(px(6. + e))
+                        .border_1()
+                        .border_dashed()
+                        .border_color(thread_color.opacity(0.42)),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .when(open_right, |d| d.left_0())
+                        .when(!open_right, |d| d.right_0())
+                        .opacity(words)
+                        .child(margin::measured(id.clone(), content, self.panel_heights.clone(), owner)),
+                )
+                // the loop stays where the thread is tied on; a lifted tag covers it
+                .when(lift < px(6.), |d| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .top(px(9.) + lift)
+                            .left(px(ring_x - 4.))
+                            .size(px(8.))
+                            .rounded_full()
+                            .border(px(1.5))
+                            .border_color(thread_color.opacity(0.9)),
+                    )
+                }),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+
+    /// Pointer over a tag (its tab or its open panel). Leaving starts a short grace
+    /// period so moving from the tab onto the panel does not fold it.
+    fn set_tag_hover(&mut self, id: &str, part: &str, hovered: bool, cx: &mut Context<Self>) {
+        let key = format!("{id}:{part}");
+        if hovered {
+            self.hover_tag.insert(key);
+        } else {
+            self.hover_tag.remove(&key);
+            if !self.tag_pointed(id) {
+                self.hover_left.insert(id.to_string(), std::time::Instant::now());
+            }
+        }
+        cx.notify();
+    }
+
+    fn tag_pointed(&self, id: &str) -> bool {
+        self.hover_tag.contains(&format!("{id}:tab")) || self.hover_tag.contains(&format!("{id}:panel"))
+    }
+
+    /// Click a tab: open it (and its reply box), or close it if it is the open one.
+    fn toggle_tag(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.active.as_deref() == Some(id) {
+            self.activate(None, window, cx);
+            return;
+        }
+        self.activate(Some(id.to_string()), window, cx);
+        if let Some(input) = self.replies.get(id).cloned() {
+            input.update(cx, |i, cx| i.focus(window, cx));
+        }
+    }
+
+    /// Move the tag being dragged by `delta` from where the drag began, kept inside the
+    /// window. A press that moves less than 4 px is still a click.
+    fn drag_tag_by(&mut self, delta: Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(d) = self.drag.as_mut() else { return };
+        if !d.moved && (delta.x.abs() + delta.y.abs()) < px(4.) {
+            return;
+        }
+        d.moved = true;
+        let (id, origin, tab) = (d.id.clone(), d.origin, d.tab);
+        let (mut dx, mut dy) = (delta.x.as_f32(), delta.y.as_f32());
+        if let Some(b) = tab {
+            let vp = self.viewport;
+            let (x0, y0) = (b.origin.x.as_f32(), b.origin.y.as_f32());
+            let (w, h) = (b.size.width.as_f32(), b.size.height.as_f32());
+            let (lo_x, lo_y) = (8. - x0, 44. - y0);
+            dx = dx.clamp(lo_x, (vp.width.as_f32() - 8. - w - x0).max(lo_x));
+            dy = dy.clamp(lo_y, (vp.height.as_f32() - 8. - h - y0).max(lo_y));
+        }
+        if let Some(t) = self.thread_mut(&id) {
+            t.tag_offset = (origin.0 + dx, origin.1 + dy);
+        }
+        cx.notify();
+    }
+
+    fn end_tag_drag(&mut self, cx: &mut Context<Self>) {
+        if self.drag.take().is_some_and(|d| d.moved) {
+            self.last_drag_end = Some(std::time::Instant::now());
+            self.schedule_save(cx);
+            cx.notify();
+        }
+    }
+
+    fn drag_moved_recently(&self) -> bool {
+        self.drag.as_ref().is_some_and(|d| d.moved) || self.last_drag_end.is_some_and(|t| t.elapsed() < Duration::from_millis(150))
+    }
+
+    /// How far each tag should be unfolded: open while pointed at (and a moment after),
+    /// while it is the open thread, and while it is being dragged.
+    fn unfold_target(&self, th: &Thread) -> f32 {
+        let id = th.id.as_str();
+        if self.active.as_deref() == Some(id) || self.drag.as_ref().is_some_and(|d| d.id == id && d.moved) {
+            return 1.;
+        }
+        if th.status == ThreadStatus::Resolved {
+            return 0.;
+        }
+        let pointed = self.tag_pointed(id) || self.hover_left.get(id).is_some_and(|t| t.elapsed() < FOLD_DELAY);
+        if pointed { 1. } else { 0. }
     }
 
     fn toolbar(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -3207,15 +3525,17 @@ impl NotePage {
     /// they end the paragraph, otherwise at the edge of the column, level with them.
     fn thread_ends(&self, s: &margin::Slot, rects: &[Bounds<Pixels>], m: Metrics, _cx: &App) -> (Point<Pixels>, Point<Pixels>) {
         let col = px(m.column_left());
-        let tag_y = s.top + px(7.);
+        let (dx, dy) = self.note.threads.iter().find(|t| t.id == s.id).map(|t| t.tag_offset).unwrap_or((0., 0.));
+        // the loop sits 13 px into the tab (whose top is 3 px above the slot), plus the drag
+        let tag_y = s.top + px(10. + dy);
         // The first stitched row is the one level with the tag (tags line up with the
         // first row of their words), and the edge of the column is the nearest point to
         // the margin that crosses no words.
         let first = rects[0];
         let y = first.origin.y + first.size.height - px(3.2);
         match s.side {
-            Side::Right => (point(col + px(m.column) + px(9.), y), point(px(m.right_left()) + px(13.), tag_y)),
-            Side::Left => (point(col - px(9.), y), point(px(m.margin) - px(13.), tag_y)),
+            Side::Right => (point(col + px(m.column) + px(9.), y), point(px(m.right_left()) + px(13. + dx), tag_y)),
+            Side::Left => (point(col - px(9.), y), point(px(m.margin) - px(13. - dx), tag_y)),
         }
     }
 }
@@ -3226,6 +3546,7 @@ impl Render for NotePage {
         let p = t.p;
         let placement = cx.global::<Store>().settings.placement;
         let viewport = window.viewport_size();
+        self.viewport = viewport;
         let width = viewport.width.as_f32() - if self.chat_open { CHAT_WIDTH } else { 0. };
         // The page sits on the linen with a strip of cloth showing on each side.
         self.m = Metrics::for_width(width - 2. * (SHEET_PAD + 14.));
@@ -3298,8 +3619,29 @@ impl Render for NotePage {
             e.placeholder_hint = hint;
         });
 
-        // Margin tags.
+        // Margin tags: folded tabs that unfold toward their target, eased each frame.
         let (threads, slots, anchor_boxes) = self.margin_layout(placement, m, cx);
+        let ease = 1. - (-dt * 15.).exp();
+        let mut unfolding = false;
+        for th in &threads {
+            let target = self.unfold_target(th);
+            let u = self.unfold.entry(th.id.clone()).or_insert(0.);
+            if (*u - target).abs() < 0.004 {
+                *u = target;
+            } else {
+                *u += (target - *u) * ease;
+                unfolding = true;
+            }
+        }
+        self.unfold.retain(|id, _| threads.iter().any(|t| &t.id == id));
+        // tags the pointer just left stay open a moment, then fold
+        if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) {
+            unfolding = true;
+        }
+        self.hover_left.retain(|_, t| t.elapsed() < FOLD_DELAY * 4);
+        if unfolding {
+            window.request_animation_frame();
+        }
         let owner: AnyView = cx.entity().into();
         let mut cards = vec![];
         if !jmw {
@@ -3307,11 +3649,12 @@ impl Render for NotePage {
                 let Some(th) = threads.iter().find(|t| t.id == slot.id).cloned() else { continue };
                 let card = self.card(&th, slot.side, cx);
                 let left = if slot.side == Side::Left { px(0.) } else { px(m.right_left()) };
+                let (dx, dy) = th.tag_offset;
                 cards.push(
                     div()
                         .absolute()
-                        .top(slot.top - px(3.))
-                        .left(left)
+                        .top(slot.top - px(3.) + px(dy))
+                        .left(left + px(dx))
                         .w(px(self.m.margin))
                         .child(margin::measured(slot.id.clone(), card, self.heights.clone(), owner.clone()))
                         .into_any_element(),
@@ -3356,7 +3699,8 @@ impl Render for NotePage {
                 let (a, b) = self.thread_ends(s, rects, m, cx);
                 alive.insert(s.id.clone());
                 let rope = self.ropes.entry(s.id.clone()).or_insert_with(|| Rope::new(a, b));
-                let animate = rope.moving;
+                let dragging = self.drag.as_ref().is_some_and(|d| d.id == s.id && d.moved);
+                let animate = rope.moving || dragging;
                 rope.set_ends(a, b, animate);
                 if th.status == ThreadStatus::Resolved && !rope.is_tied() && !rope.moving {
                     rope.tie();
@@ -3366,16 +3710,16 @@ impl Render for NotePage {
                 }
                 let since = self.tying.get(&s.id).map(|at| anim_since(*at, now));
                 let knot = (th.status == ThreadStatus::Resolved).then(|| knot_scale(since.unwrap_or(10.) - 0.34));
-                // A thread is quiet until you look at it: faint at rest, stronger under the
-                // pointer, full strength while its tag is open, and while it is being tied.
+                // A thread is quiet until you look at it: faint at rest, stronger while its
+                // tag unfolds under the pointer, full strength while it is open, and while it
+                // is being tied off.
+                let unfolded = self.unfold.get(&s.id).copied().unwrap_or(0.);
                 let opacity = if th.status == ThreadStatus::Resolved {
                     tag_fade(since)
                 } else if self.active.as_deref() == Some(s.id.as_str()) {
                     1.
-                } else if self.hovered.as_deref() == Some(s.id.as_str()) {
-                    0.6
                 } else {
-                    0.26
+                    0.22 + 0.4 * unfolded
                 };
                 ropes.push((rope.clone(), opacity, knot, color_of(&th.mind_name)));
                 holes.push((a, opacity));
@@ -3549,6 +3893,16 @@ impl Render for NotePage {
             .flex()
             .flex_row()
             .bg(p.cloth)
+            .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                let Some(start) = this.drag.as_ref().map(|d| d.start) else { return };
+                if ev.dragging() {
+                    this.drag_tag_by(ev.position - start, cx);
+                } else {
+                    // the button came up outside the window
+                    this.end_tag_drag(cx);
+                }
+            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.end_tag_drag(cx)))
             .child(
                 div()
                     .relative()
@@ -3708,18 +4062,20 @@ mod tests {
         for w in [410., 520., 600., 690., 720., 800., 868., 900., 1010., 1100., 1320., 1600., 2400.] {
             let m = Metrics::for_width(w);
             let usable = (w - 48f32).max(0.);
-            if usable >= 300. + 40. + 170. {
+            if usable >= 300. + 36. + 200. {
                 assert!(m.page() <= usable + 0.01, "width {w}: page {} > {usable}", m.page());
             }
-            assert!(m.column >= 300. && m.column <= 560., "width {w}: column {}", m.column);
-            assert!(m.margin >= 170. && m.margin <= 268., "width {w}: margin {}", m.margin);
+            assert!(m.column >= 300. && m.column <= 760., "width {w}: column {}", m.column);
+            assert!(m.margin >= 200. && m.margin <= 280., "width {w}: margin {}", m.margin);
             assert!((m.right_left() - (m.column_left() + m.column + m.gap)).abs() < 0.01);
         }
         // Wide: a margin on each side, as before.
         let wide = Metrics::for_width(1320.);
         assert!(wide.both);
-        assert_eq!(wide.margin, 268.);
-        assert_eq!(wide.column_left(), 268. + 40.);
+        assert!(wide.column > 600., "a laptop window gives the words more than 600 px: {}", wide.column);
+        assert_eq!(wide.column_left(), wide.margin + wide.gap);
+        // A big screen: the column stops at a readable width.
+        assert_eq!(Metrics::for_width(2400.).column, 760.);
         // Narrow, or the chat open on a laptop-sized window: one margin, on the right.
         let narrow = Metrics::for_width(1100. - CHAT_WIDTH);
         assert!(!narrow.both);

@@ -139,22 +139,26 @@ pub(crate) fn short_title(text: &str, max: usize) -> String {
 
 /// `INKLING_SLOWMO=<factor>` slows every thread animation down, for screenshots and the
 /// walkthrough video. 1 is real time.
-/// How wide an unfolded tag is and which way it opens, from the room on the paper either
-/// side of its tab. It opens away from the words (right from a right tab, left from a left
-/// one). A few pixels short on that side, it narrows instead: a left tab hangs out past the
-/// gutter, so its margin is always a little short of a full tag, and opening the other
-/// way would lay it across your words. Only with no room at all does it open the other way.
-fn panel_fit(right: bool, width: f32, room_left: f32, room_right: f32) -> (f32, bool) {
-    let away = if right { room_right } else { room_left };
-    if away < width && away >= PANEL_MIN - 12. {
-        return (away, right);
-    }
-    if right && room_right < width && room_left > room_right {
-        (width, false)
-    } else if !right && room_left < width && room_right > room_left {
-        (width, true)
-    } else {
+/// The narrowest an unfolded tag gets when its side is short of room; its words wrap
+/// taller instead.
+const PANEL_FLOOR: f32 = 160.;
+
+/// How wide an unfolded tag is and which way it opens. A thread never covers your words
+/// unless you dragged its tag onto them (the owner's rule), so a tag opens outward, away
+/// from the column: right from a right tab, left from a left one. Short of room, in this
+/// order: it hangs over the sheet's edge onto the cloth, as far as 8 px inside the window
+/// (`out` is the room to there, paper included); then it narrows, down to
+/// [`PANEL_FLOOR`]. Only a tag you dragged opens back across the words (`back`, the room
+/// on the paper that way), and only when not even the narrowest fits outward.
+fn panel_fit(right: bool, width: f32, out: f32, back: f32, dragged: bool) -> (f32, bool) {
+    if out >= width {
         (width, right)
+    } else if out >= PANEL_FLOOR {
+        (out, right)
+    } else if dragged && back > out {
+        (width.min(back).max(PANEL_FLOOR), !right)
+    } else {
+        (PANEL_FLOOR, right)
     }
 }
 
@@ -520,6 +524,10 @@ pub struct NotePage {
     tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     /// The sheet's bounds in the window at the last paint: tags are kept on the paper.
     sheet_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// Each unfolded tag's bounds at the last paint, and the column of your words, for
+    /// the dump: no tag you have not dragged may cover the column.
+    panel_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    column_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
     _subs: Vec<Subscription>,
@@ -610,6 +618,8 @@ impl NotePage {
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
             tab_bounds: Rc::new(RefCell::new(HashMap::new())),
             sheet_bounds: Rc::new(Cell::new(None)),
+            panel_bounds: Rc::new(RefCell::new(HashMap::new())),
+            column_bounds: Rc::new(Cell::new(None)),
             viewport: size(px(1200.), px(800.)),
             last_frame: None,
             _subs: subs,
@@ -2573,6 +2583,19 @@ impl NotePage {
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
         state["paper"] = json!([l, t, r, b]);
+        // each unfolded tag where it was drawn, and the column of your words from the header
+        // row to the last line, in the window: no tag you have not dragged may cover it
+        state["panels"] = Value::Object(
+            self.panel_bounds
+                .borrow()
+                .iter()
+                .map(|(id, b)| (short(id), json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()])))
+                .collect(),
+        );
+        if let (Some(c), Some(s)) = (self.column_bounds.get(), self.sheet_bounds.get()) {
+            let top = s.origin.y.as_f32() + 50.;
+            state["column"] = json!([c.origin.x.as_f32(), top, c.size.width.as_f32(), (c.origin.y + c.size.height).as_f32() - top]);
+        }
         // threads whose question or reply got no answer, with why (Try again in the tag)
         state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         state["tabs"] = Value::Object(
@@ -3322,16 +3345,18 @@ impl NotePage {
         let e = unfold.max(0.);
         let ec = e.min(1.);
 
-        // A tag opens away from the words, unless that runs off the paper: then it opens
-        // the other way, and it slides up when it would hang below the paper's edge.
+        // A tag opens away from the words, never across them unless you dragged it there
+        // (see `panel_fit`), and it slides up when it would hang below the paper's edge.
         let mut open_right = right;
         let mut lift = px(0.);
         if let Some(b) = self.tab_bounds.borrow().get(&id).copied() {
-            // the paper is the room (the chat sits beside the sheet, so it is never room)
             let (left, top, right_edge, bottom) = self.paper();
-            let room_right = (px(right_edge - 8.) - b.origin.x).as_f32();
-            let room_left = (b.origin.x + b.size.width - px(left + 8.)).as_f32();
-            (width, open_right) = panel_fit(right, width, room_left, room_right);
+            let (tab_l, tab_r) = (b.origin.x.as_f32(), (b.origin.x + b.size.width).as_f32());
+            // outward, the paper and then the cloth up to 8 px inside the window; back, the
+            // paper on the words' side
+            let window_w = self.viewport.width.as_f32();
+            let (out, back) = if right { (window_w - 8. - tab_l, tab_r - (left + 8.)) } else { (tab_r - 8., right_edge - 8. - tab_l) };
+            (width, open_right) = panel_fit(right, width, out, back, thread.tag_offset != (0., 0.));
             let below = px(bottom - 8.) - b.origin.y;
             if natural > below {
                 lift = (natural - below).min((b.origin.y - px(top + 4.)).max(px(0.)));
@@ -3573,6 +3598,11 @@ impl NotePage {
                         this.toggle_tag(&id_open, window, cx);
                     }
                 }))
+                // where it was drawn, for the dump
+                .child({
+                    let (panels, id) = (self.panel_bounds.clone(), id.clone());
+                    canvas(move |b, _, _| panels.borrow_mut().insert(id, b), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+                })
                 // the stitched edge grows with the tag
                 .child(
                     div()
@@ -4440,6 +4470,9 @@ impl Render for NotePage {
         }
         self.unfold.retain(|id, _| threads.iter().any(|t| &t.id == id));
         self.unfold_v.retain(|id, _| threads.iter().any(|t| &t.id == id));
+        // tabs and panels drawn this frame put their bounds back as they paint
+        self.tab_bounds.borrow_mut().retain(|id, _| !jmw && slots.iter().any(|s| &s.id == id));
+        self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.unfold.get(id).is_some_and(|u| *u > 0.01));
         // a pointer resting on a tag, or one that just left, changes it without an event
         if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) || self.hover_at.values().any(|t| t.elapsed() < HOVER_REST) {
             unfolding = true;
@@ -4645,7 +4678,10 @@ impl Render for NotePage {
             .relative()
             .w(px(m.page()))
             .child(tethers)
-            .child(div().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::NOTE).child(self.editor.clone()))
+            .child(div().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::NOTE).child(self.editor.clone()).child({
+                let column = self.column_bounds.clone();
+                canvas(move |b, _, _| column.set(Some(b)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+            }))
             .children(cards)
             .children(marks)
             .children(toolbar)
@@ -4932,23 +4968,35 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
-    fn a_left_tag_opens_into_its_margin_not_across_the_words() {
-        // Wherever two margins fit, a left tab has its margin less the 24 px it hangs out,
-        // plus the sheet's padding less 8 px, to its left: 4 px short of a full tag.
-        for w in (900..=2400).map(|w| w as f32) {
-            let m = Metrics::for_width(w);
-            if !m.both {
-                continue;
+    fn no_tag_opens_across_the_words() {
+        // The owner's rule: a thread never covers your words unless you dragged its tag onto
+        // them. At every window width, with the chat open and closed, a right tab (either
+        // layout) and a left tab (two margins) open outward, clear of the column, at least
+        // PANEL_FLOOR wide and 8 px inside the window.
+        for window in (720..=1800).map(|w| w as f32) {
+            for chat in [false, true] {
+                let width = window - if chat { CHAT_WIDTH } else { 0. };
+                let m = Metrics::for_width(width - 2. * (SHEET_PAD + 14.));
+                let sheet_w = m.page() + 2. * SHEET_PAD;
+                let sheet_x = if sheet_w <= width - 16. { (width - sheet_w) / 2. } else { 12. };
+                let page_x = sheet_x + SHEET_PAD;
+                let (col_l, col_r) = (page_x + m.column_left(), page_x + m.column_left() + m.column);
+                let full = m.margin.max(PANEL_MIN);
+                let tab_l = page_x + m.right_left();
+                let (w, open_right) = panel_fit(true, full, window - 8. - tab_l, tab_l + TAB_W - (sheet_x + 8.), false);
+                assert!(open_right && tab_l >= col_r && tab_l + w <= window - 8. + 0.01 && w >= PANEL_FLOOR, "{window} px, chat {chat}: a right tag {w} wide, opens right: {open_right}");
+                if m.both {
+                    let tab_r = page_x + m.margin - LEFT_TAB_OUT;
+                    let (w, open_right) = panel_fit(false, full, tab_r - 8., sheet_x + sheet_w - 8. - (tab_r - TAB_W), false);
+                    assert!(!open_right && tab_r <= col_l && tab_r - w >= 8. - 0.01 && w >= PANEL_FLOOR, "{window} px, chat {chat}: a left tag {w} wide, opens right: {open_right}");
+                }
             }
-            let room_left = m.margin - LEFT_TAB_OUT + SHEET_PAD - 8.;
-            let room_right = m.page() + SHEET_PAD - 8. - (m.margin - LEFT_TAB_OUT - TAB_W);
-            let (width, open_right) = panel_fit(false, m.margin.max(PANEL_MIN), room_left, room_right);
-            assert!(!open_right && width <= room_left && width >= PANEL_MIN - 12., "width {w}: {width} wide, opens right: {open_right}");
         }
-        // a right tab with its margin and the sheet's padding opens right at full width
-        assert_eq!(panel_fit(true, 249., 600., 269.), (249., true));
-        // a tab dragged to the paper's edge, with no room on its side, opens the other way
-        assert_eq!(panel_fit(true, 249., 600., 60.), (249., false));
-        assert_eq!(panel_fit(false, 249., 40., 600.), (249., true));
+        // short of room outward it hangs over the sheet's edge before it narrows
+        assert_eq!(panel_fit(false, 249., 253., 600., false), (249., false));
+        assert_eq!(panel_fit(true, 249., 180., 600., false), (180., true));
+        // with no room outward, only a tag you dragged opens back over the words
+        assert_eq!(panel_fit(true, 249., 60., 600., true), (249., false));
+        assert_eq!(panel_fit(true, 249., 60., 600., false), (PANEL_FLOOR, true));
     }
 }

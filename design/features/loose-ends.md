@@ -329,6 +329,13 @@ Built as designed, on `feat-loose-ends`. What the build taught:
   (the window then gives it back to the note). Going to a thread therefore leaves the
   keyboard in the note until the note is laid out, scrolls, and hands the keyboard to the
   reply box on the next frame, once the tag is drawn.
+- **`settle` waits for a go.** In a background window (every scenario), the frames that lay
+  out a note, scroll and hand over the keyboard come a few hundred milliseconds apart, so
+  `NotePage::settled` counts a thread being gone to as not settled, and the scenarios
+  `settle` after Return instead of waiting on the clock.
+- **No screenshots in the scenarios.** A window the machine fails to capture failed runs
+  whose expects all passed (several agents capture at once); the screenshots are taken with
+  `scripts/dev shot` instead.
 - **The dump cannot read the page.** The page builds its dump while it is being updated,
   so `loose_ends::describe` takes the page's note as an argument instead of reading the
   page (a read there panics).

@@ -12,8 +12,13 @@ const EDGE_MARKS = /^[\s«»"“”„'‘’‹›`「」『』]+|[\s«»"“�
  * matches), because the app anchors the note by searching for it verbatim.
  */
 export function snapQuote(quote: string, source: string): string {
+  return findQuote(quote, source) ?? source;
+}
+
+/** Like `snapQuote`, but `null` when the quote is not in `source` at all. */
+export function findQuote(quote: string, source: string): string | null {
   const q = quote.replace(EDGE_MARKS, "");
-  if (!q) return source;
+  if (!q) return null;
   if (source.includes(q)) return q;
   // Looser matches (case, whitespace, curly quotes, dashes), mapped back onto
   // the source's own characters; then without trailing punctuation.
@@ -28,7 +33,7 @@ export function snapQuote(quote: string, source: string): string {
     const b = a && looseFind(source, pieces[pieces.length - 1], a[1]);
     if (a && b) return source.slice(a[0], b[1]);
   }
-  return source;
+  return null;
 }
 
 function foldChar(ch: string): string {

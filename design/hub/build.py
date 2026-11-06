@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 02:04 IST"
+UPDATED = "7 Nov 2026, 02:55 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -27,27 +27,25 @@ WAITING = [
 ]
 
 RUNNING = [
-    ("Nine features from the manifesto, being built",
-     "Seven agents, one per feature or pair: Answer in the note with Write it in; Let it stand with Turn it over; Threads of your own; "
-     "Show its working; Loose ends; Threads between notes; Read it through. Each writes a short design, then builds straight away on its "
-     "own branch. To go faster, the two pairs and Threads between notes each get a second builder once their design is written, so ten "
-     "agents build at once. I merge them in whatever order they finish, each one catching up with master first. Rough ETA: built by about "
-     "03:45, Threads between notes by about 04:00. Keep the old words is skipped for now."),
-    ("The film, re-cut",
-     "A much quieter score: one calm piece under the whole film, almost no sound effects, no sewing machine or ticking. "
-     "The running plan is replaced by a technical note, in the film and in the app's Start here guide, with fresh real answers from the model. "
-     "The last chapter ends on Initial. It renders at 720p only, for the phone. Rough ETA 02:45. A second cut that shows the new features "
-     "follows: it gets ready from their designs while they are built, then re-renders only the chapters that change. Rough ETA 04:30."),
-    ("UI polish, every screen and flow",
-     "A fresh agent on Opus at max effort, looking for the small things that are easy to miss: pixel alignment, states, "
-     "wording, empty and error states, keyboard flows, light and dark, four window sizes."),
-    ("Code health, now",
-     "An agent on Fable at max effort is going through the code for performance, bugs, code smells, complexity and implicit "
-     "state machines, and fixing what it finds in place. It splits no files while the features are being built; that waits for a pass of its own. "
-     "Rough ETA 03:30."),
+    ("The rest of the new features",
+     "Being built, each on its own branch: Answer in the note, Write it in, Turn it over, Loose ends, Read it through, and Threads between notes "
+     "(one agent on the brain and data, one on the page). Threads of your own is built and catching up with master before it merges."),
+    ("Real sources from the web",
+     "Your call: Inkling looks things up by default. A correction shows a source only if its search found the page and the quoted words are on it; "
+     "otherwise it shows the arithmetic or your words, or asks instead. A switch in Settings turns it off."),
+    ("Code health",
+     "The drag jitter is found and fixed on its branch: the page never heard the pointer while you held a tag. It is catching up with master, with a steadier side for open tags while you drag."),
+    ("UI polish, continuing", "More small fixes in every screen; the first twenty are on master."),
+    ("An icon that follows the system", "Waiting for Xcode: a layered Initial icon in light, dark, tinted and clear."),
+    ("The film, second cut", "Once the features land, they go into the film, re-rendering only the chapters that change."),
 ]
 
 DONE = [
+    ("The film, first technical cut", "One note about VM cold starts from start to finish, real model words, a quiet score at -20 LUFS (the old one was -16 with constant clicks), and it ends on Initial. On the film's page."),
+    ("Show its working", "A correction only reaches the page with a check you can do yourself: the sum laid out from your own numbers, or your own words quoted. A check that does not hold up becomes a question."),
+    ("Let it stand", "Dismiss becomes Let stand, with an optional reason; no mind raises that point again, in any words."),
+    ("Threads never cover your words", "An open tag hangs outward, over the cloth if it must, or gets narrower; only a tag you dragged onto the text may cover it."),
+    ("Small things", "The sidebar slides in and out; the Dock icon follows light and dark while Inkling is open; Start here is one engineer's note now; the Mac menus are complete."),
     ("The critique's five calls", "Three changed: the toolbar's current key is filled in its own colour, a dragged tag stays on the paper, and Settings › Minds shows each mind's colour. Settings keeps its Mac-style buttons, and ⌘K keeps its light dim."),
     ("A fresh UI critique", "33 problems found and 25 fixed. The page scrolls under a band of cloth, so nothing runs under the window's controls; a reply wraps inside its tag; Marks only sets its ? like a footnote; the gutter's marks stay on the paper; long mind names end in an ellipsis; and madder is only ever Inkling's colour. Of the other 8, three are by design and five are small calls for you, under Waiting on you."),
     ("Toasts and keyboard focus", "One stack of stitched labels at the bottom, ochre for problems with a close button, Undo inside; hovering pauses it. A dashed focus ring in your thread colour and a Tab order through everything."),

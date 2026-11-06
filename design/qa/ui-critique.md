@@ -24,8 +24,8 @@ Low: polish.
 
 | | Count |
 |---|---|
-| Findings | 32 |
-| Fixed | 24 |
+| Findings | 33 |
+| Fixed | 25 |
 | Left, with the reason | 8 |
 | High | 2, both fixed |
 
@@ -69,19 +69,20 @@ Ordered by what a user would notice first.
 | 22 | Settings › New mind | How it thinks set its words 2 px left of the fields above it. | Low | They line up. | mind-fields-aligned |
 | 23 | Start here | Keys written ⌘⇧ (⌘⇧C, ⌘⇧.), where the sidebar, Settings and macOS write ⇧⌘. | Low | ⇧⌘ throughout. | guide-key-order |
 | 24 | Toasts | A stopped brain read "Inkling's brain isn't running (the brain stopped (exit status: 3))". | Low | "Inkling's brain stopped (exit status: 3)." t04 checks the words. | brain-stopped |
+| 25 | Open tag | "Write back…" sat about 18 px inside its box, twice the inset of the ask box and the chat, because the field kept its own padding inside the box's. Found in review, after the pass. | Low | The box's padding is the only inset, as in the other two. | reply-box |
 
 ## Left
 
 | # | Surface | What is not right | Severity | Why it was left |
 |---|---|---|---|---|
-| 25 | Buttons | Settings' buttons are rounded rectangles (New mind, Edit, Check again); the page's dialogs use pills (Save, Export…). | Low | Settings follows macOS on purpose (the design record, Settings). One family for both is a call for the owner. |
-| 26 | Selection toolbar | The current block is shown filled in ink for T, H1 to H3 and the lists, and outlined in its thread for Note, Warning, Tip and Code. | Low | Filling a coloured key would put a block of colour in the menu. It reads as two kinds of key; a call for the owner. |
-| 27 | ⌘K | Its backdrop is a quarter as dark as Export's and the enlarged sketch's. | Low | It reads as deliberate: a quick switcher, as Spotlight dims nothing. |
-| 28 | Tags | A tag dragged to the window's edge hangs over the sheet's edge and the cloth. | Low | "Tags drag anywhere" is the owner's decision; the drag keeps them inside the window and below the controls. |
-| 29 | Note | Tab in a plain paragraph makes it a bullet. | Low | The note keeps Tab for its lists by design; ⌃Tab leaves the note. |
-| 30 | Open tag | Its top row starts 14 px right of its words, to clear the loop the thread is tied to. | Low | By design: the loop stays where the thread ties on. |
-| 31 | Callouts | A callout's stitched edge is heavier than a tag's or a toast's. | Low | The sewn blocks are the owner's decision, sized from the explorations board; a patch is meant to be bolder than a label. |
-| 32 | Settings › Minds | Minds are listed without their thread colour, which the page uses to tell minds apart. | Low | A small feature rather than polish. |
+| 26 | Buttons | Settings' buttons are rounded rectangles (New mind, Edit, Check again); the page's dialogs use pills (Save, Export…). | Low | Settings follows macOS on purpose (the design record, Settings). One family for both is a call for the owner. |
+| 27 | Selection toolbar | The current block is shown filled in ink for T, H1 to H3 and the lists, and outlined in its thread for Note, Warning, Tip and Code. | Low | Filling a coloured key would put a block of colour in the menu. It reads as two kinds of key; a call for the owner. |
+| 28 | ⌘K | Its backdrop is a quarter as dark as Export's and the enlarged sketch's. | Low | It reads as deliberate: a quick switcher, as Spotlight dims nothing. |
+| 29 | Tags | A tag dragged to the window's edge hangs over the sheet's edge and the cloth. | Low | "Tags drag anywhere" is the owner's decision; the drag keeps them inside the window and below the controls. |
+| 30 | Note | Tab in a plain paragraph makes it a bullet. | Low | The note keeps Tab for its lists by design; ⌃Tab leaves the note. |
+| 31 | Open tag | Its top row starts 14 px right of its words, to clear the loop the thread is tied to. | Low | By design: the loop stays where the thread ties on. |
+| 32 | Callouts | A callout's stitched edge is heavier than a tag's or a toast's. | Low | The sewn blocks are the owner's decision, sized from the explorations board; a patch is meant to be bolder than a label. |
+| 33 | Settings › Minds | Minds are listed without their thread colour, which the page uses to tell minds apart. | Low | A small feature rather than polish. |
 
 ## How it was checked
 

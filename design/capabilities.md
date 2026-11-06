@@ -41,10 +41,10 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |
 | Tie off | Resolve: the knot is tied and joins the border at the top of the page |
-| Snip | Dismiss (⌘⇧⌫); Undo for a few seconds, or ⌥⌘Z |
+| Snip | Dismiss (⇧⌘⌫); Undo for a few seconds, or ⌥⌘Z |
 | Reopen, Copy, Make a note | from an open tag; Make a note turns a thread into a new note |
 | Jump between threads | ⌥⌘↓ and ⌥⌘↑ |
-| Hide threads | ⌘⇧. leaves just your words |
+| Hide threads | ⇧⌘. leaves just your words |
 | Where threads go | both margins, the right margin, or marks only (a ? in the text, × for a correction, that opens on click) |
 | How many are open | "N loose threads" above the title |
 
@@ -74,8 +74,8 @@ Update this list when a feature lands or goes; the key is the default binding.
 |---|---|
 | Notes and folders | the sidebar (⌘\\): new note, new folder, folders fold; a dot on notes with open threads |
 | Find or start a note | ⌘K |
-| Copy a note | ⌘⇧C |
-| Export | ⌘⇧E: Markdown, HTML or Word, with the threads or without; checklists, callouts and code come along (`- [ ]`, `> [!note]`, fenced code in Markdown) |
+| Copy a note | ⇧⌘C |
+| Export | ⇧⌘E: Markdown, HTML or Word, with the threads or without; checklists, callouts and code come along (`- [ ]`, `> [!note]`, fenced code in Markdown) |
 | Import from Obsidian | File > Import from Obsidian…: a vault's notes come in with their folders, as Obsidian shows them (tasks as checklists, callouts as callouts, code fences as code); their words are left unread, so only what you write afterwards is read |
 | Welcome guide | Help > Welcome Guide |
 

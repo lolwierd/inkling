@@ -149,7 +149,7 @@ These run from the most direct conflict to the mildest.
    note could open with your quoted words and the thread hanging in its margin, above an empty
    page.
 
-2. **Copy and export carry the threads unless you stop them.** Copy as Markdown (⌘⇧C) always
+2. **Copy and export carry the threads unless you stop them.** Copy as Markdown (⇧⌘C) always
    includes every thread, even while threads are hidden, and the export dialog opens with
    threads switched on. Belief 4 promises your page exactly as you left it when the margin is
    hidden, and a copy or an export is that page leaving the notebook. `directions/DESIGN.md`

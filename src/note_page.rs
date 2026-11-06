@@ -3343,13 +3343,14 @@ impl NotePage {
                         .items_center()
                         .gap(px(6.))
                         .mt(px(2.))
-                        .px(px(8.))
+                        .px(px(10.))
                         .py(px(4.))
                         .rounded(px(6.))
                         .bg(p.paper)
                         .border_1()
                         .border_color(p.rule)
-                        .child(div().flex_1().text_size(px(ts::BODY)).child(Input::new(&input).appearance(false)))
+                        // the box's padding is the only inset, as in the ask box and the chat
+                        .child(div().flex_1().child(Input::new(&input).appearance(false).px_0().text_size(px(ts::BODY))))
                         .child(
                             div()
                                 .id(SharedString::from(format!("send-{id_send}")))

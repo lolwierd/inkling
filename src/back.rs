@@ -682,7 +682,7 @@ pub fn fold_shadow(at: f32, width: f32, p: &Palette) -> AnyElement {
 
 /// The back of the page's note, in its column: the header (what this is, Turn back), the
 /// note's title in graphite, because this is the record of the note and not the note, and
-/// every entry. `left`, `column` and `page` are the page's geometry.
+/// every entry. `left` and `column` place the column on the page, `width` is the page's.
 pub fn view(page: &mut NotePage, own: &str, left: f32, column: f32, width: f32, cx: &mut Context<NotePage>) -> AnyElement {
     let t = Theme::get(cx).clone();
     let p = t.p;

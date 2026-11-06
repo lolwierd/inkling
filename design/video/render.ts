@@ -193,17 +193,18 @@ async function frames() {
   console.log(`frames: ${todo.length} chunks in ${((Date.now() - t0) / 1000).toFixed(1)} s with ${workers} workers`);
 }
 
-/** The page's film: the chunks joined (stream copy), with the mix, two-pass x264 at about
- *  620 kbit/s and AAC at 96 kbit/s, under 20 MiB. */
+/** The page's film: the chunks joined (stream copy), with the mix, two-pass x264 and AAC at
+ *  96 kbit/s, under 20 MB. The artifact host takes 20,000,000 bytes a file (decimal), not
+ *  20 MiB: a 20.2 MB file was refused. */
 async function page() {
   const segDir = join(scratch, "segments");
   const joined = join(scratch, "joined.mp4");
   await run(["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(segDir, "list.txt"), "-c", "copy", joined]);
   const outFile = join(HERE, "page", "film.mp4"), log = join(scratch, "x264-2pass");
-  // the bitrate that fills about 19.4 MiB with the video, after 96 kbit/s of audio
+  // the bitrate that fills about 19.2 MB (decimal) with the video, after 96 kbit/s of audio
   const probe = Bun.spawn(["/opt/homebrew/bin/ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", joined], { stdout: "pipe" });
   const dur = +(await new Response(probe.stdout).text()).trim();
-  const kbps = opt("kbps") ?? String(Math.floor((19.4 * 8 * 1048.576) / dur - 96));
+  const kbps = opt("kbps") ?? String(Math.floor((19.2 * 8 * 1000) / dur - 96));
   console.log(`page: ${dur.toFixed(1)} s at ${kbps} kbit/s video + 96 kbit/s audio`);
   const v = ["-c:v", "libx264", "-preset", "slow", "-b:v", kbps + "k", "-maxrate", String(Math.round(+kbps * 2)) + "k", "-bufsize", String(Math.round(+kbps * 4)) + "k", "-profile:v", "high", "-pix_fmt", "yuv420p",
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-passlogfile", log];
@@ -213,7 +214,7 @@ async function page() {
   await run(["-loglevel", "error", "-y", "-i", joined, "-i", join(HERE, "audio", "mix.wav"), "-map", "0:v", "-map", "1:a", ...v, "-pass", "2",
     "-af", `afade=t=out:st=${(dur - 0.6).toFixed(3)}:d=0.6`, "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-shortest", "-movflags", "+faststart", outFile]);
   const size = statSync(outFile).size;
-  console.log(`→ ${outFile}: ${(size / 1048576).toFixed(2)} MiB${size >= 20 * 1048576 ? " (over 20 MiB: lower --kbps)" : ""}`);
+  console.log(`→ ${outFile}: ${(size / 1e6).toFixed(2)} MB${size >= 20e6 ? " (over the host's 20 MB: lower --kbps)" : ""}`);
 }
 
 async function audio() {

@@ -351,6 +351,9 @@ pub struct NotePage {
     chat_input: Entity<InputState>,
     chat_pending: Option<(String, String)>,
     pub just_my_words: bool,
+    /// How present the window's controls are, 0..1: the app fades them while you type
+    /// and brings them back when the pointer moves. The page's header row follows it.
+    pub chrome: Rc<std::cell::Cell<f32>>,
     enlarged: Option<String>,
     error: Option<(String, std::time::Instant)>,
     marks_open: HashSet<String>,
@@ -456,6 +459,7 @@ impl NotePage {
             numbers: HashMap::new(),
             last_dismissed: None,
             last_typed: None,
+            chrome: Rc::new(std::cell::Cell::new(1.)),
             arrived: HashMap::new(),
             rechecks: HashMap::new(),
             rechecking: HashSet::new(),
@@ -751,6 +755,10 @@ impl NotePage {
         for (id, before) in due {
             self.recheck(&id, before, cx);
         }
+    }
+
+    pub fn last_typed(&self) -> Option<std::time::Instant> {
+        self.last_typed
     }
 
     fn typing_recently(&self) -> bool {
@@ -1076,7 +1084,14 @@ impl NotePage {
                 "bad_output" => "The answer came back in a shape Inkling can't use. Try again.".to_string(),
                 "timeout" => "The model took too long to answer, so Inkling stopped waiting.".to_string(),
                 _ => {
-                    let m: String = message.chars().take(140).collect();
+                    // short, but cut between words, and marked as cut
+                    let mut m: String = message.chars().take(140).collect();
+                    if message.chars().count() > 140 {
+                        if let Some(i) = m.rfind(' ') {
+                            m.truncate(i);
+                        }
+                        m.push('\u{2026}');
+                    }
                     format!("Couldn't reach the model: {m}")
                 }
             }
@@ -2165,6 +2180,8 @@ impl NotePage {
             .items_center()
             .gap(px(16.))
             .h(px(24.))
+            // the controls step back while you write, like the window's own
+            .opacity(self.chrome.get())
             .font_family(SANS)
             .when(!jmw, |d| {
                 d.child(
@@ -3920,7 +3937,8 @@ impl Render for NotePage {
                                 div()
                                     .w_full()
                                     .flex()
-                                    .pt(px(28.))
+                                    // the traffic lights, sidebar toggle and Chat sit on the cloth above
+                                    .pt(px(44.))
                                     .pb(px(28.))
                                     // Centred while it fits; past that keep the column in view.
                                     .map(|d| if fits { d.justify_center() } else { d.justify_start().pl(px(12.)) })

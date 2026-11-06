@@ -422,7 +422,13 @@ impl Launch {
         let bun = || self.bun.clone().ok_or_else(|| anyhow!(NO_BUN));
         let compiled = self.dir.join("dist/inkling-brain");
         let mut cmd = if let Some(entry) = &self.entry {
-            let path = self.dir.join(entry);
+            // relative to the brain folder, or else to where Inkling was started from
+            let mut path = self.dir.join(entry);
+            if !path.is_file() {
+                if let Ok(cwd) = std::env::current_dir() {
+                    path = cwd.join(entry);
+                }
+            }
             if !path.is_file() {
                 bail!("INKLING_BRAIN_ENTRY is {}, which is not a file", path.display());
             }

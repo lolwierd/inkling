@@ -146,6 +146,10 @@ pub struct AppView {
     partial: String,
     blots: Vec<Blot>,
     next_blot: Instant,
+    /// Shared with the page: how present the window's controls are (0..1).
+    chrome: std::rc::Rc<std::cell::Cell<f32>>,
+    last_pointer: Option<Instant>,
+    chrome_frame: Option<Instant>,
     blot_seed: u64,
     // One subscription per overlay, replaced when it opens again, so reopening
     // them all day does not pile up dead subscriptions.
@@ -309,6 +313,7 @@ impl AppView {
                 .unwrap_or_else(|| Note::new("", store.settings.default_mode, None))
         };
         let page = cx.new(|cx| NotePage::new(note, window, cx));
+        let chrome = page.read(cx).chrome.clone();
         let mut subs = vec![];
         subs.push(cx.subscribe_in(&page, window, Self::on_page_event));
         subs.push(cx.observe_window_appearance(window, |_, window, cx| {
@@ -380,6 +385,9 @@ impl AppView {
             focus: cx.focus_handle(),
             page,
             sidebar_open: false,
+            chrome,
+            last_pointer: None,
+            chrome_frame: None,
             palette: None,
             settings: None,
             export: None,
@@ -564,6 +572,11 @@ impl AppView {
     }
 
     fn on_pointer(&mut self, ev: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        // moving the pointer brings back the controls that typing faded
+        self.last_pointer = Some(Instant::now());
+        if self.chrome.get() < 1. {
+            cx.notify();
+        }
         if !cx.global::<Store>().settings.ink_from_pointer || ev.pressed_button.is_some() {
             return;
         }
@@ -839,69 +852,94 @@ impl AppView {
 
     // ----- rendering ---------------------------------------------------------
 
-    fn top_bar(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    /// The window has no bar. The traffic lights, the sidebar toggle and Chat sit on the
+    /// cloth above the sheet, over a strip that drags the window. Typing fades them;
+    /// moving the pointer brings them back.
+    fn chrome_layer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
-        let chat_open = self.page.read(cx).chat_open;
-        let jmw = self.page.read(cx).just_my_words;
+        // ("Show threads" lives in the page's own header row, not up here)
+        let (typed, chat_open) = {
+            let page = self.page.read(cx);
+            (page.last_typed(), page.chat_open)
+        };
+        let calm = typed.is_some_and(|k| self.last_pointer.is_none_or(|m| m < k)) && !self.sidebar_open;
+        let target = if calm { 0. } else { 1. };
+        let now = Instant::now();
+        let dt = self.chrome_frame.map(|l| (now - l).as_secs_f32()).unwrap_or(1. / 60.).clamp(1. / 240., 1. / 30.);
+        self.chrome_frame = Some(now);
+        let a = self.chrome.get();
+        // out slowly, so a first keystroke does not flash the corners; back quickly
+        let rate = if target < a { 5. } else { 14. };
+        let mut next = a + (target - a) * (1. - (-dt * rate).exp());
+        if (next - target).abs() < 0.003 {
+            next = target;
+        } else {
+            window.request_animation_frame();
+        }
+        self.chrome.set(next);
+
         div()
-            .h(px(46.))
-            .flex_none()
-            .flex()
-            .flex_row()
-            .items_center()
-            .pl(px(84.))
-            .pr(px(14.))
-            .gap(px(10.))
+            .absolute()
+            .top_0()
+            .left_0()
+            .w_full()
+            .h(px(40.))
             .window_control_area(WindowControlArea::Drag)
-            .child(
-                div()
-                    .id("toggle-sidebar")
-                    .p(px(4.))
-                    .rounded(px(5.))
-                    .cursor_pointer()
-                    .hover(move |s| s.bg(p.wash))
-                    .child(icon("menu", 15., p.graphite))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.sidebar_open = !this.sidebar_open;
-                        cx.notify();
-                    })),
-            )
-            .child(ui::wordmark(&t, 19.))
-            .child(div().flex_1())
-            .when(jmw, |d| {
+            .opacity(next)
+            .when(next > 0.02, |d| {
                 d.child(
-                    ui::ghost_button("show-inkling", "Show threads ⌘⇧.", &t).on_click(cx.listener(|this, _, _, cx| {
-                        this.page.update(cx, |p, cx| {
-                            p.just_my_words = false;
+                    div()
+                        .id("toggle-sidebar")
+                        .absolute()
+                        .top(px(10.))
+                        .left(px(76.))
+                        .p(px(4.))
+                        .rounded(px(5.))
+                        .cursor_pointer()
+                        .hover(move |s| s.bg(p.wash))
+                        .child(icon("menu", 14., p.graphite))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.sidebar_open = !this.sidebar_open;
                             cx.notify();
-                        });
-                        cx.notify();
-                    })),
+                        })),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .top(px(9.))
+                        .right(px(14.))
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        // an open chat has its own close button in the same corner
+                        .when(!chat_open, |d| {
+                            d.child(
+                                div()
+                                    .id("chat-button")
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(5.))
+                                    .px(px(10.))
+                                    .py(px(3.))
+                                    .rounded_full()
+                                    .border_1()
+                                    .border_color(p.rule)
+                                    .bg(p.paper.opacity(0.6))
+                                    .text_size(px(11.5))
+                                    .text_color(p.ink)
+                                    .cursor_pointer()
+                                    .hover(move |s| s.border_color(p.faint))
+                                    .child(ui::small_dot(t.voice_ink, 5.))
+                                    .child("Chat")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.page.update(cx, |p, cx| p.toggle_chat(window, cx));
+                                        cx.notify();
+                                    })),
+                            )
+                        }),
                 )
             })
-            .child(
-                div()
-                    .id("chat-button")
-                    .flex()
-                    .items_center()
-                    .gap(px(5.))
-                    .px(px(10.))
-                    .py(px(4.))
-                    .rounded_full()
-                    .border_1()
-                    .border_color(if chat_open { p.ink } else { p.rule })
-                    .text_size(px(11.5))
-                    .text_color(p.ink)
-                    .cursor_pointer()
-                    .hover(move |s| s.border_color(p.faint))
-                    .child(ui::small_dot(t.voice_ink, 5.))
-                    .child("Chat")
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.page.update(cx, |p, cx| p.toggle_chat(window, cx));
-                        cx.notify();
-                    })),
-            )
             .into_any_element()
     }
 
@@ -1049,8 +1087,10 @@ impl AppView {
                             .h(px(46.))
                             .flex()
                             .items_center()
-                            .justify_end()
+                            .justify_between()
+                            .pl(px(86.))
                             .pr(px(12.))
+                            .child(ui::wordmark(&t, 18.))
                             .child(
                                 div()
                                     .id("sidebar-close")
@@ -1327,7 +1367,7 @@ impl AppView {
 }
 
 impl Render for AppView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
         let toast = self.toast.as_ref().filter(|(_, at)| at.elapsed().as_secs() < 3).map(|(m, _)| m.clone());
@@ -1366,8 +1406,8 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_mouse_move(cx.listener(Self::on_pointer))
-            .child(self.top_bar(cx))
             .child(div().flex_1().min_h(px(0.)).child(self.page.clone()))
+            .child(self.chrome_layer(window, cx))
             .children(sidebar)
             .children(self.palette.clone())
             .children(self.settings.clone())

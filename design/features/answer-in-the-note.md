@@ -5,7 +5,8 @@ Manifesto items 1 and 6 (`design/manifesto.md`, section 2), designed 7 Nov 2026 
 a thread whose knot points at your words in the note.
 
 **State (7 Nov 2026):** rebased onto master with Let it stand, Show its working, Loose ends,
-Turn it over, Threads between notes and Read it through; the shared part and Answer in the note are built on `feat-answer`
+Turn it over, Threads between notes, Read it through and web sources (`settle`, like every
+read, is a background check and never looks things up); the shared part and Answer in the note are built on `feat-answer`
 (scenarios t40 to t44; six live checks against the real model, below). Write it in
 is being built by a second agent on top of the shared part. Screenshots, light and dark:
 `design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, and the back of

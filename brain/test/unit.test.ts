@@ -452,6 +452,11 @@ describe("answers in the note", () => {
     expect(Object.keys(THOUGHT_WITH_ANSWERS_SCHEMA.properties)).toEqual([...without(Object.keys(THOUGHT_SCHEMA.properties)), "answers", "repeats"]);
   });
 
+  test("settle and a read are background checks: they never look things up on the web", async () => {
+    const { WEB_TASKS } = await import("../src/web.ts");
+    expect(WEB_TASKS.has("settle") || WEB_TASKS.has("read")).toBe(false);
+  });
+
   test("settle shows the thread, the paragraph, the words and what was turned down, and asks for strictness", () => {
     const p = settlePrompt(ctx([]), "add a kilometre every week", [{ role: "mind", text: "Starting from how far?" }, { role: "you", text: "Good point." }], target, "starts at 8 km", ["Sunday is the long run."]);
     expect(p).toContain("This margin thread is about «add a kilometre every week»:\nYou: Starting from how far?\nWriter: Good point.");

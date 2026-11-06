@@ -19,7 +19,7 @@ expect: d.toasts.length === 2 && d.toasts.every(t => t.live)
 expect: d.toasts[0].kind === "thread_dismissed" && d.toasts[1].kind === "problem" && d.error.includes("usage limit")
 expect: d.toasts[1].bottom <= d.toasts[0].top   // the newer label sits above the older, clear of it
 expect: d.toasts.every(t => Math.abs((t.left + t.right) / 2 - 500) < 2)   // centred under the page
-expect: Math.max(...d.toasts.map(t => t.bottom)) <= 700 - 24 + 0.5   // on the paper, 12 px above the sheet's bottom edge (which is 12 px above the window's)
+expect: Math.max(...d.toasts.map(t => t.bottom)) <= 700 - 24 + 1.5   // (plus the pixel the jiggle's nudge moves the window's bottom edge by)   // on the paper, 12 px above the sheet's bottom edge (which is 12 px above the window's)
 shot: toasts
 set: appearance=dark
 wait: 300

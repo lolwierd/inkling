@@ -72,11 +72,13 @@ impl NotePage {
         if is_active && !back && thread.status == ThreadStatus::Open {
             let disputing = self.disputes.contains(&thread.id);
             let id = thread.id.clone();
+            let who = if thread.mind_name.trim().is_empty() { "Inkling".to_string() } else { thread.mind_name.clone() };
             head = head.child(
                 ui::ghost_button(SharedString::from(format!("disagree-{key}")), "Disagree", &t)
                     .when(disputing, |d| d.text_color(p.ink))
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new("Say what\u{2019}s wrong with the working. If Inkling agrees, it takes the correction back.").build(window, cx)
+                    .tooltip(move |window, cx| {
+                        let tip = format!("Say what\u{2019}s wrong with the working. If {who} agrees, it takes the correction back.");
+                        gpui_kit::component::tooltip::Tooltip::new(tip).build(window, cx)
                     })
                     .keyed_as("tag:disagree", 4., color, cx, move |this, window, cx| this.disagree(&id, window, cx)),
             );

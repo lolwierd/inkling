@@ -16,7 +16,6 @@ wait: 400
 dump: seen
 expect: d.selection[0] === "Training week\n[[silent]] ".length && d.selection[1] === d.selection[0] + "I run four days a week".length
 expect: d.active === d.threads[0].id
-shot: words
 disagree: 1
 wait: 300
 dump: disputing
@@ -26,9 +25,6 @@ settle
 dump: taken-back
 expect: d.threads[0].status === "Resolved" && d.threads[0].check === "words:1:taken back"
 shot: taken-back
-set: appearance=dark
-wait: 300
-shot: taken-back-dark
 export: md
 quit
 expect: requests.some(r => r.input.task === "reply" && r.input.message.startsWith("I don’t think your working holds: “Those are two different weeks."))

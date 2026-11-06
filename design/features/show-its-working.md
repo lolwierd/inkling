@@ -69,7 +69,7 @@ faster. Which do you want to change: the pace or the goal?
   in the note").
 - `Disagree` (a quiet text button, only in the open tag) focuses the reply box with the
   placeholder "What doesn't hold?" Tooltip: "Say what's wrong with the working. If Inkling
-  agrees, it takes the correction back."
+  agrees, it takes the correction back." (with the thread's own mind in place of Inkling).
 
 A correction with your words:
 

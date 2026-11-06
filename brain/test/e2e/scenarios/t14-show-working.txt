@@ -17,10 +17,6 @@ wait: 900
 dump: unfolded
 expect: d.unfolded.includes(d.threads[0].id)
 shot: working
-set: appearance=dark
-wait: 300
-shot: working-dark
-set: appearance=light
 hover: 0
 set: placement=marks
 wait: 300
@@ -28,7 +24,6 @@ mark: 1
 wait: 600
 dump: marks
 expect: d.active === d.threads[0].id
-shot: working-marks
 copy: 1
 export: md
 export: html

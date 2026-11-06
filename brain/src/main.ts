@@ -17,6 +17,7 @@ import {
   relatePrompt,
   systemPrompt,
   sketchPrompt,
+  throughSystemPrompt,
   REPLY_SCHEMA,
   PROBE_SCHEMA,
   LEARN_SCHEMA,
@@ -171,6 +172,7 @@ function task(v: unknown): Task {
   if (!isObject(v)) badRequest("input is missing");
   switch (v.task) {
     case "read":
+      return { task: "read", ctx: context(v.ctx), target: required(v.target, "target"), through: v.through === true };
     case "probe":
     case "answer":
     case "sketch":
@@ -248,9 +250,13 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
   switch (input.task) {
     case "read":
     case "probe": {
-      const [prompt, schema] =
-        input.task === "read" ? [readPrompt(input.ctx, input.target), THOUGHT_SCHEMA] : [probePrompt(input.ctx, input.target), PROBE_SCHEMA];
-      const { data, usage } = await runStructured<unknown>(sys, prompt, schema, settings, signal, onLimit);
+      // Reading it through, the note rides in the system prompt (`throughSystemPrompt`).
+      const through = input.task === "read" && input.through === true;
+      const [system, prompt, schema] =
+        input.task === "read"
+          ? [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through), THOUGHT_SCHEMA]
+          : [sys, probePrompt(input.ctx, input.target), PROBE_SCHEMA];
+      const { data, usage } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit);
       const d = structured(data);
       // A point the writer let stand is not raised again, in any words: the model says
       // which one its note repeats, and then the note is held back.

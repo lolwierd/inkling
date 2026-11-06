@@ -5,7 +5,7 @@
 
 import { createInterface } from "node:readline";
 import { accountStatus, ProviderError, runStructured, runText, type LimitInfo } from "./claude.ts";
-import { cleanSvg, clip, snapQuote } from "./output.ts";
+import { cleanSvg, clip, findQuote, snapQuote } from "./output.ts";
 import {
   answerPrompt,
   askPrompt,
@@ -14,6 +14,7 @@ import {
   readPrompt,
   replyPrompt,
   probePrompt,
+  relatePrompt,
   systemPrompt,
   sketchPrompt,
   REPLY_SCHEMA,
@@ -23,8 +24,9 @@ import {
   learnPrompt,
   THOUGHT_SCHEMA,
   SKETCH_SCHEMA,
+  RELATE_SCHEMA,
 } from "./prompts.ts";
-import type { Context, Event, Frequency, LetStandPoint, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
+import type { Context, ElsewhereEnd, Event, Frequency, LetStandPoint, Passage, Relation, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
 import { withWorking } from "./working.ts";
 
 const VERSION = "0.1.0";
@@ -114,7 +116,12 @@ function context(v: unknown): Context {
     brief: optionalText(v.brief),
     aboutMe: optionalText(v.aboutMe),
     threads: Array.isArray(v.threads)
-      ? v.threads.filter(isObject).map((t) => ({ quote: text(t.quote), messages: messages(t.messages), resolved: t.resolved === true }))
+      ? v.threads.filter(isObject).map((t) => ({
+          quote: text(t.quote),
+          messages: messages(t.messages),
+          resolved: t.resolved === true,
+          elsewhere: isObject(t.elsewhere) && text(t.elsewhere.quote).trim() ? { noteTitle: text(t.elsewhere.noteTitle), quote: text(t.elsewhere.quote) } : null,
+        }))
       : [],
     now: text(v.now) || new Date().toDateString(),
     letStand: letStand(v.letStand),
@@ -125,6 +132,38 @@ function context(v: unknown): Context {
       voice: VOICES.has(mind.voice as Voice) ? (mind.voice as Voice) : "plain",
       frequency: FREQUENCIES.has(mind.frequency as Frequency) ? (mind.frequency as Frequency) : "when_it_matters",
     },
+  };
+}
+
+const RELATIONS = new Set<Relation>(["contradicts", "depends"]);
+
+/** The passages of a relate request; ones without words are left out. */
+function passages(v: unknown): Passage[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter(isObject)
+    .map((p) => ({
+      note: text(p.note),
+      noteTitle: text(p.noteTitle),
+      written: text(p.written),
+      edited: text(p.edited),
+      heading: optionalText(p.heading),
+      text: text(p.text),
+    }))
+    .filter((p) => p.text.trim());
+}
+
+/** The other end of a thread between notes on a reply, or undefined. */
+function elsewhereEnd(v: unknown): ElsewhereEnd | undefined {
+  if (!isObject(v) || !text(v.quote).trim()) return undefined;
+  const gone = v.gone === true || typeof v.text !== "string";
+  return {
+    noteTitle: text(v.noteTitle),
+    edited: text(v.edited),
+    quote: text(v.quote),
+    text: gone ? null : text(v.text),
+    relation: RELATIONS.has(v.relation as Relation) ? (v.relation as Relation) : "contradicts",
+    gone,
   };
 }
 
@@ -141,11 +180,26 @@ function task(v: unknown): Task {
     case "draw":
       return { task: "draw", ctx: context(v.ctx), quote: text(v.quote), thought: text(v.thought), request: optionalText(v.request) ?? undefined };
     case "reply":
-      return { task: "reply", ctx: context(v.ctx), quote: text(v.quote), messages: messages(v.messages), message: required(v.message, "message") };
+      return {
+        task: "reply",
+        ctx: context(v.ctx),
+        quote: text(v.quote),
+        messages: messages(v.messages),
+        message: required(v.message, "message"),
+        elsewhere: elsewhereEnd(v.elsewhere),
+      };
     case "chat":
       return { task: "chat", ctx: context(v.ctx), history: messages(v.history), message: required(v.message, "message"), near: optionalText(v.near) };
     case "learn":
       return { task: "learn", aboutMe: optionalText(v.aboutMe), message: required(v.message, "message") };
+    case "relate":
+      return {
+        task: "relate",
+        ctx: context(v.ctx),
+        target: required(v.target, "target"),
+        before: Array.isArray(v.before) ? v.before.filter((b): b is string => typeof b === "string" && b.trim() !== "").slice(-2) : [],
+        passages: passages(v.passages),
+      };
     default:
       return badRequest(`unknown task ${JSON.stringify(v.task ?? null)}`);
   }
@@ -175,6 +229,10 @@ function nonEmpty(v: unknown, what: string): string {
 // ----- running tasks ------------------------------------------------------------
 
 async function run(id: string, settings: RunSettings, input: Task, signal: AbortController): Promise<{ data: unknown; usage: Usage }> {
+  if (input.task === "relate" && input.passages.length === 0) {
+    // Nothing to compare with: no model call.
+    return { data: { speak: false }, usage: { ms: 0 } };
+  }
   if (input.task === "learn") {
     const { data, usage } = await runStructured<unknown>(LEARN_SYSTEM, learnPrompt(input.aboutMe, input.message), LEARN_SCHEMA, settings, signal, onLimit);
     const d = structured(data);
@@ -224,8 +282,10 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
       const { text: out, usage } = await runText(sys, drawPrompt(input.ctx, input.quote, input.thought, input.request), settings, signal, undefined, onLimit);
       return { data: { svg: cleanSvg(out) }, usage };
     }
+    case "relate":
+      return relate(input, sys, settings, signal);
     case "reply": {
-      const { data, usage } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message), REPLY_SCHEMA, settings, signal, onLimit);
+      const { data, usage } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere), REPLY_SCHEMA, settings, signal, onLimit);
       const d = structured(data);
       return { data: { text: nonEmpty(d.text, "an empty reply"), resolved: d.resolved === true, redraw: d.redraw === true }, usage };
     }
@@ -242,6 +302,39 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
       return { data: { text: out }, usage };
     }
   }
+}
+
+/**
+ * Threads between notes: the paragraph just read against passages from other notes. It
+ * speaks only when the model says both are about the same thing and disagree, names a
+ * passage that was sent, and quotes words that are really in it; the far quote never falls
+ * back to the whole passage, so a quote the model made up is silence, not a thread.
+ */
+async function relate(
+  input: Extract<Task, { task: "relate" }>,
+  sys: string,
+  settings: RunSettings,
+  signal: AbortController,
+): Promise<{ data: unknown; usage: Usage }> {
+  const prompt = relatePrompt(input.ctx, input.target, input.before, input.passages);
+  const { data, usage } = await runStructured<unknown>(sys, prompt, RELATE_SCHEMA, settings, signal, onLimit);
+  const d = structured(data);
+  const n = typeof d.passage === "number" ? d.passage : Number.NaN;
+  const relation = d.relation === "contradicts" || d.relation === "depends" ? d.relation : null;
+  const say = text(d.text).trim();
+  if (d.same_subject !== true || !relation || !Number.isInteger(n) || n < 1 || n > input.passages.length || !say) {
+    return { data: { speak: false }, usage };
+  }
+  const passage = input.passages[n - 1];
+  const other = findQuote(text(d.other), passage.text);
+  if (other === null) {
+    log(`relate: the other words ${JSON.stringify(text(d.other).slice(0, 80))} are not in passage ${n}; staying silent`);
+    return { data: { speak: false }, usage };
+  }
+  return {
+    data: { speak: true, passage: n - 1, note: passage.note, quote: snapQuote(text(d.quote), input.target), other, relation, text: say },
+    usage,
+  };
 }
 
 async function handleRun(req: Json) {

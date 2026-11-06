@@ -1,0 +1,23 @@
+# A visiting end: the calendar shows thread b1 (asked in Race-week plan) on its own words,
+# follows an edit there, and saving sends its new place home; the calendar's file never
+# holds it.
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race calendar
+settle
+dump: visited
+expect: d.between.some(e => e.thread === "b1" && e.visiting && e.title === "Race-week plan" && e.quote === "Sunday 22 March")
+expect: d.threads.some(t => t.id === "b1" && t.quote === "Sunday 15 March" && t.status === "Open" && t.msgs === 1)
+expect: d.anchors.some(a => a.id === "b1" && a.open)
+edit: City 10k: => The city 10k:
+settle
+switch: Race-week plan
+settle
+dump: home
+expect: d.between.some(e => e.thread === "b1" && !e.visiting && e.quote === "Sunday 15 March")
+quit
+expect: !note("Race calendar").threads.some(t => t.id === "b1") && !("elsewhere" in note("Race calendar"))
+expect: note("Race-week plan").elsewhere.find(e => e.thread === "b1").start === textOf(note("Race calendar")).indexOf("Sunday 15 March")
+expect: note("Race-week plan").threads.find(t => t.id === "b1").status === "open" && tasks.every(t => t === "read")

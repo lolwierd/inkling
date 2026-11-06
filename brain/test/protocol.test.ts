@@ -391,6 +391,66 @@ describe("what each task sends back", () => {
     expect((await b.end("p")).data).toEqual({ text: "Yes.", resolved: true, redraw: false });
   });
 
+  describe("relate", () => {
+    const passages = [
+      { note: "e1", noteTitle: "Race calendar", written: "Thursday 3 September 2026", edited: "Thursday 3 September 2026", heading: null, text: "…Pick up the race bib on Friday 13 March at the harbour office." },
+      { note: "e3", noteTitle: "March budget", written: "Thursday 1 October 2026", edited: "Thursday 1 October 2026", heading: null, text: "The March budget for running gear is £120." },
+    ];
+    const target = "I'll pick up my bib on Saturday 14 March.";
+    // the fake SDK's answer rides in `before`, so the quotes cannot match its own text
+    const relate = (id: string, answer: object, extra: object = {}) =>
+      run(id, { task: "relate", ctx: ctx(), target, before: [fake({ structured: answer })], passages, ...extra });
+    const clash = { same_subject: true, relation: "contradicts", passage: 1, quote: "SATURDAY 14 March", other: "“Friday 13 March”", text: " Race calendar says Friday 13 March. Which day? " };
+
+    test("that speaks: the passage by index, its note, both quotes exact, the relation", async () => {
+      const b = brain();
+      b.send(relate("r", clash));
+      expect((await b.end("r")).data).toEqual({ speak: true, passage: 0, note: "e1", quote: "Saturday 14 March", other: "Friday 13 March", relation: "contradicts", text: "Race calendar says Friday 13 March. Which day?" });
+      b.send(relate("r2", { ...clash, passage: 2, relation: "depends", other: "£120" }));
+      expect((await b.end("r2")).data).toMatchObject({ speak: true, passage: 1, note: "e3", other: "£120", relation: "depends" });
+    });
+
+    test("is silent unless both are the same thing, they disagree, the passage was sent, its words are real and there is a note", async () => {
+      const b = brain();
+      const silent = [
+        { ...clash, same_subject: false },
+        { ...clash, relation: "none" },
+        { ...clash, relation: "maybe" },
+        { ...clash, passage: 0 },
+        { ...clash, passage: 3 },
+        { ...clash, passage: 1.5 },
+        { ...clash, other: "Saturday 20 March" },
+        { ...clash, text: "  " },
+      ];
+      silent.forEach((a, i) => b.send(relate(`s${i}`, a)));
+      for (let i = 0; i < silent.length; i++) expect((await b.end(`s${i}`)).data).toEqual({ speak: false });
+    });
+
+    test("with no passages there is no model call", async () => {
+      const b = brain();
+      b.send(run("n", { task: "relate", ctx: ctx(), target: target + " " + fake({ hang: true }), before: [], passages: [{ note: "x", noteTitle: "Empty", text: "  " }] }));
+      expect(await b.end("n", 2000)).toMatchObject({ ev: "done", data: { speak: false } });
+    });
+
+    test("a target is required; before and passages may be left out", async () => {
+      const b = brain();
+      b.send(run("t", { task: "relate", ctx: ctx(), passages }));
+      expect(await b.end("t")).toMatchObject({ ev: "error", kind: "other" });
+      b.send(run("u", { task: "relate", ctx: ctx(), target }));
+      expect((await b.end("u")).data).toEqual({ speak: false });
+    });
+  });
+
+  test("a reply may carry the other end of a thread between notes, well formed or not", async () => {
+    const b = brain();
+    const answer = fake({ structured: { text: "Then fix the calendar.", resolved: false, redraw: false } });
+    const elsewhere = { noteTitle: "Race calendar", edited: "Thursday 3 September 2026", quote: "Friday 13 March", text: "Pick up the race bib on Friday 13 March.", relation: "contradicts" };
+    for (const [id, e] of [["e1", elsewhere], ["e2", { ...elsewhere, text: null, gone: true }], ["e3", "junk"], ["e4", { quote: "" }]] as const) {
+      b.send(run(id, { task: "reply", ctx: ctx(answer), quote: "Saturday 14 March", messages: [], message: "Saturday.", elsewhere: e }));
+      expect((await b.end(id)).data).toEqual({ text: "Then fix the calendar.", resolved: false, redraw: false });
+    }
+  });
+
   test("learn: update and no update; the profile is clipped on a character boundary", async () => {
     const b = brain();
     const long = "You " + "🚀".repeat(800);

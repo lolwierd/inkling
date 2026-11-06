@@ -8,7 +8,8 @@ import { join } from "node:path";
 process.env.INKLING_DATA_DIR = join(tmpdir(), "inkling-brain-unit-test");
 
 const { accountStatus, childEnv, classify, runStructured, runText, setQueryForTests, ProviderError } = await import("../src/claude.ts");
-const { cleanSvg, clip, snapQuote } = await import("../src/output.ts");
+const { cleanSvg, clip, findQuote, snapQuote } = await import("../src/output.ts");
+const { relatePrompt, replyPrompt, readPrompt } = await import("../src/prompts.ts");
 const { fakeQuery } = await import("./fake-sdk.ts");
 setQueryForTests(fakeQuery as any);
 
@@ -50,6 +51,65 @@ describe("snapQuote", () => {
   test("result is always a substring", () => {
     const cases = ["UNIQUE  words", "keep one", "we'll KEEP", "zzz", "", "minute.", "…"];
     for (const c of cases) expect(src.includes(snapQuote(c, src))).toBe(true);
+  });
+});
+
+describe("findQuote", () => {
+  const passage = "…Pick up the race bib on Friday 13 March at the harbour office.";
+  test("exact and loose matches are the passage's own words", () => {
+    expect(findQuote("Friday 13 March", passage)).toBe("Friday 13 March");
+    expect(findQuote("“friday 13 march”", passage)).toBe("Friday 13 March");
+    expect(findQuote("…Pick up the race bib", passage)).toBe("Pick up the race bib");
+  });
+  test("nothing that matches is null, never the whole passage", () => {
+    expect(findQuote("Saturday 14 March", passage)).toBeNull();
+    expect(findQuote("", passage)).toBeNull();
+    expect(snapQuote("Saturday 14 March", passage)).toBe(passage);
+  });
+});
+
+describe("prompts for threads between notes", () => {
+  const mind = { name: "Inkling", description: "", howItThinks: "", voice: "plain" as const, frequency: "when_it_matters" as const };
+  const ctx = (threads: any[] = []) => ({ noteTitle: "Race-week plan", noteText: "Race week is about sleep.\n\nI'll pick up my bib on Saturday 14 March.", brief: null, mind, aboutMe: null, threads, now: "Saturday 7 November 2026" });
+  const passages = [
+    { note: "e1", noteTitle: "Race calendar", written: "Thursday 3 September 2026", edited: "Thursday 3 September 2026", heading: "Spring", text: "Pick up the race bib on Friday 13 March at the harbour office." },
+    { note: "e3", noteTitle: "March \"budget\"", written: "Thursday 1 October 2026", edited: "Thursday 1 October 2026", heading: null, text: "The March budget for running gear is £120." },
+  ];
+  test("relate shows the paragraph, what comes before it and each passage with its note and dates, but not the rest of the note", () => {
+    const p = relatePrompt(ctx(), "I'll pick up my bib on Saturday 14 March.", ["Race week is about sleep."], passages);
+    expect(p).toContain("<paragraph>I'll pick up my bib on Saturday 14 March.</paragraph>");
+    expect(p).toContain("<before>Race week is about sleep.</before>");
+    expect(p).toContain('<passage n="1" note="Race calendar" written="Thursday 3 September 2026" edited="Thursday 3 September 2026" heading="Spring">Pick up the race bib');
+    expect(p).toContain(`<passage n="2" note="March 'budget'"`);
+    expect(p).toContain("The search only matched words");
+    expect(p).toContain("same_subject");
+    expect(p).not.toContain("<note");
+    expect(p).not.toContain("Already in the margin");
+  });
+  test("relate names the open threads already on the paragraph", () => {
+    const threads = [
+      { quote: "Saturday 14 March", messages: [{ role: "mind", text: "Why Saturday?" }], resolved: false },
+      { quote: "elsewhere entirely", messages: [{ role: "mind", text: "Not this one." }], resolved: false },
+    ];
+    const p = relatePrompt(ctx(threads), "I'll pick up my bib on Saturday 14 March.", [], passages);
+    expect(p).toContain("Already in the margin about this paragraph:\n- «Saturday 14 March»: Why Saturday?");
+    expect(p).not.toContain("Not this one.");
+    expect(p).not.toContain("<before>");
+  });
+  test("a reply on a thread between notes sees the other end, or that its note is gone", () => {
+    const end = { noteTitle: "Race calendar", edited: "Thursday 3 September 2026", quote: "Friday 13 March", text: "Pick up the race bib on Friday 13 March at the harbour office.", relation: "contradicts" as const };
+    const p = replyPrompt(ctx(), "Saturday 14 March", [{ role: "mind", text: "Which day?" }], "Saturday.", end);
+    expect(p).toContain("This thread also quotes the writer's other note «Race calendar» (last edited Thursday 3 September 2026): «Friday 13 March», in this passage:\n<passage>Pick up the race bib");
+    expect(p).toContain("For a thread between two notes, resolved is true when the two no longer disagree");
+    const gone = replyPrompt(ctx(), "Saturday 14 March", [], "Saturday.", { ...end, text: null, gone: true });
+    expect(gone).toContain("which has since been deleted");
+    const plain = replyPrompt(ctx(), "Saturday 14 March", [], "Saturday.");
+    expect(plain).not.toContain("other note");
+    expect(plain).not.toContain("\n\n\n");
+  });
+  test("every prompt's margin names a thread's other end", () => {
+    const p = readPrompt(ctx([{ quote: "Saturday 14 March", messages: [], resolved: false, elsewhere: { noteTitle: "Race calendar", quote: "Friday 13 March" } }]), "x");
+    expect(p).toContain("Thread 1 on «Saturday 14 March», which also quotes «Friday 13 March» in the note «Race calendar»:");
   });
 });
 

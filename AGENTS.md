@@ -95,8 +95,9 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
 | `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open (the bundle's `.icns` is the light Initial; per-appearance bundle icons need Xcode's `actool`) | `follow` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
+| `src/between.rs` | threads between notes, the data side: an in-memory index of every searchable paragraph and the gate that picks at most three passages for `relate`; a thread's far end (`Note.elsewhere`) shown in the other note as a visiting end (`add_visitors`) and sent home on save (`save_visitors_home`); the wire shapes. The page's half is `src/note_page/between.rs` (`look_elsewhere`, after a read). Design: `design/features/threads-between-notes.md` | `Index::passages`, `searchable`, `send_home` |
 | `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
-| `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped, an unknown block kind reads as a paragraph); notes as Markdown | `Note`, `Thread`, `Settings`, `BlockKind` (`Check`, `Callout`, `Code(Lang)`), `markdown_blocks` |
+| `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped, an unknown block kind reads as a paragraph); notes as Markdown | `Note`, `Thread`, `Elsewhere` (a thread's far end in another note), `Settings`, `BlockKind` (`Check`, `Callout`, `Code(Lang)`), `markdown_blocks` |
 | `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
 | `src/export.rs` | Markdown, HTML, Word (via `textutil`) with threads under paragraphs; checklists, callouts and code in each | `to_markdown`, `to_html`, `to_word_html` |
 | `src/import.rs` | File > Import from Obsidian…: a vault's Markdown as notes and folders, as Obsidian shows it; every imported paragraph goes in `Note.left_alone`; the vault is only read | `convert` (one note), `read_vault`, `add_to_store` |
@@ -121,7 +122,9 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
    left, at least four words, nothing else reading), Answer (it calls the mind by name),
    Later, or Skip. A paragraph's hash goes into `note.read_hashes` so it is read once.
 3. `read_line` sends `{"task":"read"}` (or `probe` for a new notebook's first
-   sentence) through `send_task` → `Brain::run` → one JSON line to the brain.
+   sentence) through `send_task` → `Brain::run` → one JSON line to the brain. After a
+   read, `look_elsewhere` (`src/note_page/between.rs`) asks `relate` about passages from
+   other notes, only when the local index finds some (threads between notes).
 4. The brain (`main.ts` `run`) builds the prompt (`prompts.ts`), calls the SDK
    (`claude.ts runStructured`), snaps the quote onto the paragraph (`output.ts`), and
    answers with exactly one `done` or `error`.

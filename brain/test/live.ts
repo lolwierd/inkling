@@ -106,6 +106,27 @@ function checkThought(d: any, target: string, mustSpeak?: boolean) {
   if (mustSpeak === false) check(false, "expected silence, got a note");
 }
 
+const RACE_CALENDAR_BIB = { note: "cal", noteTitle: "Race calendar", written: "Thursday 3 September 2026", edited: "Thursday 3 September 2026", heading: "Spring", text: "Pick up the race bib on Friday 13 March at the harbour office." };
+const RACE_CALENDAR_START = { ...RACE_CALENDAR_BIB, text: "City 10k: Sunday 15 March, 9:00 start from the harbour." };
+const MARCH_BUDGET = { note: "budget", noteTitle: "March budget", written: "Thursday 1 October 2026", edited: "Thursday 1 October 2026", heading: null, text: "The March budget for running gear is £120, mostly for new shoes." };
+
+/** A relate answer: when it must speak, both quotes are real words of their texts. */
+function checkRelate(r: { e: Ev }, target: string, passages: { note: string; text: string }[], mustSpeak: boolean) {
+  if (!check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`)) return;
+  const d = r.e.data;
+  if (!mustSpeak) {
+    check(d.speak === false, `false alarm: ${JSON.stringify(d)}`);
+    return;
+  }
+  if (!check(d.speak === true, "expected a thread between notes, got silence")) return;
+  const p = passages[d.passage];
+  check(p !== undefined && d.note === p.note, `passage ${d.passage} / note ${d.note}`);
+  check(typeof d.quote === "string" && target.includes(d.quote) && d.quote !== target, `quote ${JSON.stringify(d.quote)}`);
+  check(p !== undefined && typeof d.other === "string" && p.text.includes(d.other), `other ${JSON.stringify(d.other)}`);
+  check(d.relation === "contradicts" || d.relation === "depends", `relation ${d.relation}`);
+  check(typeof d.text === "string" && words(d.text) <= 50, `text has ${words(d.text ?? "")} words`);
+}
+
 function checkStream(id: string, d: any) {
   const ds = deltasOf(id);
   check(ds.length > 1, `only ${ds.length} delta(s)`);
@@ -447,6 +468,47 @@ const scenarios: Record<string, () => Promise<unknown>> = {
     const left = kids.filter(alive);
     check(left.length === 0, `runtime processes still alive 4 s after cancel: ${left.join(",")}`);
     return { ms: Date.now() - t0, deltasBeforeCancel: evs.filter((x) => x.ev === "delta").length, end: e, childrenAtCancel: kids.length, aliveAfter: left.length };
+  },
+  // ----- threads between notes: three must stay silent (a speak is a false alarm) -----
+  async relate_clash() {
+    const target = "I'll pick up my bib on Saturday 14 March, after the shakeout run.";
+    const r = await call(LIGHT, { task: "relate", ctx: ctx(["Race week is about sleep and nothing new.", target], { noteTitle: "Race-week plan" }), target, before: ["Race week is about sleep and nothing new."], passages: [RACE_CALENDAR_BIB, MARCH_BUDGET] });
+    checkRelate(r, target, [RACE_CALENDAR_BIB, MARCH_BUDGET], true);
+    return { ...r, tokens: r.e.usage };
+  },
+  async relate_depends() {
+    // builds on the budget note's figure and gets it wrong (an earlier version said "this
+    // month", which the model rightly read as another month than March)
+    const target = "The March running gear budget covers £300 of kit, so in March I'll get the new shoes and the watch.";
+    const r = await call(LIGHT, { task: "relate", ctx: ctx([target], { noteTitle: "Kit" }), target, before: [], passages: [MARCH_BUDGET, RACE_CALENDAR_BIB] });
+    checkRelate(r, target, [MARCH_BUDGET, RACE_CALENDAR_BIB], true);
+    return { ...r, tokens: r.e.usage };
+  },
+  async relate_same_words() {
+    const target = "Sam's city 10k in Bristol, the one I paced for her in 2024, started at 10:30 on Sunday 17 March.";
+    const r = await call(LIGHT, { task: "relate", ctx: ctx([target], { noteTitle: "People I ran with" }), target, before: [], passages: [RACE_CALENDAR_START] });
+    checkRelate(r, target, [RACE_CALENDAR_START], false);
+    return { ...r, tokens: r.e.usage };
+  },
+  async relate_moved_on() {
+    const target = "This year the goal for the city 10k is under 50 minutes, so the long runs get faster.";
+    const old = { note: "goals-2025", noteTitle: "Goals 2025", written: "Monday 6 January 2025", edited: "Monday 6 January 2025", heading: null, text: "Goal for the city 10k this year: under 55 minutes, and no walking after 7 km." };
+    const r = await call(LIGHT, { task: "relate", ctx: ctx([target], { noteTitle: "Goals 2026" }), target, before: [], passages: [old] });
+    checkRelate(r, target, [old], false);
+    return { ...r, tokens: r.e.usage };
+  },
+  async relate_agrees() {
+    const target = "Bib pickup is Friday 13 March at the harbour office, so I'll go straight from work.";
+    const r = await call(LIGHT, { task: "relate", ctx: ctx([target], { noteTitle: "Race-week plan" }), target, before: [], passages: [RACE_CALENDAR_BIB] });
+    checkRelate(r, target, [RACE_CALENDAR_BIB], false);
+    return { ...r, tokens: r.e.usage };
+  },
+  async relate_read_compare() {
+    // the same paragraph as relate_clash, read as reading along reads it: for its tokens
+    const paras = ["Race week is about sleep and nothing new.", "I'll pick up my bib on Saturday 14 March, after the shakeout run."];
+    const r = await call(LIGHT, { task: "read", ctx: ctx(paras, { noteTitle: "Race-week plan" }), target: paras[1] });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    return { ...r, tokens: r.e.usage };
   },
   async api_key_auth() {
     // Only meaningful with LIVE_ENV_INKLING_USE_API_KEY=1 and a bogus key.

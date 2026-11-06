@@ -13,7 +13,9 @@ The section "The contract" below is what they agree on; everything else explains
   notebook. Only when a paragraph in another note shares the subject strongly enough (at
   least two uncommon words and a high enough score) does Inkling make one extra, small
   model call, `relate`, with that paragraph and at most three short passages. Most pauses
-  add no tokens at all; a pause that does is about 1,200 tokens in and 100 out.
+  add no tokens at all; a pause that does costs about what a read of a short note costs:
+  2,200 tokens in (900 of them the runtime's own prefix, read from the cache) and 160 to
+  300 out, measured.
 - **One thread, two ends.** The thread lives in the note where you were writing (its
   home). The other note's words are its far end, stored beside the thread in
   `Note.elsewhere`. When you open the other note, the same thread hangs from those words
@@ -236,9 +238,9 @@ If relation is not "none":
   that names the clash.
 - other: the exact words from the passage, character for character, the shortest span that
   names the clash.
-- text: your margin note, at most 40 words. Say what the other note says, naming it, and end
-  with one question that lets the writer decide. Do not say which one is right: you cannot
-  know.
+- text: your margin note, at most 40 words. Say what the other note says, naming it by its
+  title in plain words (no quote marks around the title), and end with one question that
+  lets the writer decide. Do not say which one is right: you cannot know.
 Otherwise set passage to 0 and quote, other and text to empty strings.
 Never raise anything else about the paragraph here, and never repeat a point already in the
 margin.
@@ -300,21 +302,35 @@ The real-model check below measures what is left.
 
 ### Cost per read, in tokens
 
-Estimated from the prompt sizes (about four characters a token) and to be replaced by the
-counts the SDK reports, which the brain now logs (`Usage.inputTokens`, `outputTokens`):
+Measured on 7 Nov 2026 with Opus 5.5 at low effort, the read's settings, through the real
+brain (`brain/test/live.ts`, eight calls); the SDK reports the counts, which the brain now
+passes on in `Usage`:
 
-| | Input | Output | When |
+| Call | Input tokens | Output tokens | SDK's cost estimate |
 |---|---|---|---|
-| A read today (system 250, instructions 250, the note, its margin) | 700 for a 100-word note; about 2,000 for 1,000 words | 15 silent, 80 speaking | every finished paragraph |
-| Retrieval | 0 | 0 | every read |
-| `relate` (system 250, instructions 450, paragraph and context 100 to 250, passages 100 to 450, schema 100) | about 1,000 to 1,500 | 30 silent, 110 speaking | only when the gate passes |
-| A reply or second look on a thread between notes | today's reply plus the passage, about 150 more | as today | when you reply or edit its words |
+| `relate`, first call of a session | 2,266 (all written to the cache) | 233 | $0.023 |
+| `relate`, later calls | about 2,200: 920 read from the cache (the runtime's own prefix), 1,250 to 1,310 new | 160 silent, 230 to 300 speaking | $0.013 to $0.017 |
+| a `read` of the same paragraph in a two-paragraph note, for comparison | 1,925: 897 from the cache, 1,026 new | 335 | $0.015 |
 
-How often the gate passes depends on the notebook: never with one note, and in a notebook
-of a few hundred notes on overlapping subjects perhaps one paragraph in ten. At one in ten,
-a read costs on average about 120 more input tokens, roughly 6 to 15 percent of the read
-itself. Latency: `relate` starts when the read ends and takes about as long as a read at low
-effort (around 5 s), so a thread between notes lands about 10 s after the pause.
+So one `relate` costs about what one read of a short note costs: the runtime's fixed prefix
+is most of it, and the passages are small. Retrieval and the gate cost nothing. A pause
+costs a `relate` only when the gate passes: never in a notebook with one note, and in a
+notebook of a few hundred notes on overlapping subjects perhaps one paragraph in ten,
+which makes reading along about 10 percent dearer on average. The estimate before
+measuring was 1,000 to 1,500 input tokens; the difference is the runtime's prefix of about
+900 tokens, which every task pays and which is read from the cache after the first call.
+Latency: `relate` starts when the read ends and took 2.4 to 4.6 s (11.6 s for the first call
+of a session, which starts the runtime), so a thread between notes lands about 5 to 10 s
+after the pause.
+
+**False alarms, measured.** Five cases, one call each: the bib dates in two notes (spoke,
+both quotes exact), a budget a paragraph relies on with a different figure (spoke, `£300`
+against `£120`), two different races that share *city 10k*, *Sunday* and *March* (silent),
+last year's goal against this year's (silent), and the same date in both notes (silent).
+No false alarms in three chances, and both real clashes found. A first version of the
+budget case said *this month* rather than *March*; the model stayed silent, rightly, since
+the budget note is about March. Too few calls to be a rate; enough to show the guards hold
+on the obvious traps.
 
 ## The contract
 
@@ -411,18 +427,22 @@ Rule for everyone: **build notebook-wide lists from `Store.notes`** (each thread
 home), never from the page's `note`, which holds visiting ends while a note is open; flush
 the page first, as opening a note does.
 
-Functions (`src/between.rs`, brain-and-data agent):
+Functions (`src/between.rs`, brain-and-data agent). They take the notebook's notes as
+`&store.notes`, so they can be tested without a store on disk:
 
 | Function | What it does |
 |---|---|
-| `add_visitors(note: &mut Note, store: &Store)` | add the visiting ends, re-finding a far quote nearest its stored place when the range no longer matches |
-| `save_visitors_home(note: &Note, store: &mut Store) -> Note` | write visiting ends home (saving changed home notes) and return the note without them, to be saved; also refreshes `title` and `edited` on this note's own entries |
-| `visiting(store, note_id) -> Vec<(&Note, &Thread, &Elsewhere)>` | the threads whose far end is in `note_id` |
-| `other_note(store, e: &Elsewhere) -> Option<&Note>` | the note at the other end, `None` once deleted |
-| `open_here(store, note) -> usize` | open threads on a note, its own plus visiting: the sidebar's count |
-| `elsewhere_wire(store, note, thread) -> Option<Value>` | the `elsewhere` object for a `reply` (below), from the other end as it is now |
+| `add_visitors(note: &mut Note, notes: &[Note])` | add the visiting ends, re-finding a far quote nearest its stored place when the range no longer matches (called in `load_into_editor`) |
+| `save_visitors_home(note: &Note, store: &mut Store) -> Note` | write visiting ends home (saving changed home notes) and return the note without them, to be saved; also refreshes `title` and `edited` on this note's own entries (called in `flush`) |
+| `send_home(note, notes: &mut [Note]) -> (Note, Vec<String>)` | the same without saving: the saved note and the ids of the home notes that changed |
+| `without_visitors(note) -> Note` | the note as it is saved |
+| `visiting(notes, note_id) -> Vec<(&Note, &Thread, &Elsewhere)>` | the threads whose far end is in `note_id` |
+| `other_note(notes, e: &Elsewhere) -> Option<&Note>` | the note at the other end, `None` once deleted |
+| `open_here(notes, note) -> usize` | open threads on a note, its own plus visiting: the sidebar's count |
+| `elsewhere_wire(notes, note, thread) -> Option<Value>` | the `elsewhere` object for a `reply` (below), from the other end as it is now |
 | `summary_wire(note, thread) -> Value` | `{noteTitle, quote}` or null, for `ctx.threads[i].elsewhere` |
-| `Index::passages(&mut self, store, here: &Note, target) -> Vec<Passage>` and `with_index(f)` | retrieval and the gate |
+| `locate_other(note, block, quote) -> Option<(Range, String)>` | where a new far end goes: the words in their block, else nearest it, else the whole block |
+| `with_index(f)`, `Index::passages(&mut self, notes, minds, here: &Note, target) -> Vec<Passage>` | retrieval and the gate |
 
 ### Protocol (`brain/src/protocol.ts`)
 
@@ -521,8 +541,9 @@ two never edit the same new file. Both add fields at the end of structs.
 
 Dump fields the brain-and-data side adds: `d.relating` (`{req, line}` or null) and
 `d.between`: one object per `Elsewhere` on the page's note,
-`{thread, note, title, quote, start, end, relation, visiting, gone}` (thread and note ids cut
-to 8 characters like the others).
+`{thread, note, title, quote, start, end, relation, visiting, placed, gone}` (the thread id
+cut to 8 characters like the others; the note id whole, since fixture ids differ only at
+the end).
 
 ## Privacy
 
@@ -651,13 +672,14 @@ off and the home note's file says `resolved`; dismiss at the far end, `undo-dism
 the home thread is open; the far note deleted shows `gone` in the dump; shots in Linen and
 Lamplight of both ends open.
 
-**Real-model check** (`brain/test/live.ts`, run by hand, six calls): `relate_clash` (the bib
-dates: must speak, both quotes exact), `relate_depends` (a budget that relies on a total in
-another note and does not match it: must speak), `relate_same_words` (two different races
-that share *city 10k* and *March*: must stay silent), `relate_moved_on` (last year's time
-against this year's goal: silent), `relate_agrees` (the same date in both: silent), and one
-`read` of the same paragraph to compare token counts. A speak on any of the three silent
-cases is a false alarm; the run prints the count and each call's tokens.
+**Real-model check** (`brain/test/live.ts`, run by hand, one call each): `relate_clash` (the
+bib dates: must speak, both quotes exact), `relate_depends` (a paragraph that relies on the
+budget note's figure and gets it wrong: must speak), `relate_same_words` (two different
+races that share *city 10k*, *Sunday* and *March*: must stay silent), `relate_moved_on`
+(last year's goal against this year's: silent), `relate_agrees` (the same date in both:
+silent), and `relate_read_compare`, a `read` of the clash paragraph to compare token counts.
+A speak on any of the three silent cases is a false alarm. Run on 7 Nov 2026: all six pass
+(results under "Cost per read" above).
 
 ## Build order
 

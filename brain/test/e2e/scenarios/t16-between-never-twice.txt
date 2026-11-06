@@ -1,0 +1,15 @@
+# A pair of paragraphs already joined by a thread is never sent to the model again, even
+# after the thread is cut: the plan's 10k paragraph and the calendar's are joined by b1.
+# fixture: between
+# tags: between
+wait: 1500
+switch: Race-week plan
+dismiss: 1
+caret: end
+type: The city 10k on Sunday 22 March starts at 9:00 by the harbour [[read>silent]] [[elsewhere]].
+settle
+dump: after
+expect: d.statuses.includes("b1:Dismissed:Inkling")
+quit
+expect: !requests.some(r => r.input.task === "relate" && r.input.passages.some(p => p.text.includes("Sunday 15 March")))
+expect: note("Race-week plan").threads.length === 1 && note("Race-week plan").threads[0].status === "dismissed"

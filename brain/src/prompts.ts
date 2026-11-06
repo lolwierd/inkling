@@ -1,4 +1,4 @@
-import type { Context, Frequency, LetStandPoint, ThreadMessage, Voice } from "./protocol.ts";
+import type { Context, ElsewhereEnd, Frequency, LetStandPoint, Passage, ThreadMessage, Voice } from "./protocol.ts";
 
 const VOICES: Record<Voice, string> = {
   plain: "Plain and direct. Say it the simplest way.",
@@ -23,7 +23,8 @@ function threadsBlock(ctx: Context): string {
       const msgs = t.messages
         .map((m) => `  ${m.role === "you" ? "Writer" : "You"}: ${m.text}`)
         .join("\n");
-      return `Thread ${i + 1}${t.resolved ? " (resolved)" : ""} on «${t.quote}»:\n${msgs}`;
+      const also = t.elsewhere ? `, which also quotes «${t.elsewhere.quote}» in the note «${t.elsewhere.noteTitle}»` : "";
+      return `Thread ${i + 1}${t.resolved ? " (resolved)" : ""} on «${t.quote}»${also}:\n${msgs}`;
     })
     .join("\n\n");
 }
@@ -189,7 +190,16 @@ export function drawPrompt(ctx: Context, quote: string, thought: string, request
     .join("\n");
 }
 
-export function replyPrompt(ctx: Context, quote: string, messages: ThreadMessage[], message: string): string {
+/** What a thread between notes says about its other end, for the reply prompt. */
+function elsewhereBlock(e: ElsewhereEnd): string {
+  if (e.gone || e.text === null) {
+    return `This thread also quoted «${e.quote}» from the writer's note «${e.noteTitle}», which has since been deleted.`;
+  }
+  const edited = e.edited ? ` (last edited ${e.edited})` : "";
+  return [`This thread also quotes the writer's other note «${e.noteTitle}»${edited}: «${e.quote}», in this passage:`, `<passage>${e.text}</passage>`].join("\n");
+}
+
+export function replyPrompt(ctx: Context, quote: string, messages: ThreadMessage[], message: string, elsewhere?: ElsewhereEnd): string {
   const history = messages.map((m) => `${m.role === "you" ? "Writer" : "You"}: ${m.text}`).join("\n");
   return [
     noteBlock(ctx),
@@ -197,13 +207,83 @@ export function replyPrompt(ctx: Context, quote: string, messages: ThreadMessage
     `You are in a margin thread about «${quote}». So far:`,
     history,
     `Writer: ${message}`,
+    elsewhere ? `\n${elsewhereBlock(elsewhere)}` : "",
     "",
     "Reply in the thread. Stay on this point. If they are wrong, push back with the specific reason. If they are right and that settles this thread's point, say so in a few words and ask nothing new. If they are right but the point is not settled yet, ask the next question about it. If they asked for an explanation, give it concretely.",
     "- text: your reply, at most 80 words unless they explicitly asked for a longer explanation (then at most 160).",
-    "- resolved: true when their reply settles this thread's point (they fixed the mistake, or answered the question soundly). Other questions about the note belong in other threads.",
+    "- resolved: true when their reply settles this thread's point (they fixed the mistake, or answered the question soundly). Other questions about the note belong in other threads." +
+      (elsewhere ? " For a thread between two notes, resolved is true when the two no longer disagree, because either was changed, or when the writer explains why both can stand." : ""),
     "- redraw: true only when they asked to see a drawing (again or differently). The drawing is made separately from your text, so then keep the text to one or two sentences on what it should show, and never draw with characters.",
-  ].join("\n");
+  ]
+    .filter((l, i, a) => !(l === "" && a[i - 1] === ""))
+    .join("\n");
 }
+
+/** The words of an attribute value, safe inside double quotes. */
+function attr(v: string): string {
+  return v.replace(/"/g, "'").replace(/\s+/g, " ").trim();
+}
+
+/** The margin threads already on this paragraph, so relate does not repeat one. */
+function threadsOn(ctx: Context, target: string): string[] {
+  return ctx.threads
+    .filter((t) => !t.resolved && t.quote.trim() && target.includes(t.quote.trim()))
+    .map((t) => {
+      const first = t.messages.find((m) => m.role === "mind")?.text ?? "";
+      return `- «${t.quote}»: ${first}`;
+    });
+}
+
+/**
+ * Threads between notes: does the paragraph just read disagree with one of these passages
+ * from the writer's other notes? Only the paragraph, what comes just before it and the
+ * passages are sent; the rest of the note is the read's business, and the read has just run.
+ */
+export function relatePrompt(ctx: Context, target: string, before: string[], passages: Passage[]): string {
+  const already = threadsOn(ctx, target);
+  const lines = [
+    `The writer just finished this paragraph in their note «${ctx.noteTitle}»:`,
+    `<paragraph>${target}</paragraph>`,
+  ];
+  if (before.length) lines.push("What comes just before it in that note:", `<before>${before.join("\n")}</before>`);
+  lines.push(
+    "",
+    "A search of the writer's other notes found these passages. The search only matched words, so most of them are not related in any way that matters.",
+  );
+  passages.forEach((p, i) => {
+    const heading = p.heading ? ` heading="${attr(p.heading)}"` : "";
+    lines.push(`<passage n="${i + 1}" note="${attr(p.noteTitle)}" written="${attr(p.written)}" edited="${attr(p.edited)}"${heading}>${p.text}</passage>`);
+  });
+  if (already.length) lines.push("", "Already in the margin about this paragraph:", ...already);
+  lines.push(
+    "",
+    "Decide whether the paragraph and one of these passages disagree about the same thing. Most of the time they do not; then relation is \"none\".",
+    "- same_subject: true only when both are about the very same thing (the same event, plan, number, person or decision), not merely the same words or topic.",
+    "- relation: \"contradicts\" when, read as written, they cannot both be true now (a different date, amount, count, name or choice for the same thing); \"depends\" when the paragraph builds on what the passage says and does not match it; otherwise \"none\". A plain change over time (an old goal, last year's numbers, an earlier draft the writer has moved on from) is \"none\", unless the paragraph treats the old value as still true.",
+    "If relation is not \"none\":",
+    "- passage: the number of that passage.",
+    "- quote: the exact words from the paragraph, character for character, the shortest span that names the clash.",
+    "- other: the exact words from the passage, character for character, the shortest span that names the clash.",
+    "- text: your margin note, at most 40 words. Say what the other note says, naming it by its title in plain words (no quote marks around the title), and end with one question that lets the writer decide. Do not say which one is right: you cannot know.",
+    "Otherwise set passage to 0 and quote, other and text to empty strings.",
+    "Never raise anything else about the paragraph here, and never repeat a point already in the margin.",
+  );
+  return lines.join("\n");
+}
+
+export const RELATE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["same_subject", "relation", "passage", "quote", "other", "text"],
+  properties: {
+    same_subject: { type: "boolean" },
+    relation: { type: "string", enum: ["none", "contradicts", "depends"] },
+    passage: { type: "integer" },
+    quote: { type: "string" },
+    other: { type: "string" },
+    text: { type: "string" },
+  },
+} as const;
 
 export function chatPrompt(ctx: Context, history: ThreadMessage[], message: string, near: string | null): string {
   const h = history.map((m) => `${m.role === "you" ? "Writer" : "You"}: ${m.text}`).join("\n");

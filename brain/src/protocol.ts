@@ -22,6 +22,39 @@ export interface ThreadSummary {
   quote: string;
   messages: ThreadMessage[];
   resolved: boolean;
+  /** A thread between notes: the other note and the words it quotes there. */
+  elsewhere?: { noteTitle: string; quote: string } | null;
+}
+
+/** Words from another note that share the subject of the paragraph just read (relate). */
+export interface Passage {
+  /** The other note's id: echoed back, never put in the prompt. */
+  note: string;
+  noteTitle: string;
+  /** That note's created_at as a date: "Thursday 3 September 2026". */
+  written: string;
+  /** Its updated_at, the same way. */
+  edited: string;
+  /** The nearest heading above the passage. */
+  heading: string | null;
+  /** The passage, at most 600 characters. */
+  text: string;
+}
+
+export type Relation = "contradicts" | "depends";
+
+/** The other end of a thread between notes, as it is now (reply). */
+export interface ElsewhereEnd {
+  noteTitle: string;
+  /** As Passage.edited; empty when the note is gone. */
+  edited: string;
+  /** The other end's words now. */
+  quote: string;
+  /** Its paragraph now (at most 600 characters); null when the note is gone. */
+  text: string | null;
+  relation: Relation;
+  /** The other note was deleted. */
+  gone?: boolean;
 }
 
 // A point the writer let stand: every mind is told it, so none raises it again.
@@ -57,9 +90,10 @@ export type Task =
   | { task: "answer"; ctx: Context; target: string }
   | { task: "sketch"; ctx: Context; target: string }
   | { task: "draw"; ctx: Context; quote: string; thought: string; request?: string }
-  | { task: "reply"; ctx: Context; quote: string; messages: ThreadMessage[]; message: string }
+  | { task: "reply"; ctx: Context; quote: string; messages: ThreadMessage[]; message: string; elsewhere?: ElsewhereEnd }
   | { task: "chat"; ctx: Context; history: ThreadMessage[]; message: string; near: string | null }
-  | { task: "learn"; aboutMe: string | null; message: string };
+  | { task: "learn"; aboutMe: string | null; message: string }
+  | { task: "relate"; ctx: Context; target: string; before: string[]; passages: Passage[] };
 
 export type Request =
   | { op: "run"; id: string; settings: RunSettings; input: Task }
@@ -81,4 +115,9 @@ export interface Usage {
   ms: number;
   model?: string;
   costUsd?: number;
+  /** Token counts the runtime reports, to measure what a task costs. */
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }

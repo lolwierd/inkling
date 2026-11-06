@@ -29,6 +29,8 @@ use crate::ui::{self, Keyed, icon};
 
 mod show_working;
 mod goto;
+/// Threads between notes: the reading loop's look at other notes after a read.
+mod between;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -539,6 +541,10 @@ pub struct NotePage {
     /// A thread gone to from Loose ends, whose words are brought into view once the note
     /// is laid out (`goto.rs`).
     goto: Option<goto::Goto>,
+    /// The look at other notes in flight (threads between notes), one at a time, and the
+    /// newest paragraph read meanwhile, which waits for it.
+    relating: Option<Reading>,
+    relate_next: Option<(usize, String)>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -633,6 +639,8 @@ impl NotePage {
             _subs: subs,
             disputes: HashSet::new(),
             goto: None,
+            relating: None,
+            relate_next: None,
         };
         page.load_into_editor(cx);
         page
@@ -643,6 +651,7 @@ impl NotePage {
     }
 
     fn load_into_editor(&mut self, cx: &mut Context<Self>) {
+        crate::between::add_visitors(&mut self.note, &cx.global::<Store>().notes);
         let lines = self.note.blocks.iter().map(|b| (b.kind, b.text.clone())).collect();
         let text = self.note.joined_text();
         let anchors = self
@@ -684,6 +693,10 @@ impl NotePage {
         // The read in flight will never land: leave its paragraph unread.
         if let Some(r) = self.reading.take() {
             self.note.read_hashes.retain(|h| *h != r.hash);
+            self.cancel_request(&r.req, cx);
+        }
+        self.relate_next = None;
+        if let Some(r) = self.relating.take() {
             self.cancel_request(&r.req, cx);
         }
         // Threads still waiting for their first words (a loose thread, a sketch, a
@@ -762,7 +775,7 @@ impl NotePage {
             cx.global::<Store>().note(&clean.id).filter(|n| n.same_writing(&clean)).map(|n| n.updated_at)
         };
         self.note.updated_at = kept.unwrap_or_else(Utc::now);
-        let note = self.note.clone();
+        let note = crate::between::save_visitors_home(&self.note, cx.global_mut::<Store>());
         let store = cx.global_mut::<Store>();
         match store.notes.iter_mut().find(|n| n.id == note.id) {
             Some(n) => *n = note.clone(),
@@ -1008,6 +1021,7 @@ impl NotePage {
     /// (quitting flushes them); neither shows on the page.
     pub(crate) fn settled(&self) -> bool {
         self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
+            && self.relating.is_none() && self.relate_next.is_none()
     }
 
     /// The words of an open thread were edited: look at them again at the next pause.
@@ -1181,6 +1195,7 @@ impl NotePage {
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
                     "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+                    "elsewhere": crate::between::summary_wire(&self.note, &t.id),
                 })
             })
             .collect();
@@ -1305,6 +1320,7 @@ impl NotePage {
     /// Is `req` still something this page is waiting on?
     fn tracks(&self, req: &str) -> bool {
         self.reading.as_ref().is_some_and(|r| r.req == req)
+            || self.relating.as_ref().is_some_and(|r| r.req == req)
             || self.pending.values().any(|(r, _)| r == req)
             || self.chat_pending.as_ref().is_some_and(|(r, _)| r == req)
     }
@@ -1394,6 +1410,7 @@ impl NotePage {
         let task = if self.note.first_run { "probe" } else { "read" };
         let input = json!({"task": task, "ctx": self.context(cx), "target": text});
         let target = text.clone();
+        let reads = task == "read";
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.reading = None;
@@ -1416,6 +1433,14 @@ impl NotePage {
                 if page.note.first_run {
                     page.note.first_run = false;
                     page.schedule_save(cx);
+                }
+                if reads {
+                    let (target, note) = (target.clone(), page.note.id.clone());
+                    page.later(cx, move |page, cx| {
+                        if page.note.id == note {
+                            page.look_elsewhere(line, target, cx)
+                        }
+                    });
                 }
                 page.later(cx, |page, cx| page.after_read(cx));
                 cx.notify();
@@ -2683,6 +2708,7 @@ impl NotePage {
         state["lets_stand"] = json!(self.active.as_ref().and_then(|a| self.note.threads.iter().find(|t| &t.id == a)).map(crate::stand::lets_stand));
         // Loose ends, open or as it would open now (see loose_ends.rs)
         state["loose_ends"] = crate::loose_ends::describe(&self.note, window, cx);
+        self.between_state(&mut state, cx);
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()

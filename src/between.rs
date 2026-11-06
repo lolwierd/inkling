@@ -529,6 +529,27 @@ pub fn locate_in_block(note: &Note, block: usize, quote: &str) -> Option<Range<u
     text.find(q).map(|i| r.start + i..r.start + i + q.len())
 }
 
+/// Where the far end of a new thread goes in `note`: the words `quote` in block `block`
+/// (where the passage came from), else those words nearest that block (the note changed
+/// since it was searched), else the whole block. Returns the range and the words there.
+pub fn locate_other(note: &Note, block: usize, quote: &str) -> Option<(Range<usize>, String)> {
+    let text = note.joined_text();
+    let ranges = block_ranges(note);
+    let br = ranges.get(block)?.clone();
+    let range = locate_in_block(note, block, quote)
+        .or_else(|| {
+            let q = quote.trim().trim_matches('\u{2026}').trim();
+            nearest(&text, q, br.start).map(|i| i..i + q.len())
+        })
+        .unwrap_or_else(|| {
+            let b = &note.blocks[block].text;
+            let lead = b.len() - b.trim_start().len();
+            br.start + lead..br.start + lead + b.trim().len()
+        });
+    let words = text[range.clone()].to_string();
+    Some((range, words))
+}
+
 /// The occurrence of `needle` in `hay` that starts closest to `near`.
 fn nearest(hay: &str, needle: &str, near: usize) -> Option<usize> {
     if needle.is_empty() {
@@ -958,6 +979,11 @@ mod tests {
         assert_eq!(&cal.joined_text()[r], "Friday 13 March");
         assert!(locate_in_block(cal, 1, "Friday 13 March").is_none());
         assert!(locate_in_block(cal, 9, "x").is_none());
+        // the far end of a new thread: in its block, else nearest it, else the whole block
+        assert_eq!(locate_other(cal, 2, "Friday 13 March").unwrap().1, "Friday 13 March");
+        assert_eq!(locate_other(cal, 1, "Friday 13 March").unwrap().1, "Friday 13 March");
+        assert_eq!(locate_other(cal, 3, "gone words").unwrap().1, "Spring half marathon in Leeds on 26 April, if the knee holds.");
+        assert!(locate_other(cal, 9, "x").is_none());
     }
 
     /// A plan whose thread `b1` joins "Saturday 14 March" to the calendar's "Friday 13 March".

@@ -1,0 +1,21 @@
+# Threads between notes: a finished paragraph that disagrees with a paragraph in another note
+# gets one thread that quotes both, stored with its far end. The note that waits to be asked
+# (Journal shares the bib words) and the note that shares only the month are never sent.
+# fixture: between
+# tags: between
+wait: 1500
+switch: Race-week plan
+caret: end
+type: I'll pick up my bib on Saturday 14 March, after the shakeout run [[read>silent]] [[elsewhere]] [[quote:Saturday 14 March]] [[other:Friday 13 March]].
+settle
+dump: linked
+expect: tasks.join() === "read,relate"
+expect: requests[1].input.passages.length === 1 && requests[1].input.passages[0].noteTitle === "Race calendar" && requests[1].input.passages[0].text === "Pick up the race bib on Friday 13 March at the harbour office."
+expect: requests[1].input.before.join("|") === "Race week is about sleep and nothing new.|The city 10k is on Sunday 22 March, so the taper starts on the 8th."
+expect: d.between.some(e => e.quote === "Friday 13 March" && e.title === "Race calendar" && !e.visiting && !e.placed && !e.gone)
+expect: d.threads.some(t => t.quote === "Saturday 14 March" && t.kind === "Question" && t.status === "Open")
+expect: d.relating === null
+quit
+expect: note("Race-week plan").elsewhere.length === 2 && note("Race-week plan").elsewhere.some(e => e.quote === "Friday 13 March" && e.note === note("Race calendar").id && e.relation === "contradicts")
+expect: rangeText(note("Race calendar"), note("Race-week plan").elsewhere.find(e => e.quote === "Friday 13 March")) === "Friday 13 March"
+expect: rangeText(note("Race-week plan"), note("Race-week plan").threads.find(t => t.quote === "Saturday 14 March")) === "Saturday 14 March"

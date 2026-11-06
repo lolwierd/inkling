@@ -151,7 +151,7 @@ async function drain(
       }
       case "result": {
         const r = m as any;
-        const usage: Usage = { ms: Date.now() - started, model, costUsd: r.total_cost_usd };
+        const usage: Usage = { ms: Date.now() - started, model, costUsd: r.total_cost_usd, ...tokens(r.usage) };
         if (r.subtype !== "success" || r.is_error) {
           const errors = Array.isArray(r.errors) ? r.errors.filter(Boolean).join("; ") : "";
           const msg = String(errors || r.result || r.subtype || "the model returned an error");
@@ -162,6 +162,20 @@ async function drain(
     }
   }
   throw new ProviderError("other", "the model stopped without a result");
+}
+
+/** The token counts on a result, as numbers, when the runtime reports them. */
+function tokens(u: any): Partial<Usage> {
+  if (typeof u !== "object" || u === null) return {};
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const out: Partial<Usage> = {
+    inputTokens: n(u.input_tokens),
+    outputTokens: n(u.output_tokens),
+    cacheReadTokens: n(u.cache_read_input_tokens),
+    cacheWriteTokens: n(u.cache_creation_input_tokens),
+  };
+  for (const k of Object.keys(out) as (keyof Usage)[]) if (out[k] === undefined) delete out[k];
+  return out;
 }
 
 function resultKind(

@@ -219,7 +219,10 @@ impl Render for Palette {
                 div()
                     .id(("palette-row", i))
                     .mx(px(6.))
-                    .px(px(10.))
+                    // the row's icon under the search's, 14 px in as the footer's ↩ is,
+                    // and its title under the search box's words
+                    .pl(px(8.))
+                    .pr(px(10.))
                     .py(px(7.))
                     // a row's corner, as the sidebar's and the menus' rows have it
                     .rounded(px(6.))
@@ -229,7 +232,7 @@ impl Render for Palette {
                     .flex()
                     .flex_row()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(10.))
                     .child(ui::icon(if create { "plus" } else { "file-text" }, 13., p.faint))
                     .child(
                         div()

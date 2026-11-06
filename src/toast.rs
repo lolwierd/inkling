@@ -376,7 +376,8 @@ pub fn stack<V: 'static>(
                             undo(this, kind, window, cx);
                         })),
                 )
-                .when(kind == Kind::ThreadDismissed, |d| d.children(undo_keys.clone().map(|k| ui::key_hint(k, &t))))
+                // the keys close the label as Undo's own padding would: as far in as the words start
+                .when(kind == Kind::ThreadDismissed, |d| d.children(undo_keys.clone().map(|k| ui::key_hint(k, &t).pr(px(6.)))))
             })
             .when(problem, |d| {
                 d.cursor_pointer()

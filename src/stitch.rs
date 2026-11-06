@@ -38,22 +38,97 @@ fn lighter(c: Hsla, by: f32) -> Hsla {
 
 // ---------------------------------------------------------------- stitches
 
-/// Thread on the surface for a stitch, then under the cloth for a gap: a running
-/// stitch from `x0` to `x1` along `y`. Each stitch is a capsule, because thread has
-/// round ends. `skip_first` leaves room for a cross-stitch at the start.
-pub fn running_stitch(window: &mut Window, x0: Pixels, x1: Pixels, y: Pixels, color: Hsla, seed: u64, skip_first: bool) {
-    let mut x = x0 + if skip_first { px(11.) } else { px(0.) };
+/// Room a correction's cross-stitch takes at the start of its words.
+const CROSS_ROOM: f32 = 11.;
+
+/// One stitch of a running stitch: thread on the surface from `x0` to `x1`, `dy` off the
+/// line (the hand is steady, not exact).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Dash {
+    pub x0: f32,
+    pub x1: f32,
+    pub dy: f32,
+}
+
+/// The stitches of a running stitch from `x0` to `x1`: thread on the surface for a
+/// stitch, then under the cloth for a gap. `skip_first` leaves room for a cross-stitch at
+/// the start.
+pub fn stitch_dashes(x0: f32, x1: f32, seed: u64, skip_first: bool) -> Vec<Dash> {
+    let mut out = vec![];
+    let mut x = x0 + if skip_first { CROSS_ROOM } else { 0. };
     let mut i = 0u32;
-    let h = px(1.8);
-    while x < x1 - px(2.5) {
-        let len = px(6.6 + jitter(seed, i) * 1.4);
-        let end = (x + len).min(x1);
-        let dy = px(jitter(seed, i + 101) * 0.7);
-        let b = Bounds::new(point(x, y - h / 2. + dy), size(end - x, h));
-        window.paint_quad(fill(b, color).corner_radii(h / 2.));
-        x = end + px(3.7 + jitter(seed, i + 211) * 0.8);
+    while x < x1 - 2.5 {
+        let end = (x + 6.6 + jitter(seed, i) * 1.4).min(x1);
+        out.push(Dash { x0: x, x1: end, dy: jitter(seed, i + 101) * 0.7 });
+        x = end + 3.7 + jitter(seed, i + 211) * 0.8;
         i += 1;
     }
+    out
+}
+
+/// One stitch, along `y`. Each is a capsule, because thread has round ends.
+pub fn paint_dash(window: &mut Window, d: Dash, y: Pixels, color: Hsla) {
+    let h = px(1.8);
+    let b = Bounds::new(point(px(d.x0), y - h / 2. + px(d.dy)), size(px(d.x1 - d.x0), h));
+    window.paint_quad(fill(b, color).corner_radii(h / 2.));
+}
+
+/// A running stitch from `x0` to `x1` along `y` (see [`stitch_dashes`]).
+pub fn running_stitch(window: &mut Window, x0: Pixels, x1: Pixels, y: Pixels, color: Hsla, seed: u64, skip_first: bool) {
+    for d in stitch_dashes(x0.as_f32(), x1.as_f32(), seed, skip_first) {
+        paint_dash(window, d, y, color);
+    }
+}
+
+/// One thread's words on one row of text: where its stitches run.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Run {
+    pub x0: f32,
+    pub x1: f32,
+    pub seed: u64,
+    /// A correction's first row starts with a cross-stitch: no stitch in its first 11 px.
+    pub cross: bool,
+}
+
+/// The stitches for every thread on one row of text, each with the index of the run that
+/// owns it. A thread alone keeps its own running stitch. Where threads share words (Ask
+/// the room puts several minds on the same quote), they share one running stitch there
+/// and take its stitches in turn, a stitch each in the order given, so every mind's
+/// colour shows rather than only the one drawn last.
+pub fn shared_stitches(runs: &[Run]) -> Vec<(usize, Dash)> {
+    let mut order: Vec<usize> = (0..runs.len()).collect();
+    order.sort_by(|&a, &b| runs[a].x0.total_cmp(&runs[b].x0).then(a.cmp(&b)));
+    let mut out = vec![];
+    let mut i = 0;
+    while i < order.len() {
+        // the runs that overlap this one, directly or through each other
+        let mut group = vec![order[i]];
+        let mut end = runs[order[i]].x1;
+        let mut j = i + 1;
+        while j < order.len() && runs[order[j]].x0 < end - 0.5 {
+            end = end.max(runs[order[j]].x1);
+            group.push(order[j]);
+            j += 1;
+        }
+        let first = runs[order[i]];
+        if group.len() == 1 {
+            out.extend(stitch_dashes(first.x0, first.x1, first.seed, first.cross).into_iter().map(|d| (order[i], d)));
+        } else {
+            group.sort();
+            for (k, d) in stitch_dashes(first.x0, end, first.seed, false).into_iter().enumerate() {
+                if group.iter().any(|&g| runs[g].cross && d.x1 > runs[g].x0 && d.x0 < runs[g].x0 + CROSS_ROOM) {
+                    continue;
+                }
+                let mid = (d.x0 + d.x1) / 2.;
+                let here: Vec<usize> = group.iter().copied().filter(|&g| runs[g].x0 <= mid && mid < runs[g].x1).collect();
+                if !here.is_empty() {
+                    out.push((here[k % here.len()], d));
+                }
+            }
+        }
+        i = j;
+    }
+    out
 }
 
 /// A cross-stitch: marks a correction, so a correction differs from a question in shape
@@ -530,6 +605,57 @@ mod tests {
         r.set_ends(point(px(0.), px(24.)), point(px(200.), px(24.)), false);
         assert!(!r.moving);
         assert!((r.pts[0].y - 24.).abs() < 0.01);
+    }
+
+    fn run(x0: f32, x1: f32) -> Run {
+        Run { x0, x1, seed: 7, cross: false }
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_alone_keeps_its_own_running_stitch() {
+        let alone = shared_stitches(&[Run { x0: 10., x1: 210., seed: 42, cross: true }]);
+        let own: Vec<(usize, Dash)> = stitch_dashes(10., 210., 42, true).into_iter().map(|d| (0, d)).collect();
+        assert_eq!(alone, own);
+        // two threads on different words of the same row each keep theirs
+        let apart = shared_stitches(&[run(0., 80.), Run { x0: 120., x1: 200., seed: 9, cross: false }]);
+        assert!(apart.iter().filter(|(i, _)| *i == 0).all(|(_, d)| d.x1 <= 80.));
+        assert!(apart.iter().filter(|(i, _)| *i == 1).all(|(_, d)| d.x0 >= 120.));
+        assert_eq!(apart.iter().filter(|(i, _)| *i == 1).count(), stitch_dashes(120., 200., 9, false).len());
+    }
+
+    #[std::prelude::v1::test]
+    fn threads_on_the_same_words_take_the_stitches_in_turn() {
+        let two = shared_stitches(&[run(0., 300.), run(0., 300.)]);
+        let owners: Vec<usize> = two.iter().map(|(i, _)| *i).collect();
+        assert!(owners.windows(2).all(|w| w[0] != w[1]), "turn and turn about: {owners:?}");
+        // one running stitch: no stitch drawn over another
+        assert!(two.windows(2).all(|w| w[1].1.x0 >= w[0].1.x1), "stitches overlap");
+        // three minds each get a third
+        let three = shared_stitches(&[run(0., 300.), run(0., 300.), run(0., 300.)]);
+        let counts: Vec<usize> = (0..3).map(|m| three.iter().filter(|(i, _)| *i == m).count()).collect();
+        assert!(counts.iter().all(|c| *c >= 8) && counts.iter().max().unwrap() - counts.iter().min().unwrap() <= 1, "{counts:?}");
+    }
+
+    #[std::prelude::v1::test]
+    fn words_shared_in_part_share_only_the_part() {
+        let s = shared_stitches(&[run(0., 120.), run(60., 200.)]);
+        for (i, d) in &s {
+            let mid = (d.x0 + d.x1) / 2.;
+            if mid < 60. {
+                assert_eq!(*i, 0, "only the first thread before the second starts");
+            } else if mid >= 120. {
+                assert_eq!(*i, 1, "only the second after the first ends");
+            }
+        }
+        let shared: Vec<usize> = s.iter().filter(|(_, d)| (60.0..120.0).contains(&((d.x0 + d.x1) / 2.))).map(|(i, _)| *i).collect();
+        assert!(shared.contains(&0) && shared.contains(&1), "both colours where both threads are: {shared:?}");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_shared_correction_keeps_room_for_its_cross() {
+        let s = shared_stitches(&[Run { x0: 40., x1: 240., seed: 3, cross: true }, run(40., 240.)]);
+        assert!(s.iter().all(|(_, d)| d.x1 <= 40. || d.x0 >= 40. + CROSS_ROOM));
+        assert!(s.iter().any(|(i, _)| *i == 0) && s.iter().any(|(i, _)| *i == 1));
     }
 
     #[std::prelude::v1::test]

@@ -26,6 +26,7 @@
   .sw-rail .nav { position:absolute; left:12px; right:12px; top:52px; display:flex; flex-direction:column; gap:3.5px; }
   .sw-rail .nav span { display:flex; align-items:center; gap:10px; height:29px; padding:0 10px; border-radius:8px; font-size:13.2px; color:var(--ink); }
   .sw-rail .nav span.on { background:var(--paper); box-shadow: 0 1px 3px rgba(var(--shade),.14); }
+  .sw-rail .nav span.ring { outline: 1.5px dashed var(--voice); outline-offset: 3px; }
   .sw-rail .ft { position:absolute; left:18px; right:18px; bottom:14px; display:flex; align-items:flex-end; justify-content:space-between; font-size:10.5px; color:var(--graphite); }
   .sw-sheet { position:absolute; left:230px; top:10px; width:660px; height:699px; border-radius:12px; background:var(--paper); box-shadow: 0 0 0 1px var(--rule); overflow:hidden; }
   .sw-sc { position:absolute; left:33px; right:33px; top:0; }
@@ -158,7 +159,8 @@
     ensureCSS();
     const pane = S.pane || "Reading";
     const navKey = pane === "NewMind" ? "Minds" : pane;
-    const nav = PANES.map(([n, ic]) => `<span class="${n === navKey ? "on" : ""}">${pi(ic, n === navKey ? "var(--voice)" : "var(--graphite)")}${n}</span>`).join("");
+    // the keyboard's ring (ui::Keyed): a running stitch in your thread around the control Tab reached
+    const nav = PANES.map(([n, ic]) => `<span class="${n === navKey ? "on" : ""}${S.ring === n ? " ring" : ""}">${pi(ic, n === navKey ? "var(--voice)" : "var(--graphite)")}${n}</span>`).join("");
     const body = (PANE[pane] || (() => ""))(S, t);
     host.innerHTML = `<div class="sw-win"><div class="sw-rail"><div class="lt"><i></i><i></i><i></i></div><div class="nav">${nav}</div><div class="ft"><span>${A.WM_HTML(17)}</span><span>v0.1.0</span></div></div>` +
       `<div class="sw-sheet"><div class="sw-sc" style="transform:translateY(${fx(-(S.scroll || 0))}px)">${body}</div></div></div>`;

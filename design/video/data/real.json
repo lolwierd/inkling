@@ -2487,7 +2487,7 @@
       "The flag is snapshot_restore, and it stays off by default.",
       "Skeptic, will restores hold up when a hundred VMs start at once?",
       "We rebuild the snapshot once a week, along with the image.",
-      "Measure p99 from the API call, not from boot."
+      "Do we still need the boot path once restore works?"
     ],
     "p2Fixed": "So we skip boot and restore each VM from a memory snapshot. A 4 GiB snapshot copies over a 25 Gbit/s link in about 1.4 s, so we load pages on demand.",
     "edits": [

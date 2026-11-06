@@ -20,6 +20,7 @@
 //     reply   the writer answers the probe's question (FILM_REPLY, or REPLY below)
 //     mind    a mind of your own reads ¶6
 //     learn   Inkling learns about you from a reply
+//     note    no call: rewrites real.note after a change to the writer's words
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -51,7 +52,8 @@ const P3 = "We try it on the staging hosts first, from Monday.";
 const P4 = "The flag is snapshot_restore, and it stays off by default.";
 const P5 = "Skeptic, will restores hold up when a hundred VMs start at once?";
 const P6 = "We rebuild the snapshot once a week, along with the image.";
-const P7 = "Measure p99 from the API call, not from boot.";
+// dictated in chapter 6, a question the writer asks themselves; no model call reads it
+const P7 = "Do we still need the boot path once restore works?";
 const BRIEF = "For a design review on Thursday. What matters is p99, not the median.";
 const FIRST = "We can get VM cold starts under two seconds by March.";
 const PROBE_TARGET = "We try it on the staging hosts first";
@@ -234,6 +236,10 @@ const STAGES: Record<string, () => Promise<unknown>> = {
   // The note's mind is now the writer's own; it reads the next paragraph.
   async mind() {
     await call("mind", LIGHT, { task: "read", ctx: ctx([...BODY, P5, P6], { threads: threads(["t1", "t2r", "ask", "room", "call", "sketch"]), brief: BRIEF, mind: SECURITY }), target: P6 });
+  },
+  // no model call: writes the note's words (real.note) after a change to them
+  async note() {
+    save();
   },
   async learn() {
     await call("learn", LIGHT, { task: "learn", aboutMe: null, message: LEARN_MESSAGE });

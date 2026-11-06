@@ -2805,11 +2805,13 @@ impl NotePage {
                 .mt(px(4.))
                 .flex()
                 .flex_row()
-                .items_baseline()
+                // the label sits beside the brief's first line, however many it wraps to
+                .items_start()
                 .gap(px(8.))
                 .cursor_pointer()
                 .child(
                     div()
+                        .h(px(19.))
                         .flex()
                         .flex_none()
                         .items_center()

@@ -39,25 +39,8 @@ gpui_kit::actions!(
 );
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys(crate::editor::bindings());
-    cx.bind_keys([
-        KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("cmd-\\", ToggleSidebar, None),
-        KeyBinding::new("cmd-n", NewNote, None),
-        KeyBinding::new("cmd-k", OpenPalette, None),
-        KeyBinding::new("cmd-j", ToggleChat, None),
-        KeyBinding::new("cmd-,", OpenSettings, None),
-        KeyBinding::new("cmd-shift-.", JustMyWords, None),
-        KeyBinding::new("cmd->", JustMyWords, None),
-        KeyBinding::new("cmd-shift-c", CopyNote, None),
-        KeyBinding::new("cmd-shift-e", ExportNote, None),
-        KeyBinding::new("cmd-enter", FindLooseThread, None),
-        // the margin, from the keyboard
-        KeyBinding::new("alt-cmd-down", NextThread, None),
-        KeyBinding::new("alt-cmd-up", PrevThread, None),
-        KeyBinding::new("cmd-shift-backspace", DismissThread, None),
-        KeyBinding::new("alt-cmd-z", UndoDismiss, None),
-    ]);
+    // Every shortcut, the editor's included, with the keys from Settings › Shortcuts.
+    crate::shortcuts::install(cx);
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.set_menus(vec![
         Menu {
@@ -809,8 +792,9 @@ impl AppView {
         cx.notify();
     }
 
+    /// Settings is a window of its own (see settings.rs); the page follows what changes there.
     fn open_settings(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
-        let view = cx.new(|cx| SettingsView::new(tab, window, cx));
+        let Some(view): Option<Entity<SettingsView>> = crate::settings::open_window(tab, cx) else { return };
         let sub = cx.subscribe_in(&view, window, |this, _, ev: &SettingsEvent, window, cx| match ev {
             SettingsEvent::Changed => {
                 apply_theme(window.appearance(), cx);
@@ -824,11 +808,7 @@ impl AppView {
                 cx.notify();
             }
         });
-        // Take the keyboard from the note behind: typing must not edit it, and
-        // Escape should close settings straight away.
-        window.focus(&view.focus_handle(cx), cx);
         self.settings_sub = Some(sub);
-        self.settings = Some(view);
         self.sidebar_open = false;
         cx.notify();
     }

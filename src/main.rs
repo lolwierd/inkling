@@ -8,6 +8,7 @@ mod note_page;
 mod palette;
 mod script;
 mod settings;
+mod shortcuts;
 mod stitch;
 mod store;
 mod theme;

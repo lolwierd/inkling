@@ -1,8 +1,8 @@
 # Code health pass, 7 November 2026
 
-Branch `code-health`, rebased onto master `1a64810` (Let it stand, Show its working, the UI
-polish with `panel_fit`, Loose ends, Turn it over, Threads between notes, Read it through and
-the app icon merged) with every side's changes kept: the features' new page state (`goto`,
+Branch `code-health`, rebased onto master `c9b8e04` (Let it stand, Show its working, the UI
+polish with `panel_fit`, Loose ends, Turn it over, Threads between notes, Read it through,
+web sources and the app icon merged) with every side's changes kept: the features' new page state (`goto`,
 `disputes`, `unanswered`, `read_through`, the visitors of threads between notes) sits beside
 `Tag` and `ChatReply` and needed no folding, since none of it read the old tag maps or the
 chat's two Options. The ask: find the performance problems, bugs, implicit state

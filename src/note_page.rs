@@ -4059,6 +4059,50 @@ impl NotePage {
         cx.notify();
     }
 
+    /// The pointer moved while a tag is held: drag it, or (the button came up outside the
+    /// window) let it go.
+    fn drag_pointer(&mut self, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let Some(start) = self.drag.as_ref().map(|d| d.start) else { return };
+        if ev.dragging() {
+            self.drag_tag_by(ev.position - start, cx);
+        } else {
+            self.end_tag_drag(cx);
+        }
+    }
+
+    /// While a tag is held, the page hears the pointer from the window itself rather than
+    /// from what is under it: the tag, and the panel that unfolds over it, occlude the
+    /// page, so a handler on the page would hear only the moves that slip off the tag,
+    /// and the tag would follow the pointer in jumps.
+    fn drag_listener(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.drag.as_ref()?;
+        let this = cx.entity().downgrade();
+        Some(
+            canvas(
+                |_, _, _| (),
+                move |_, _, window, _| {
+                    let page = this.clone();
+                    window.on_mouse_event(move |ev: &MouseMoveEvent, phase, _, cx| {
+                        if phase == DispatchPhase::Bubble {
+                            let _ = page.update(cx, |p, cx| p.drag_pointer(ev, cx));
+                        }
+                    });
+                    let page = this.clone();
+                    window.on_mouse_event(move |ev: &MouseUpEvent, phase, _, cx| {
+                        if phase == DispatchPhase::Bubble && ev.button == MouseButton::Left {
+                            let _ = page.update(cx, |p, cx| p.end_tag_drag(cx));
+                        }
+                    });
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .into_any_element(),
+        )
+    }
+
     fn end_tag_drag(&mut self, cx: &mut Context<Self>) {
         if self.drag.take().is_some_and(|d| d.moved) {
             self.last_drag_end = Some(std::time::Instant::now());
@@ -5100,21 +5144,13 @@ impl Render for NotePage {
                 .bg(linear_gradient(180., linear_color_stop(p.shadow, 0.), linear_color_stop(p.shadow.opacity(0.), 1.)))
         });
 
+        let dragging = self.drag_listener(cx);
         let root = div()
             .size_full()
             .flex()
             .flex_row()
             .bg(p.cloth)
-            .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
-                let Some(start) = this.drag.as_ref().map(|d| d.start) else { return };
-                if ev.dragging() {
-                    this.drag_tag_by(ev.position - start, cx);
-                } else {
-                    // the button came up outside the window
-                    this.end_tag_drag(cx);
-                }
-            }))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.end_tag_drag(cx)))
+            .children(dragging)
             .child(
                 div()
                     .relative()

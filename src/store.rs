@@ -713,10 +713,6 @@ impl Note {
         self.elsewhere.iter().find(|e| e.thread == thread)
     }
 
-    pub fn elsewhere_of_mut(&mut self, thread: &str) -> Option<&mut Elsewhere> {
-        self.elsewhere.iter_mut().find(|e| e.thread == thread)
-    }
-
     /// The note's text as one string, blocks joined by newlines.
     pub fn joined_text(&self) -> String {
         self.blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join("\n")

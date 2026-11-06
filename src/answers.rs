@@ -81,17 +81,6 @@ pub fn push_not_answer(t: &mut Thread, words: &str) {
     }
 }
 
-/// A thread's kind as the minds are told it.
-pub fn kind_wire(kind: ThoughtKind) -> &'static str {
-    match kind {
-        ThoughtKind::Question => "question",
-        ThoughtKind::Correction => "correction",
-        ThoughtKind::Sketch => "sketch",
-        ThoughtKind::Ask => "ask",
-        ThoughtKind::Answer => "answer",
-    }
-}
-
 /// What a knot's tooltip says: whose thread it ties off, and on which of your words.
 pub fn knot_label(t: &Thread) -> String {
     let mind = if t.mind_name.trim().is_empty() { "Inkling" } else { t.mind_name.trim() };

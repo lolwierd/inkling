@@ -176,6 +176,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `INKLING_OPEN=chat,sidebar,...` | panels open at launch |
 | `INKLING_SETTINGS_TAB=<pane>` | the pane Settings opens on (with `INKLING_OPEN=settings`) |
 | `INKLING_SETTINGS_RECORD=<action>`, `INKLING_SETTINGS_KEYS=settings:<keys>,main:<keys>`, `INKLING_SETTINGS_SEARCH=<text>` | drive the shortcut recorder without clicks: listen for an action's keys, press keys in Settings or the note, fill the search |
+| `INKLING_SETTINGS_SCROLL=<px>` | scroll the Settings pane down that far, for a screenshot of a long pane (`scripts/dev shot --window settings --env ...`) |
 | `INKLING_SLOWMO=<factor>` | slow every thread animation |
 | `INKLING_BUN`, `INKLING_BRAIN_DIR`, `INKLING_CLAUDE_PATH`, `INKLING_USE_API_KEY=1` | where Bun, the brain and `claude` are; keep an API key in the brain's env |
 | `FAKE_*` | the fake brain's delays and failures (its header) |

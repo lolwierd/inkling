@@ -6,7 +6,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::store::Placement;
-use crate::theme::{Palette, Theme};
+use crate::theme::{Palette, Theme, ts};
 use crate::ui::icon;
 
 /// The window's materials. The desk is linen with the desktop showing through it,
@@ -111,8 +111,8 @@ pub fn section(title: impl Into<SharedString>, aside: Option<SharedString>, t: &
         .flex()
         .items_baseline()
         .gap(px(12.))
-        .child(crate::ui::section_label(title, t).flex_1().text_size(px(12.)))
-        .children(aside.map(|a| div().text_size(px(11.)).text_color(p.faint).child(a)))
+        .child(crate::ui::section_label(title, t).flex_1().text_size(px(ts::SMALL)))
+        .children(aside.map(|a| div().text_size(px(ts::META)).text_color(p.faint).child(a)))
 }
 
 /// Rows grouped on a card, with hairlines between them inset from the left, as macOS does.
@@ -145,15 +145,15 @@ pub fn row(title: impl IntoElement, detail: Option<SharedString>, control: impl 
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(div().text_size(px(13.)).text_color(p.ink).child(title))
-                .children(detail.map(|d| div().text_size(px(11.5)).line_height(px(16.)).text_color(p.graphite).child(d))),
+                .child(div().text_size(px(ts::UI)).text_color(p.ink).child(title))
+                .children(detail.map(|d| div().text_size(px(ts::SMALL)).line_height(px(16.)).text_color(p.graphite).child(d))),
         )
         .child(control)
 }
 
 /// A line of small print under a group.
 pub fn note(text: impl Into<SharedString>, t: &Theme) -> Div {
-    div().mt(px(7.)).px(px(2.)).text_size(px(11.)).line_height(px(15.)).text_color(t.p.faint).child(text.into())
+    div().mt(px(7.)).px(px(2.)).text_size(px(ts::META)).line_height(px(15.)).text_color(t.p.faint).child(text.into())
 }
 
 /// The groove a segmented control's choices sit in.
@@ -174,37 +174,11 @@ pub fn segment(id: impl Into<ElementId>, label: impl Into<SharedString>, on: boo
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.))
+        .text_size(px(ts::SMALL))
         .cursor_pointer()
         .when(on, |d| d.bg(p.card).text_color(p.ink).font_weight(FontWeight::MEDIUM).shadow(g.float(1., 2.)))
         .when(!on, |d| d.text_color(p.graphite).hover(move |s| s.text_color(p.ink)).active(move |s| s.bg(g.hover)))
         .child(label.into())
-}
-
-/// An on/off switch: ink when on, as everywhere in Inkling.
-pub fn switch(id: impl Into<ElementId>, on: bool, t: &Theme) -> Stateful<Div> {
-    let p = t.p;
-    let g = Glass::of(&p);
-    let off_knob = if p.dark { p.graphite } else { white(1.) };
-    div()
-        .id(id)
-        .flex_none()
-        .w(px(34.))
-        .h(px(20.))
-        .rounded_full()
-        .relative()
-        .cursor_pointer()
-        .bg(if on { p.ink } else { p.ink.opacity(if p.dark { 0.22 } else { 0.16 }) })
-        .child(
-            div()
-                .absolute()
-                .top(px(2.))
-                .left(if on { px(16.) } else { px(2.) })
-                .size(px(16.))
-                .rounded_full()
-                .bg(if on { p.paper } else { off_knob })
-                .shadow(g.float(1., 2.)),
-        )
 }
 
 /// A button with a border, as macOS draws push buttons.
@@ -223,7 +197,7 @@ pub fn push_button(id: impl Into<ElementId>, label: impl Into<SharedString>, t: 
         .border_1()
         .border_color(p.rule)
         .shadow(g.float(1., 1.))
-        .text_size(px(12.))
+        .text_size(px(ts::SMALL))
         .text_color(p.ink)
         .cursor_pointer()
         .hover(move |s| s.border_color(p.faint))
@@ -243,7 +217,7 @@ pub fn default_button(id: impl Into<ElementId>, label: impl Into<SharedString>, 
         .items_center()
         .rounded(px(7.))
         .bg(p.ink)
-        .text_size(px(12.))
+        .text_size(px(ts::SMALL))
         .font_weight(FontWeight::MEDIUM)
         .text_color(p.paper)
         .when(enabled, |d| d.cursor_pointer().hover(|s| s.opacity(0.9)).active(|s| s.opacity(0.8)))
@@ -257,7 +231,7 @@ pub fn text_button(id: impl Into<ElementId>, label: impl Into<SharedString>, t: 
     div()
         .id(id)
         .flex_none()
-        .text_size(px(12.))
+        .text_size(px(ts::SMALL))
         .text_color(p.graphite)
         .cursor_pointer()
         .hover(move |s| s.text_color(p.ink))
@@ -325,7 +299,7 @@ pub fn keycap(id: impl Into<ElementId>, text: impl Into<SharedString>, cap: Cap,
         .justify_center()
         .gap(px(5.))
         .rounded(px(6.))
-        .text_size(px(12.))
+        .text_size(px(ts::SMALL))
         .cursor_pointer()
         .border_1()
         .map(|d| match cap {
@@ -411,6 +385,7 @@ pub fn page_picture(placement: Placement, p: &Palette, thread: Hsla) -> Div {
             // the ? the page puts after a passage
             for (x, y) in [(first.0 + first.2 + 2., first.1 - 7.), (second.0 + second.2 + 2., second.1 - 7.)] {
                 d = d.child(
+                    // drawn to the picture's scale, not the interface's
                     div().absolute().left(px(x)).top(px(y)).text_size(px(9.)).line_height(px(10.)).font_weight(FontWeight::BOLD).text_color(thread).child("?"),
                 );
             }

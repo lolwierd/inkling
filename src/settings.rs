@@ -22,7 +22,7 @@ use crate::store::{
     Appearance, Frequency, InkColor, Lettering, Mind, ModelChoice, Mode, Pace, Placement, Store, TextSize, Voice,
     chosen_model, mind_templates, new_id,
 };
-use crate::theme::{Palette, SANS, SERIF, Theme, ink_color, note_size, thread_hex};
+use crate::theme::{Palette, SANS, SERIF, Theme, ink_color, note_size, thread_hex, ts};
 use crate::ui::{self, icon};
 use parts::{Cap, Glass, group, note, row, section, segment, segmented};
 
@@ -207,6 +207,8 @@ pub struct SettingsView {
     record_sub: Option<Subscription>,
     /// Whether the Model pane shows the pinned versions.
     show_versions: bool,
+    /// The page's scroll (INKLING_SETTINGS_SCROLL scrolls it at launch, for screenshots).
+    scroll: ScrollHandle,
     _subs: Vec<Subscription>,
 }
 
@@ -328,8 +330,13 @@ impl SettingsView {
             recording: None,
             record_sub: None,
             show_versions: false,
+            scroll: ScrollHandle::new(),
             _subs: subs,
         };
+        // Test aid: INKLING_SETTINGS_SCROLL=<px> scrolls the page down that far.
+        if let Some(y) = std::env::var("INKLING_SETTINGS_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
+            this.scroll.set_offset(point(px(0.), px(-y)));
+        }
         this.show(tab, window, cx);
         this.jiggle(window, cx);
         // Test aid: INKLING_SETTINGS_RECORD=<action name, e.g. app::NewNote> opens listening
@@ -593,8 +600,8 @@ impl SettingsView {
         let s = cx.global::<Store>().settings.clone();
         let mode = |id: &'static str, title: &'static str, body: &'static str, m: Mode, cx: &mut Context<Self>| {
             let words = div()
-                .child(div().text_size(px(13.)).text_color(p.ink).child(title))
-                .child(div().mt(px(4.)).text_size(px(11.5)).line_height(px(16.)).text_color(p.graphite).child(body));
+                .child(div().text_size(px(ts::UI)).text_color(p.ink).child(title))
+                .child(div().mt(px(4.)).text_size(px(ts::SMALL)).line_height(px(16.)).text_color(p.graphite).child(body));
             parts::tile(id, s.default_mode == m, &t, words)
                 .p(px(14.))
                 .pr(px(30.))
@@ -617,8 +624,8 @@ impl SettingsView {
             };
             let card = div()
                 .child(parts::page_picture(v, &p, t.voice_ink).w_full())
-                .child(div().mt(px(9.)).px(px(4.)).text_size(px(13.)).text_color(p.ink).child(v.label()))
-                .child(div().mt(px(2.)).px(px(4.)).pb(px(4.)).text_size(px(11.5)).line_height(px(16.)).text_color(p.graphite).child(body));
+                .child(div().mt(px(9.)).px(px(4.)).text_size(px(ts::UI)).text_color(p.ink).child(v.label()))
+                .child(div().mt(px(2.)).px(px(4.)).pb(px(4.)).text_size(px(ts::SMALL)).line_height(px(16.)).text_color(p.graphite).child(body));
             places = places.child(
                 parts::tile(("place", i), s.placement == v, &t, card)
                     .p(px(8.))
@@ -664,8 +671,8 @@ impl SettingsView {
             };
             let card = div()
                 .child(picture.w_full())
-                .child(div().mt(px(9.)).px(px(4.)).text_size(px(13.)).text_color(p.ink).child(a.label()))
-                .child(div().mt(px(2.)).px(px(4.)).pb(px(4.)).text_size(px(11.5)).line_height(px(16.)).text_color(p.graphite).child(body));
+                .child(div().mt(px(9.)).px(px(4.)).text_size(px(ts::UI)).text_color(p.ink).child(a.label()))
+                .child(div().mt(px(2.)).px(px(4.)).pb(px(4.)).text_size(px(ts::SMALL)).line_height(px(16.)).text_color(p.graphite).child(body));
             looks = looks.child(
                 parts::tile(("look", i), s.appearance == a, &t, card)
                     .p(px(8.))
@@ -680,7 +687,7 @@ impl SettingsView {
                 .flex_col()
                 .justify_between()
                 .child(div().font_family(SERIF).text_size(note_size(size)).text_color(p.ink).child("A thought."))
-                .child(div().text_size(px(11.5)).text_color(p.graphite).child(size.label()));
+                .child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child(size.label()));
             sizes = sizes.child(
                 parts::tile(("size", i), s.text_size == size, &t, card)
                     .h(px(78.))
@@ -695,8 +702,8 @@ impl SettingsView {
                 .flex()
                 .flex_col()
                 .justify_between()
-                .child(div().font_family(font).text_size(px(15.)).text_color(t.voice_ink).child("Does this still hold?"))
-                .child(div().text_size(px(11.5)).text_color(p.graphite).child(l.label()));
+                .child(div().font_family(font).text_size(px(ts::BODY)).text_color(t.voice_ink).child("Does this still hold?"))
+                .child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child(l.label()));
             parts::tile(id, s.lettering == l, &t, card)
                 .h(px(78.))
                 .px(px(14.))
@@ -737,7 +744,7 @@ impl SettingsView {
                     row(
                         "Ink from the pointer",
                         Some("Now and then a drop of ink falls as you move the pointer, then dries and fades.".into()),
-                        parts::switch("ink-pointer", s.ink_from_pointer, &t)
+                        ui::switch("ink-pointer", s.ink_from_pointer, &t)
                             .on_click(cx.listener(|this, _, _, cx| this.update(cx, |s| s.ink_from_pointer = !s.ink_from_pointer))),
                         &t,
                     )
@@ -771,7 +778,7 @@ impl SettingsView {
         div()
             .children(built_in.map(|m| {
                 group(
-                    vec![row(m.name.clone(), Some(m.description.clone().into()), div().text_size(px(11.5)).text_color(p.faint).child("Built in"), &t).into_any_element()],
+                    vec![row(m.name.clone(), Some(m.description.clone().into()), div().text_size(px(ts::META)).text_color(p.faint).child("Built in"), &t).into_any_element()],
                     &t,
                 )
                 .mt(px(4.))
@@ -790,8 +797,8 @@ impl SettingsView {
                     vec![div()
                         .px(px(14.))
                         .py(px(14.))
-                        .child(div().text_size(px(13.)).text_color(p.ink).child("None yet"))
-                        .child(div().mt(px(2.)).text_size(px(11.5)).text_color(p.graphite).child("Start from one of these, or write your own with New mind."))
+                        .child(div().text_size(px(ts::UI)).text_color(p.ink).child("None yet"))
+                        .child(div().mt(px(2.)).text_size(px(ts::SMALL)).text_color(p.graphite).child("Start from one of these, or write your own with New mind."))
                         .child(chips)
                         .into_any_element()],
                     &t,
@@ -813,7 +820,9 @@ impl SettingsView {
                 this.fill(&m, window, cx);
             })));
         }
-        let field = |label: &'static str, hint: &'static str, input: AnyElement| {
+        // The box pads its words 12 px, as a text area pads its own: a one-line field is
+        // given no padding of its own (`px_0`), a text area none from the box.
+        let field = |label: &'static str, hint: &'static str, input: AnyElement, pads_itself: bool| {
             div()
                 .px(px(14.))
                 .py(px(10.))
@@ -822,10 +831,10 @@ impl SettingsView {
                         .flex()
                         .items_baseline()
                         .gap(px(8.))
-                        .child(div().text_size(px(13.)).text_color(p.ink).child(label))
-                        .child(div().text_size(px(11.)).text_color(p.faint).child(hint)),
+                        .child(div().text_size(px(ts::UI)).text_color(p.ink).child(label))
+                        .child(div().text_size(px(ts::META)).text_color(p.faint).child(hint)),
                 )
-                .child(div().mt(px(6.)).px(px(9.)).py(px(6.)).rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(13.)).child(input))
+                .child(div().mt(px(6.)).px(px(if pads_itself { 0. } else { 12. })).py(px(6.)).rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(ts::UI)).child(input))
                 .into_any_element()
         };
         let mut voices = segmented(&t);
@@ -849,9 +858,9 @@ impl SettingsView {
             .child(section("The mind", None, &t).when(editing, |d| d.mt(px(4.))))
             .child(group(
                 vec![
-                    field("Name", "", Input::new(&self.name).appearance(false).into_any_element()),
-                    field("Description", "Shown when you pick it", Input::new(&self.description).appearance(false).into_any_element()),
-                    field("How it thinks", "What it looks for, pushes on, and leaves alone", Textarea::new(&self.how).appearance(false).into_any_element()),
+                    field("Name", "", Input::new(&self.name).appearance(false).px_0().into_any_element(), false),
+                    field("Description", "Shown when you pick it", Input::new(&self.description).appearance(false).px_0().into_any_element(), false),
+                    field("How it thinks", "What it looks for, pushes on, and leaves alone", Textarea::new(&self.how).appearance(false).into_any_element(), true),
                 ],
                 &t,
             ))
@@ -889,7 +898,7 @@ impl SettingsView {
                     vec![row(
                         "Inkling learns about you",
                         Some("When you say something lasting about yourself, like what you study or how you like feedback, it can be worked in here.".into()),
-                        parts::switch("learns", s.learns_about_me, &t).on_click(cx.listener(|this, _, _, cx| this.update(cx, |s| s.learns_about_me = !s.learns_about_me))),
+                        ui::switch("learns", s.learns_about_me, &t).on_click(cx.listener(|this, _, _, cx| this.update(cx, |s| s.learns_about_me = !s.learns_about_me))),
                         &t,
                     )
                     .into_any_element()],
@@ -899,7 +908,7 @@ impl SettingsView {
             )
             .child(section("What Inkling knows", Some(format!("{} of {ABOUT_LIMIT}", s.about_me.chars().count()).into()), &t))
             // The text area pads itself; this lines its words up with the rows' titles.
-            .child(group(vec![div().px(px(4.)).py(px(6.)).text_size(px(13.)).line_height(px(19.)).child(Textarea::new(&self.about).appearance(false)).into_any_element()], &t))
+            .child(group(vec![div().px(px(4.)).py(px(6.)).text_size(px(ts::UI)).line_height(px(19.)).child(Textarea::new(&self.about).appearance(false)).into_any_element()], &t))
             .child(note("Edit it any time. Inkling only adds to it when the switch above is on.", &t))
     }
 
@@ -1000,7 +1009,7 @@ impl SettingsView {
             row(
                 "Model id",
                 Some("Any model Claude Code takes. Empty is its default.".into()),
-                div().w(px(220.)).h(px(28.)).px(px(9.)).flex().items_center().rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(12.5)).child(Input::new(&self.model).appearance(false)),
+                div().w(px(220.)).h(px(28.)).px(px(9.)).flex().items_center().rounded(px(7.)).bg(p.paper).border_1().border_color(p.rule).text_size(px(ts::UI)).child(Input::new(&self.model).appearance(false).px_0()),
                 &t,
             )
             .into_any_element(),
@@ -1034,7 +1043,7 @@ impl SettingsView {
                     }
                     seg.into_any_element()
                 }
-                None => div().text_size(px(12.)).text_color(p.faint).child("None").into_any_element(),
+                None => div().text_size(px(ts::SMALL)).text_color(p.faint).child("None").into_any_element(),
             };
             row(label, None, control, &t).into_any_element()
         };
@@ -1070,7 +1079,7 @@ impl SettingsView {
             .flex()
             .items_center()
             .gap(px(6.))
-            .text_size(px(12.))
+            .text_size(px(ts::SMALL))
             .text_color(p.graphite)
             .cursor_pointer()
             .hover(move |s| s.text_color(p.ink))
@@ -1180,6 +1189,9 @@ impl SettingsView {
                                     .justify_center()
                                     .invisible()
                                     .group_hover(cap_group, |s| s.visible())
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(p.ink))
+                                    .active(|s| s.opacity(0.7))
                                     .child(icon("x", 9., p.paper))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         cx.stop_propagation();
@@ -1214,26 +1226,26 @@ impl SettingsView {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .child(div().flex().items_center().gap(px(6.)).child(div().text_size(px(13.)).text_color(p.ink).child(l.label)).when(l.custom, |d| {
-                        d.child(div().text_size(px(11.)).text_color(p.faint).child("Changed"))
+                    .child(div().flex().items_center().gap(px(6.)).child(div().text_size(px(ts::UI)).text_color(p.ink).child(l.label)).when(l.custom, |d| {
+                        d.child(div().text_size(px(ts::META)).text_color(p.faint).child("Changed"))
                     }))
-                    .children(l.hint.map(|h| div().text_size(px(11.5)).line_height(px(16.)).text_color(p.graphite).child(h)));
+                    .children(l.hint.map(|h| div().text_size(px(ts::SMALL)).line_height(px(16.)).text_color(p.graphite).child(h)));
                 for (keys, other) in &l.clashes {
                     left = left.child(
                         div()
                             .flex()
                             .items_center()
                             .gap(px(5.))
-                            .text_size(px(11.5))
+                            .text_size(px(ts::SMALL))
                             .text_color(warn)
                             .child(icon("triangle-alert", 12., warn))
                             .child(format!("{} also runs {}", shortcuts::glyphs(keys), other)),
                     );
                 }
                 if let Some((_, _, _, Some(why))) = listening_here {
-                    left = left.child(div().flex().items_center().gap(px(5.)).text_size(px(11.5)).text_color(warn).child(icon("info", 12., warn)).child(why));
+                    left = left.child(div().flex().items_center().gap(px(5.)).text_size(px(ts::SMALL)).text_color(warn).child(icon("info", 12., warn)).child(why));
                 } else if listening_here.is_some() {
-                    left = left.child(div().text_size(px(11.5)).text_color(p.graphite).child("Press the new keys. Esc cancels."));
+                    left = left.child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child("Press the new keys. Esc cancels."));
                 }
                 rows.push(
                     div()
@@ -1264,7 +1276,7 @@ impl SettingsView {
                     .items_center()
                     .gap(px(6.))
                     .child(icon("search", 18., p.faint))
-                    .child(div().text_size(px(13.)).text_color(p.graphite).child(format!("No shortcut matches “{}”.", self.search.read(cx).value().trim()))),
+                    .child(div().text_size(px(ts::UI)).text_color(p.graphite).child(format!("No shortcut matches “{}”.", self.search.read(cx).value().trim()))),
             );
         }
         out
@@ -1286,7 +1298,7 @@ impl SettingsView {
                 div()
                     .px(px(14.))
                     .py(px(10.))
-                    .text_size(px(13.))
+                    .text_size(px(ts::UI))
                     .line_height(px(19.))
                     .text_color(p.graphite)
                     .child(StyledText::new(format!("{lead} {rest}")).with_highlights([(0..lead.len(), HighlightStyle { color: Some(p.ink), ..Default::default() })]))
@@ -1349,7 +1361,7 @@ impl SettingsView {
                     .flex()
                     .items_center()
                     .gap(px(9.))
-                    .text_size(px(13.))
+                    .text_size(px(ts::UI))
                     .text_color(p.ink)
                     .cursor_pointer()
                     .when(on, |d| d.bg(g.chosen).border_1().border_color(g.chosen_rim).shadow(g.float(1., 3.)).font_weight(FontWeight::MEDIUM))
@@ -1376,7 +1388,7 @@ impl SettingsView {
                 .child(items)
                 .child(div().flex_1().window_control_area(WindowControlArea::Drag))
                 .child(div().px(px(18.)).pb(px(16.)).flex().items_end().justify_between().child(ui::wordmark(&t, 16.)).child(
-                    div().text_size(px(11.)).text_color(p.graphite).child(concat!("v", env!("CARGO_PKG_VERSION"))),
+                    div().text_size(px(ts::META)).text_color(p.graphite).child(concat!("v", env!("CARGO_PKG_VERSION"))),
                 )),
         )
     }
@@ -1406,7 +1418,7 @@ impl SettingsView {
                                 .border_1()
                                 .border_color(p.rule)
                                 .child(icon("search", 13., p.faint))
-                                .child(div().flex_1().min_w(px(0.)).text_size(px(12.5)).child(Input::new(&self.search).appearance(false))),
+                                .child(div().flex_1().min_w(px(0.)).text_size(px(ts::UI)).child(Input::new(&self.search).appearance(false).px_0())),
                         )
                         .child(
                             parts::push_button("reset-all", "Reset all", &t)
@@ -1462,7 +1474,7 @@ impl Render for SettingsView {
                 .items_center()
                 .gap(px(2.))
                 .mb(px(2.))
-                .text_size(px(12.))
+                .text_size(px(ts::SMALL))
                 .text_color(p.graphite)
                 .cursor_pointer()
                 .hover(move |s| s.text_color(p.ink))
@@ -1500,10 +1512,10 @@ impl Render for SettingsView {
                                 .flex()
                                 .items_center()
                                 .gap(px(16.))
-                                .child(div().flex_1().min_w(px(0.)).text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(p.ink).child(title))
+                                .child(div().flex_1().min_w(px(0.)).text_size(px(ts::PANE)).font_weight(FontWeight::SEMIBOLD).text_color(p.ink).child(title))
                                 .children(extras),
                         )
-                        .child(div().mt(px(4.)).max_w(px(600.)).text_size(px(12.)).line_height(px(17.)).text_color(p.graphite).child(self.tab.blurb())),
+                        .child(div().mt(px(4.)).max_w(px(600.)).text_size(px(ts::SMALL)).line_height(px(17.)).text_color(p.graphite).child(self.tab.blurb())),
                 )
                 .child(
                     div()
@@ -1511,6 +1523,7 @@ impl Render for SettingsView {
                         .flex_1()
                         .min_h(px(0.))
                         .overflow_y_scroll()
+                        .track_scroll(&self.scroll)
                         .child(div().px(px(32.)).pt(px(8.)).pb(px(32.)).child(content.max_w(px(640.)))),
                 ),
         );
@@ -1535,6 +1548,21 @@ impl Render for SettingsView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every size in Settings is one of the interface's (`theme::ts`), so its rows, labels and
+    /// hints line up with the rest of Inkling. Only a picture is drawn to its own scale.
+    #[std::prelude::v1::test]
+    fn settings_text_comes_in_the_shared_sizes() {
+        let literal = ["text_size", "(px(", ""].concat();
+        let scaled = ["text_size", "(px(ts::"].concat();
+        for (file, src) in [("settings.rs", include_str!("settings.rs")), ("settings/parts.rs", include_str!("settings/parts.rs"))] {
+            let lines: Vec<&str> = src.lines().collect();
+            for (i, line) in lines.iter().enumerate() {
+                let picture = i > 0 && lines[i - 1].contains("the picture's scale");
+                assert!(!line.contains(&literal) || line.contains(&scaled) || picture, "{file}:{}: a size off the scale: {}", i + 1, line.trim());
+            }
+        }
+    }
 
     #[std::prelude::v1::test]
     fn about_you_is_capped_in_characters_not_bytes() {

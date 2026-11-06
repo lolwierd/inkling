@@ -23,8 +23,8 @@ pub const MONO: &str = "Spline Sans Mono";
 pub const MONO_INLINE: &str = "Spline Sans Mono Inline";
 
 /// The interface's type scale, in Figtree: five sizes, so labels, rows and hints line up
-/// from one surface to the next. The writer's words follow the text-size setting
-/// ([`note_size`]) instead.
+/// from one surface to the next, and one for the title of a Settings pane. The writer's
+/// words follow the text-size setting ([`note_size`]) instead.
 pub mod ts {
     /// Key hints, counts, captions and fine print.
     pub const META: f32 = 11.;
@@ -36,6 +36,8 @@ pub mod ts {
     pub const BODY: f32 = 14.;
     /// Dialog and panel titles.
     pub const TITLE: f32 = 15.;
+    /// The title of a pane in Settings, a window of its own, set large as macOS sets them.
+    pub const PANE: f32 = 20.;
 }
 
 #[derive(Clone, Copy, Debug)]

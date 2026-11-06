@@ -321,8 +321,9 @@ pub fn small_dot(color: Hsla, size: f32) -> Div {
     div().flex_none().size(px(size)).rounded_full().bg(color)
 }
 
-/// The wordmark: "inkling" in Fraunces Display with a French knot for the dot of the
-/// first i. The smallest piece of ink in the name is where Inkling lives.
+/// The wordmark: "inkling" in Fraunces Display, its first i in your thread and dotted
+/// with a French knot, as the Initial mark marks the app the way linen was marked as
+/// someone's own. The smallest piece of ink in the name is where Inkling lives.
 pub fn wordmark(t: &Theme, size: f32) -> impl IntoElement {
     let ink = t.p.ink;
     let thread = t.voice_ink;
@@ -331,8 +332,9 @@ pub fn wordmark(t: &Theme, size: f32) -> impl IntoElement {
         |_, _, _| (),
         move |bounds, _, window, cx| {
             let text: SharedString = "\u{131}nkling".into();
-            let run = TextRun {
-                len: text.len(),
+            let first = "\u{131}".len();
+            let run = |len: usize, color: Hsla| TextRun {
+                len,
                 font: Font {
                     family: crate::theme::DISPLAY.into(),
                     features: FontFeatures::default(),
@@ -340,19 +342,23 @@ pub fn wordmark(t: &Theme, size: f32) -> impl IntoElement {
                     weight: FontWeight::MEDIUM,
                     style: FontStyle::Normal,
                 },
-                color: ink,
+                color,
                 background_color: None,
                 underline: None,
                 strikethrough: None,
             };
-            let shaped = window.text_system().shape_line(text, px(size), &[run], None);
+            // the initial in your thread, the rest of the name in ink
+            let runs = [run(first, thread), run(text.len() - first, ink)];
+            let shaped = window.text_system().shape_line(text, px(size), &runs, None);
             let _ = shaped.paint(bounds.origin, px(h), TextAlign::Left, None, window, cx);
             // the dotless i is the first glyph; its stem sits a little left of centre
             let i_w = shaped.x_for_index("\u{131}".len());
-            let x = bounds.origin.x + i_w * 0.47;
-            let y = bounds.origin.y + px(h * 0.5 - size * 0.6);
-            // the dot is one cross-stitch in Inkling's thread, as in the Darn · Border wordmark
-            crate::stitch::cross_stitch(window, point(x, y), px(size * 0.085), thread);
+            let x = bounds.origin.x + i_w * 0.5;
+            // the knot sits as close over the stem as the Initial mark's does: a gap of about
+            // a tenth of the size, the knot a little wider than the stem
+            let y = bounds.origin.y + px(h * 0.5 - size * 0.48);
+            // the dot is a French knot in the same thread, as in the Initial mark
+            crate::stitch::french_knot(window, point(x, y), px(size * 0.12), thread, 1.);
         },
     )
     .w(px(size * 3.25))

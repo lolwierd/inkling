@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.svg" width="128" alt="Inkling's icon: a linen page whose top border is a row of darns, the last one still being woven">
+  <img src="assets/icon.svg" width="128" alt="Inkling's icon: a satin-stitched i dotted with a French knot, on linen inside a hemstitched border">
 </p>
 
 # Inkling
@@ -56,7 +56,7 @@ You pick the model in Settings > Model, from the list Claude Code offers; readin
 
 ## The look
 
-The design is called Loose Threads, after embroidery: running stitches under your words, a thread that hangs with real rope physics, fabric tags, a knot when a thread is tied off, and a sampler border that grows as you work. The logo, Darn · Border, is a page whose top border is a row of darns, one for every question answered, the newest still on the needle. The type is Fraunces for writing and Figtree for the controls.
+The design is called Loose Threads, after embroidery: running stitches under your words, a thread that hangs with real rope physics, fabric tags, a knot when a thread is tied off, and a sampler border that grows as you work. The logo, Initial, marks the app the way linen was always marked as someone's own: a satin-stitched i, dotted with a French knot, inside a hemstitched border. The wordmark in the app carries the same i, in your thread colour. The type is Fraunces for writing and Figtree for the controls.
 
 How the design was chosen, and the two directions it was chosen over, is in [`design/directions/DESIGN.md`](design/directions/DESIGN.md). The motion, the stitched diagrams and code blocks are explored in [`design/explorations/`](design/explorations/), and the logo rounds are in [`design/logo/`](design/logo/).
 

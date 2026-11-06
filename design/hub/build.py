@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 01:25 IST"
+UPDATED = "7 Nov 2026, 01:45 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -33,13 +33,14 @@ WAITING = [
 RUNNING = [
     ("The film, re-cut",
      "A much quieter score: one calm piece under the whole film, almost no sound effects, no sewing machine or ticking. "
-     "The running plan is replaced by a technical note, in the film and in the app's Start here guide, with fresh real answers from the model."),
+     "The running plan is replaced by a technical note, in the film and in the app's Start here guide, with fresh real answers from the model. "
+     "The last chapter ends on Initial."),
     ("UI polish, every screen and flow",
      "A fresh agent on Opus at max effort, looking for the small things that are easy to miss: pixel alignment, states, "
      "wording, empty and error states, keyboard flows, light and dark, four window sizes."),
-    ("Code health, next",
-     "Once the polish lands, an agent on Fable at max effort goes through the code for performance, bugs, code smells, "
-     "complexity and implicit state machines, and fixes what it finds. It waits so the two never rewrite the same code at once."),
+    ("Code health, now",
+     "An agent on Fable at max effort is going through the code for performance, bugs, code smells, complexity and implicit "
+     "state machines, and fixing what it finds. It works beside the polish on its own branch and rebases onto it once the polish lands."),
 ]
 
 DONE = [
@@ -49,7 +50,7 @@ DONE = [
     ("The README", "Written for people, with the film at the top."),
     ("Sewn blocks", "Checklists that take a cross-stitch, callouts sewn on as patches (note, warning, tip), code blocks with line numbers and thread-colour syntax, and quotes on a back-stitched seam. Type [ ], > [!note] or three backticks."),
     ("The film, re-cut", "3:28, all 44 capabilities on screen, a camera that moves with the thread, and a score made from needle, thread and cloth. It has its own page, linked under The film."),
-    ("The logo: Darn · Border", "Your pick. It is the app icon now, and the wordmark in the app dots its i with one cross-stitch."),
+    ("The logo: Initial", "Your pick, back from round 1: a satin-stitched i dotted with a French knot. It is the app icon now, and the wordmark in the app sets its i in your thread colour with the knot on top."),
     ("Loose Threads, in the app", "Stitches under your words, a hanging thread with real rope physics, tags in the margin, a knot when a thread is answered."),
     ("Tags that fold and drop", "A tag stays folded until you rest on it, drops open on a spring, and drags anywhere."),
     ("An immersive window", "No top bar. The controls fade while you write and come back when you move the pointer."),
@@ -63,6 +64,7 @@ DONE = [
 ]
 
 LOGOS = [
+    ("initial", "Initial", "A satin-stitched i, dotted with a knot."),
     ("darn-border", "Darn · Border", "One darn per answer along the top."),
     ("darn-word", "Darn · Word", "A word in your line, darned in place."),
     ("darn-hole", "Darn · Hole", "Half-woven, the needle in the open row."),

@@ -1,11 +1,12 @@
 # A new notebook opens on the tour ("Start here"); the first sentence you write is always asked about.
+# The sentence is the walkthrough film's (design/video): the guide's own example, a plan for faster VM cold starts.
 wait: 1500
 dump: fresh
 expect: d.first_run && d.note.title === "Start here" && d.left_alone > 0 && d.reading === null   // the tour, its own words left alone
-keys: We should drop the old cache next week because nobody reads from it anymore.
+keys: We can get VM cold starts under two seconds by March.
 caret: end
 wait: 4500
 dump: asked
-expect: !d.first_run && d.threads.length === dumps.fresh.threads.length + 1 && d.threads.some(t => t.kind === "Question" && t.quote.startsWith("We should drop"))
+expect: !d.first_run && d.threads.length === dumps.fresh.threads.length + 1 && d.threads.some(t => t.kind === "Question" && t.quote.startsWith("We can get"))
 expect: tasks.join() === "probe"   // the first sentence is always asked about, never read silently; the tour is never read
 quit

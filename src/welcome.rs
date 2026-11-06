@@ -7,6 +7,8 @@ use crate::store::{
     Block, BlockKind, Callout, Lang, Message, Mode, Note, Role, Side, Thread, ThoughtKind, ThreadStatus, new_id,
 };
 
+/// The old welcome note's sketch; only tests open that note now.
+#[cfg(test)]
 const MOON_SKETCH: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 236">
 <g data-step="1" data-caption="Sunlight always arrives from one side.">
 <text x="46" y="40" class="voice" font-size="17" fill="ink" text-anchor="middle">Sun</text>
@@ -31,6 +33,32 @@ const MOON_SKETCH: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 </g>
 </svg>"#;
 
+/// The guide's sketch, on its boot-order correction: three stages of a cold start, laid
+/// end to end on a time line, then the brace that sums them.
+const BOOT_SKETCH: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 176">
+<g data-step="1" data-caption="Firmware runs first, then hands over to the kernel.">
+<path d="M20 96 L300 96" stroke="graphite" stroke-width="1.1" fill="none"/>
+<path d="M294 92 L300 96 L294 100" stroke="graphite" stroke-width="1.1" fill="none"/>
+<text x="300" y="113" class="sans" font-size="10" fill="faint" text-anchor="end">time</text>
+<rect x="20" y="44" width="78" height="28" rx="4" stroke="ink" stroke-width="1.4" fill="none"/>
+<text x="59" y="32" class="voice" font-size="15" fill="ink" text-anchor="middle">firmware</text>
+</g>
+<g data-step="2" data-caption="The kernel starts systemd, and only then do the services begin.">
+<rect x="102" y="44" width="58" height="28" rx="4" stroke="ink" stroke-width="1.4" fill="none"/>
+<text x="131" y="32" class="voice" font-size="15" fill="ink" text-anchor="middle">kernel</text>
+<rect x="164" y="44" width="132" height="28" rx="4" stroke="ink" stroke-width="1.4" fill="none"/>
+<text x="230" y="32" class="voice" font-size="15" fill="ink" text-anchor="middle">services</text>
+<path d="M100 76 L100 92 M162 76 L162 92" stroke="faint" stroke-width="1" fill="none"/>
+</g>
+<g data-step="3" data-caption="So a boot is the three added up, not the slowest of them.">
+<path d="M20 118 Q20 128 30 128 L148 128 Q158 128 158 138 Q158 128 168 128 L286 128 Q296 128 296 118" stroke="ink" stroke-width="1.1" fill="none"/>
+<text x="158" y="162" class="voice" font-size="15" fill="ink" text-anchor="middle">boot = all three, in turn</text>
+</g>
+</svg>"#;
+
+/// The welcome note before the guide: a few lines and the Moon correction. Only tests
+/// (export, drawing, store) still open it.
+#[cfg(test)]
 pub fn welcome_note(mode: Mode) -> Note {
     let mut note = Note::new("Welcome to Inkling", mode, None);
     let quote = "The far side of the Moon is dark because sunlight never reaches it.";
@@ -80,17 +108,18 @@ pub fn first_run_note(mode: Mode) -> Note {
     use BlockKind::{Bullet, Check, Code, H2, Paragraph as P, Quote, Title};
     let rust = Code(Lang::new("rust"));
     let mut note = Note::new("Start here", mode, None);
-    let pace = "A 10 km race at 5:30 per kilometre takes 50 minutes.";
-    let memory = "The best way to remember something is to write it down.";
-    let enough = "Four runs a week is enough to get faster.";
-    let moon = "The far side of the Moon is dark because sunlight never reaches it.";
+    // one running example, a plan to make virtual machines start faster
+    let image = "Reading a 20 GB disk image at 400 MB/s takes 5 seconds.";
+    let faster = "Restoring a snapshot is always faster than booting.";
+    let enough = "A warm pool of ten VMs per host is enough for Monday mornings.";
+    let order = "Firmware, the kernel and the services start side by side, so a boot takes as long as the slowest of them.";
     let blocks: Vec<(BlockKind, &str)> = vec![
         (Title, "Start here"),
         (P, "Inkling is a notebook that asks. You write, and it reads along. When a line doesn\u{2019}t add up, it pulls a thread from those words into the margin: a question, or a correction. It never writes your notes for you. The thinking stays yours."),
         (P, "Everything on this page works. Point at a tag in the margin to read it, click it to answer, and drag it anywhere you like."),
         (H2, "Threads"),
-        (P, pace),
-        (P, memory),
+        (P, image),
+        (P, faster),
         (P, "A \u{d7} on a tag is a correction and a ? is a question. Open questions are numbered in reading order, with a knot beside their paragraph, and \u{2325}\u{2318}\u{2193} jumps to the next one. Fix the words a thread is about and Inkling reads them again; if the problem is gone, the thread ties itself off and its knot joins the border at the top of the page."),
         (P, "Open a tag to write back, and the mind answers in the same thread. Resolve ties it off. Dismiss snips it, and Undo or \u{2325}\u{2318}Z brings it back. Copy takes the whole thread with you, and Make a note turns it into a note of its own."),
         (H2, "Reading along"),
@@ -100,17 +129,17 @@ pub fn first_run_note(mode: Mode) -> Note {
         (P, "Select some words and a small menu appears. Find a loose thread (\u{2318}\u{21b5}) picks the one thing in them most worth a question. Ask Inkling takes your own question. Sketch it answers with a drawing, stitched out step by step; click a sketch to see it large. The same menu turns a line into a heading, a list, a quote, a callout or code."),
         (P, enough),
         (P, "Ask the room to hear from up to three minds at once. Each answers on its own thread, in its own colour. Or start a sentence with a mind\u{2019}s name and a comma, and that mind answers you there."),
-        (P, moon),
+        (P, order),
         (P, "\u{2318}J opens a chat about the whole note. It has read every thread as well, so it can tell you what you have settled and what is still open."),
         (H2, "Checklists, callouts and code"),
         (P, "Start a line with [ ] and a space for a checklist item; click its box, or press \u{2318}L, to check it off. Start one with > [!note], > [!warning] or > [!tip] and a space for a callout. Three backticks and a language, then Return, start a block of code; Return twice at its end leaves it. Inkling reads all of them like any paragraph, and can ask about a single line of code."),
-        (Check(true), "Pick up the race bib on Friday"),
-        (Check(false), "An easy 5 km on Thursday, nothing faster"),
-        (BlockKind::Callout(Callout::Tip), "Run the first kilometre 10 seconds slower than goal pace."),
-        (rust, "fn finish(secs_per_km: u32) -> u32 {"),
-        (rust, "    10 * secs_per_km // 10 km at an even pace"),
+        (Check(true), "Time one cold start with systemd-analyze"),
+        (Check(false), "Restore one VM from a snapshot, nothing else"),
+        (BlockKind::Callout(Callout::Tip), "Time cold starts at p99, not the average: the slow ones are the ones people notice."),
+        (rust, "fn boot_ms(firmware: u32, kernel: u32, services: u32) -> u32 {"),
+        (rust, "    firmware + kernel + services // one after another"),
         (rust, "}"),
-        (Quote, "Run the mile you\u{2019}re in."),
+        (Quote, "The fastest boot is the one you skip."),
         (H2, "Minds"),
         (P, "The name above the title is the note\u{2019}s mind. Inkling comes with Staff engineer, Editor, Skeptic, Socratic tutor and Investor. In Settings, under Minds, you can make your own: say what it is for and how it thinks, give it a voice (plain, warm, blunt or Socratic), and choose how often it speaks. Each mind keeps its own thread colour, so you can see who asked what."),
         (P, "Settings, under About you, holds what Inkling knows about you. Turn on Inkling learns about you, and it keeps what matters from your replies."),
@@ -165,19 +194,19 @@ pub fn first_run_note(mode: Mode) -> Note {
     let you = |text: &str| Message::new(Role::You, text);
     note.threads = vec![
         thread(
-            "takes 50 minutes",
+            "takes 5 seconds",
             ThoughtKind::Correction,
             Side::Right,
             "Inkling",
-            vec![mind("At 5:30 a kilometre, 10 km takes 55 minutes. Finishing in 50 needs 5:00 a kilometre. Change the number in the sentence and this thread ties itself off.")],
+            vec![mind("At 400 MB/s, 20 GB takes 50 seconds. Reading it in 5 needs 4 GB/s. Change the number in the sentence and this thread ties itself off.")],
             None,
         ),
         thread(
-            memory,
+            faster,
             ThoughtKind::Question,
             Side::Left,
             "Inkling",
-            vec![mind("Better than what? Recalling it with the page closed tends to stick better than writing it out again. Which have you tried?")],
+            vec![mind("Always? A restore skips the boot, but a guest that has to fault in most of its memory can end up slower than a lean boot. Which have you timed?")],
             None,
         ),
         thread(
@@ -187,7 +216,7 @@ pub fn first_run_note(mode: Mode) -> Note {
             "Skeptic",
             vec![
                 you("Is this enough?"),
-                mind("Enough for what, and compared to what? Four easy runs keep you fit; one hard session among them is what usually makes you faster. What does your week look like now?"),
+                mind("Enough for which minute? A pool sized for the average empties in the first seconds of a burst. How many starts does one host see at nine on a Monday, and how fast does the pool refill?"),
             ],
             None,
         ),
@@ -198,19 +227,49 @@ pub fn first_run_note(mode: Mode) -> Note {
             "Socratic tutor",
             vec![
                 you("Is this enough?"),
-                mind("What has to change in your legs for 5:00 a kilometre to feel like 5:30 does today? Which of your four runs works on that?"),
+                mind("If twenty requests reach one host in the same second, what happens to the eleventh? What would you measure to find out?"),
             ],
             None,
         ),
         thread(
-            moon,
+            order,
             ThoughtKind::Correction,
             Side::Left,
             "Inkling",
-            vec![mind("It gets as much sunlight as the side we see. It is only hidden from us: the Moon turns once per orbit, so one face always points at Earth. At new Moon, which side is lit?")],
-            Some(MOON_SKETCH),
+            vec![mind("They run one after another: firmware hands over to the kernel, the kernel starts systemd, and systemd brings up the services. The times add up. Which of the three takes longest on yours?")],
+            Some(BOOT_SKETCH),
         ),
     ];
     note.first_run = true;
     note
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[std::prelude::v1::test]
+    fn the_guides_threads_sit_on_their_words() {
+        let note = first_run_note(Mode::ThinksWithYou);
+        let joined = note.joined_text();
+        assert_eq!(note.threads.len(), 5);
+        for t in &note.threads {
+            assert_eq!(&joined[t.start..t.end], t.quote, "{}", t.quote);
+        }
+        // a tag in each margin, so the tour shows both
+        assert!(note.threads.iter().any(|t| t.side == Side::Left) && note.threads.iter().any(|t| t.side == Side::Right));
+        // the guide's own words are never read, so none of its threads gets a stray reply
+        assert_eq!(note.left_alone.len(), note.blocks.iter().skip(1).filter(|b| !b.text.is_empty()).count());
+    }
+
+    #[std::prelude::v1::test]
+    fn the_guides_sketch_parses() {
+        let note = first_run_note(Mode::ThinksWithYou);
+        let drawn: Vec<_> = note.threads.iter().filter_map(|t| t.drawing.as_deref()).collect();
+        assert_eq!(drawn.len(), 1, "one thread answers with a sketch");
+        let d = crate::drawing::parse(drawn[0]).expect("the guide's sketch parses");
+        assert_eq!((d.min_x, d.min_y, d.width, d.height), (0., 0., 320., 176.));
+        assert_eq!(d.steps.len(), 3);
+        assert!(d.steps.iter().all(|s| !s.caption.is_empty() && !s.shapes.is_empty()));
+    }
 }

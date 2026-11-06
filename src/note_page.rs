@@ -27,6 +27,8 @@ use crate::stitch::{self, Rope};
 use crate::theme::{SANS, TEXT_COLORS, Theme, ts};
 use crate::ui::{self, Keyed, icon};
 
+mod show_working;
+
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
 /// The band of cloth along the top of the window that holds the traffic lights, ☰ and
@@ -488,6 +490,8 @@ pub struct NotePage {
     viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
     _subs: Vec<Subscription>,
+    /// Threads whose next reply says the working does not hold (Disagree).
+    disputes: HashSet<String>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -577,6 +581,7 @@ impl NotePage {
             viewport: size(px(1200.), px(800.)),
             last_frame: None,
             _subs: subs,
+            disputes: HashSet::new(),
         };
         page.load_into_editor(cx);
         page
@@ -994,7 +999,7 @@ impl NotePage {
             "task": "reply",
             "ctx": self.context(cx),
             "quote": before,
-            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": m.text})).collect::<Vec<_>>(),
+            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
             "message": message,
         });
         let tid = id.to_string();
@@ -1115,7 +1120,7 @@ impl NotePage {
                 json!({
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
-                    "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": m.text})).collect::<Vec<_>>(),
+                    "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
                 })
             })
             .collect();
@@ -1337,6 +1342,7 @@ impl NotePage {
                     let kind = if v["kind"] == "correction" { ThoughtKind::Correction } else { ThoughtKind::Question };
                     let sketch = v["sketch"].as_bool() == Some(true);
                     if let Some(id) = page.add_thought(line, &target, &quote, kind, Some(body), cx) {
+                        page.attach_check(&id, &v["check"], cx);
                         page.arrived.insert(id.clone(), std::time::Instant::now());
                         if sketch {
                             page.later(cx, move |page, cx| page.request_drawing(&id, None, cx));
@@ -1615,6 +1621,7 @@ impl NotePage {
                     }
                 }
                 page.push_message(&tid, Role::Mind, body, cx);
+                page.attach_check(&tid, &v["check"], cx);
                 if v["sketch"].as_bool() == Some(true) {
                     let id = tid.clone();
                     page.later(cx, move |page, cx| page.request_drawing(&id, None, cx));
@@ -1838,12 +1845,14 @@ impl NotePage {
         let Some(t) = self.note.threads.iter().find(|t| t.id == id).cloned() else { return };
         self.push_message(id, Role::You, text.clone(), cx);
         self.maybe_learn(&text, cx);
+        let dispute = self.dispute_message(id, &text, window, cx);
+        let disputed = dispute.is_some();
         let input = json!({
             "task": "reply",
             "ctx": self.context(cx),
             "quote": t.quote,
-            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": m.text})).collect::<Vec<_>>(),
-            "message": text,
+            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+            "message": dispute.unwrap_or(text.clone()),
         });
         let tid = id.to_string();
         let asked = text.clone();
@@ -1855,6 +1864,9 @@ impl NotePage {
                     page.notice("Inkling came back with nothing to say. Try again.".into(), cx);
                 } else {
                     page.push_message(&tid, Role::Mind, body, cx);
+                }
+                if disputed {
+                    page.after_dispute(&tid, v["resolved"].as_bool() == Some(true), cx);
                 }
                 if v["resolved"].as_bool() == Some(true) {
                     if let Some(t) = page.thread_mut(&tid) {
@@ -1971,7 +1983,12 @@ impl NotePage {
         let mut out = format!("> {}\n\n", t.quote);
         for m in &t.messages {
             match m.role {
-                Role::Mind => out.push_str(&format!("{}: {}\n\n", t.mind_name, m.text)),
+                Role::Mind => {
+                    out.push_str(&format!("{}: {}\n\n", t.mind_name, m.text));
+                    for line in Self::check_lines(m) {
+                        out.push_str(&format!("{line}\n\n"));
+                    }
+                }
                 Role::You => out.push_str(&format!("You: {}\n\n", m.text)),
             }
         }
@@ -2211,6 +2228,8 @@ impl NotePage {
                     .map(|t| t.id.clone());
                 self.activate(id, window, cx);
             }
+            Step::See(n, m) => self.see_step(*n, *m, window, cx),
+            Step::Disagree(n) => self.disagree_step(*n, window, cx),
             Step::Reply(text) => {
                 if let Some(id) = self.active.clone() {
                     if let Some(input) = self.replies.get(&id).cloned() {
@@ -2473,6 +2492,7 @@ impl NotePage {
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
                 "quote": t.quote, "msgs": t.messages.len(), "drawing": t.drawing.is_some(),
+                "check": t.messages.iter().find_map(|m| m.check.as_ref()).map(crate::working::summary),
             })).collect::<Vec<_>>(),
             "anchors": ed.anchors().iter().map(|a| json!({"id": short(&a.id), "range": [a.range.start, a.range.end], "open": a.open})).collect::<Vec<_>>(),
             "read_hashes": self.note.read_hashes.len(),
@@ -3297,7 +3317,13 @@ impl NotePage {
                         .gap(px(5.))
                         .text_size(px(ts::SMALL))
                         .child(div().min_w(px(0.)).truncate().font_weight(FontWeight::SEMIBOLD).text_color(thread_color).child(mind))
-                        .child(div().flex_none().text_color(p.faint).child(if tied { "\u{b7} tied off".to_string() } else { format!("\u{b7} {kind}") })),
+                        .child(div().flex_none().text_color(p.faint).child(if Self::taken_back(thread) {
+                            "\u{b7} taken back".to_string()
+                        } else if tied {
+                            "\u{b7} tied off".to_string()
+                        } else {
+                            format!("\u{b7} {kind}")
+                        })),
                 )
                 .children(self.numbers.get(&id).map(|n| div().flex_none().text_size(px(ts::SMALL)).text_color(p.faint).child(n.to_string()))),
         );
@@ -3316,6 +3342,9 @@ impl NotePage {
             };
             for m in messages {
                 body = body.child(self.message_view(m, &t, false));
+                if let Some(w) = self.working_block(thread, m, thread_color, is_active, width - 30., cx) {
+                    body = body.child(w);
+                }
             }
             if let Some(Pending::Streaming(s)) = &pending {
                 body = body.child(self.message_view(&Message::new(Role::Mind, s.clone()), &t, false));

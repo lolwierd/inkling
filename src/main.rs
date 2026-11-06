@@ -18,6 +18,7 @@ mod theme;
 mod toast;
 mod ui;
 mod welcome;
+mod working;
 
 use gpui_kit::*;
 

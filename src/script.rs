@@ -42,6 +42,8 @@
 //! makenote: 1
 //! hover: 2        (the pointer rests on thread 2's tag, which unfolds; `hover: 0` moves away)
 //! drag: 1 -40 120 (move thread 1's tag by that many pixels, as a finished drag would)
+//! see: 1 2        (click the 2nd words thread 1's check rests on: they are selected)
+//! disagree: 1     (press Disagree on thread 1's working: the next `reply:` disputes it)
 //! ```
 //!
 //! The note, the reader and the room:
@@ -161,6 +163,10 @@ pub enum Step {
     Click(f32, f32),
     /// The pointer moves to a point in the window.
     Pointer(f32, f32),
+    /// Click the m-th words thread n's check rests on (`see: n m`).
+    See(usize, usize),
+    /// Press Disagree on thread n's working.
+    Disagree(usize),
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -257,6 +263,11 @@ pub fn parse(src: &str) -> Vec<Step> {
                         }
                     }
                 }
+                "see" => {
+                    let v: Vec<usize> = arg.split_whitespace().filter_map(|n| n.parse().ok()).collect();
+                    Step::See(v.first().copied().unwrap_or(1), v.get(1).copied().unwrap_or(1))
+                }
+                "disagree" => Step::Disagree(n()),
                 "shot" => Step::Shot(arg),
                 "settle" => Step::Settle(arg.parse().unwrap_or(SETTLE_MAX_MS)),
                 // for the runner, which checks it after the run

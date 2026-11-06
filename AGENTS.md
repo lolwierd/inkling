@@ -91,6 +91,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/sewn.rs` | your blocks, sewn: the checklist box and its cross-stitch (and its timing), a callout's patch, a quote's seam, the block geometry the editor lays out and hit-tests | `patch`, `check_box`, `cross_at`, `lay_along` |
 | `src/margin.rs` | where tags go without overlapping (`place`), and the `Measured` wrapper that reports their heights | |
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
+| `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open (the bundle's `.icns` is the light Initial; per-appearance bundle icons need Xcode's `actool`) | `follow` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
 | `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
 | `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped, an unknown block kind reads as a paragraph); notes as Markdown | `Note`, `Thread`, `Settings`, `BlockKind` (`Check`, `Callout`, `Code(Lang)`), `markdown_blocks` |

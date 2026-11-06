@@ -365,8 +365,10 @@ impl AppView {
         let chrome = page.read(cx).chrome.clone();
         let mut subs = vec![];
         subs.push(cx.subscribe_in(&page, window, Self::on_page_event));
+        crate::dock::follow(window.appearance());
         subs.push(cx.observe_window_appearance(window, |_, window, cx| {
             apply_theme(window.appearance(), cx);
+            crate::dock::follow(window.appearance());
             cx.refresh_windows();
         }));
         page.update(cx, |p, cx| p.focus_editor_at_end(window, cx));

@@ -26,6 +26,9 @@ async-channel = "2"
 # starts instead, so the Command Line Tools are enough.
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_macos = { package = "gpui-pre-macos", version = "=0.3.11", features = ["runtime_shaders"] }
+# The Dock icon follows the system's appearance (src/dock.rs): one AppKit call, through
+# the same objc crate GPUI's Apple backend already builds.
+objc = "0.2"
 
 [profile.dev]
 opt-level = 1

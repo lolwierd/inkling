@@ -1,6 +1,7 @@
 mod app;
 mod brain;
 mod code;
+mod dock;
 mod drawing;
 mod editor;
 mod export;

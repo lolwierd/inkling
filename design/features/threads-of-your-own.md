@@ -53,7 +53,7 @@ Ask yourself opens the question box under the words:
 - the dot before the box is in your ink;
 - placeholder: **Ask yourself about this…**;
 - the minds' chips, none of them seated;
-- the line under them: **No mind answers. Add one to ask it.** on the left, **Enter to ask** on
+- the line under them: **No mind answers. Add one to ask it.** on the left, **↩ ask** on
   the right.
 
 Type "Is four too many with the long run on Sunday?" and press Return. The box closes, the
@@ -159,7 +159,7 @@ Click the tab (or jump to it with ⌥⌘↓). It opens:
 | A note that waits to be asked | Works the same; nothing is read either way. This is where your own threads help most, because the minds are quiet until called. |
 | A note that reads along | The reading loop sees your threads as yours (see The brain) and does not ask your question back. |
 | Export | Markdown: `> **Me** on “four days a week”`, then `> *Me:* …` for your lines and `> *Inkling:* …` for a mind's answer, under the paragraph like every thread. HTML and Word: "Me" as the thread's name, a called mind's paragraphs start with its name. Follows the export's own threads switch. |
-| Copy (⇧⌘C, Copy on the tag) | Copy as Markdown is the export's Markdown. The tag's Copy gives `> quote`, then `You: …` and `Inkling: …`. |
+| Copy (⇧⌘C, Copy on the tag) | Copy as Markdown is the export's Markdown. The tag's Copy gives `> quote`, then `Me: …` for your lines and `Inkling: …` for a mind's. |
 | Make a note | As today: the quote, then "Me: …" and each mind's lines under its own name. |
 | Undo | Cutting has the usual toast and ⌥⌘Z. ⌘Z in the note undoes text, never a thread, as today. A line added to your own thread has no undo, like a reply. |
 | Several minds | Each answer in your thread is under its mind's name and colour. A mind's own thread on the same words shares the stitch row with yours. |
@@ -275,7 +275,7 @@ instead of "You", so a mind called into your thread sees who said what.
 | Feature | What it means for your threads | Shared types |
 |---|---|---|
 | Answer in the note + Write it in | Answer in the note should skip `own` threads: a mind deciding a paragraph answers your question is a mind answering. Write it in should treat a tied-off own thread like any tied-off thread and offer your last line. | reads `Thread.own` |
-| Let it stand + Turn it over | Cutting your own thread is not letting a point stand: the list of points let stand that goes to every mind must skip `own` threads. The back of the note lists your threads with the rest, named "You" (`Thread::asker`). | reads `Thread.own` |
+| Let it stand + Turn it over | Cutting your own thread is not letting a point stand. Built after the rebase: `Thread::is_point()` is false for your threads, so their second button stays Dismiss, cutting one snips it, and the points every mind is told (`ctx.letStand`) never include one, even after a mind you called has spoken in it. The back of the note lists your threads with the rest, named "You" (`Thread::asker`). | reads `Thread.own` |
 | Show its working | No overlap: your threads hold no corrections. A mind called in answers as Ask does. | none |
 | Loose ends | Your open threads are loose ends. Show them in ink and named "You", through `own::ink` and `Thread::asker`. | reads `Thread.own` |
 | Threads between notes | No overlap: those threads are always a mind's. | none |
@@ -387,15 +387,15 @@ something else), and a call into your own thread with history.
 Size: S, at the top of S. About 450 lines with tests, two thirds of them in the new module and
 the tests.
 
-## Open questions
+## Decided (7 Nov 2026)
 
-1. **Ink, or the colour in Settings?** I sewed your threads in ink, for the reason above. The
-   alternative honours "in your colour" literally but makes your threads and the note's mind's
-   look alike in a new notebook. Recommendation: keep ink.
-2. **Should a called mind stay in your thread?** Built: no, a mind answers once per call, so
-   your next plain line stays private. The alternative is a conversation that continues until
-   you close the tag, which is friendlier for a long back-and-forth but means a plain line
-   might reach a mind. Recommendation: keep one answer per call; the button is one Tab away.
+The two questions this design left open were decided as recommended:
+
+1. **Ink, not the colour in Settings.** Your threads are sewn in ink. The Settings colour would
+   honour "in your colour" literally, but in a new notebook your threads and the note's mind's
+   would look alike.
+2. **A called mind answers once per call.** Your next plain line stays private; to hear from a
+   mind again, call it again (the button is one Tab away).
 
 ## As built (7 Nov 2026)
 
@@ -411,7 +411,8 @@ design:
   own-thread framing now ends "Stay on this thread's point; other parts of the note belong in
   other threads.", the line the reply prompt already uses, and the second call stayed on point.
 - **The question box's hint wraps.** "No mind answers. Add one to ask it." is longer than the
-  hint it replaces and pushed "Enter to ask" past the box's edge; the hint now wraps.
+  hint it replaces and pushed the key ("↩ ask" since the polish pass) past the box's edge; the
+  hint now wraps.
 
 Real model, four calls through `brain/test/live.ts` (Opus 5.5): `read_note` on the rate
 limiter's "can never send more than 100 requests in any 60-second span" corrects the burst
@@ -425,6 +426,17 @@ room on the paper). It is more noticeable for your threads only because, like an
 every other one takes the left margin.
 
 Screenshots: `design/features/shots/own-threads-*.jpg`, Linen and Lamplight.
+
+Rebased onto master after Let it stand, Show its working, the polish pass and the technical
+Start here landed:
+
+- `Thread` keeps every feature's fields (`reason`, `ended_at`, `first_quote`, then `own`) and
+  derives `Default`; every literal spells out master's fields and ends with
+  `..Default::default()`. `Message` keeps `check` (Show its working) beside `mind`.
+- A message reaches the minds with its working (`crate::working::wire_text`), through
+  `own::message_json`, which adds the name of a mind you called.
+- The tag's Copy follows master's wording: your lines as "Me:", each mind by name, the working
+  under a correction. The question box says "↩ ask", and the docs write Return as ↩.
 
 Left for the owner or another agent: the welcome tour (`src/welcome.rs`, the film agent's)
 and the film do not show Ask yourself yet, though `design/capabilities.md` now lists it;

@@ -169,6 +169,7 @@ pub struct AppView {
     focus: FocusHandle,
     page: Entity<NotePage>,
     sidebar_open: bool,
+    sidebar_motion: SidebarMotion,
     palette: Option<Entity<Palette>>,
     settings: Option<Entity<SettingsView>>,
     export: Option<(ExportStage, Format, bool)>,
@@ -286,6 +287,8 @@ impl Talk {
 
 /// Ink blots kept at once, and how long one lasts before it has faded.
 const MAX_BLOTS: usize = 12;
+/// The sidebar's width.
+const SIDEBAR_W: f32 = 240.;
 const BLOT_LIFE: Duration = Duration::from_millis(2800);
 
 /// The file name the save panel suggests for a note: its title, trimmed, without the
@@ -369,6 +372,63 @@ pub(crate) fn script_resize(window: &mut Window, w: f32, h: f32) {
 fn same_folder_name(a: &str, b: &str) -> bool {
     a.trim().to_lowercase() == b.trim().to_lowercase()
 }
+
+/// The sidebar's motion. Opening, it slides in from the window's left edge and fades up
+/// over 200 ms, easing out; closing, it slides back out quicker, 160 ms, easing in, as
+/// the toasts arrive and leave. No bounce: it is a drawer, not a tag. Turned midway, it
+/// goes back from where it is, in the time that part takes. With reduced motion it only
+/// fades, 120 ms.
+#[derive(Clone, Copy, Debug)]
+struct SidebarMotion {
+    /// Where it was (0 closed, 1 open) when it last turned, which way it is going, when.
+    from: f32,
+    open: bool,
+    at: Instant,
+    reduced: bool,
+}
+
+impl SidebarMotion {
+    const OPEN: f32 = 0.2;
+    const CLOSE: f32 = 0.16;
+    const FADE: f32 = 0.12;
+
+    fn closed(now: Instant) -> Self {
+        Self { from: 0., open: false, at: now, reduced: false }
+    }
+
+    /// How long this leg takes: the part of the way it has left to go.
+    fn length(&self) -> f32 {
+        let whole = if self.reduced { Self::FADE } else if self.open { Self::OPEN } else { Self::CLOSE };
+        whole * (if self.open { 1. - self.from } else { self.from }) * crate::note_page::slowmo()
+    }
+
+    /// How far open it is: 0 closed, 1 open.
+    fn shown(&self, now: Instant) -> f32 {
+        let length = self.length();
+        let k = if length <= 0. { 1. } else { ((now - self.at).as_secs_f32() / length).clamp(0., 1.) };
+        let eased = if self.reduced { k } else if self.open { 1. - (1. - k).powi(3) } else { k * k };
+        let to = if self.open { 1. } else { 0. };
+        self.from + (to - self.from) * eased
+    }
+
+    fn moving(&self, now: Instant) -> bool {
+        (now - self.at).as_secs_f32() < self.length()
+    }
+
+    /// Head the other way from wherever it is now.
+    fn turn(&mut self, open: bool, now: Instant, reduced: bool) {
+        *self = Self { from: self.shown(now), open, at: now, reduced };
+    }
+}
+
+/// Where the sidebar is, for the page's dump: asked open, and how far it shows (0 to 1).
+#[derive(Clone, Copy, Default)]
+pub struct SidebarShown {
+    pub open: bool,
+    pub shown: f32,
+}
+
+impl Global for SidebarShown {}
 
 /// A drop of ink left by the pointer ("Ink from the pointer").
 struct Blot {
@@ -484,6 +544,7 @@ impl AppView {
             focus: cx.focus_handle(),
             page,
             sidebar_open: false,
+            sidebar_motion: SidebarMotion::closed(Instant::now()),
             chrome,
             last_pointer: None,
             chrome_frame: None,
@@ -1196,9 +1257,12 @@ impl AppView {
             .into_any_element()
     }
 
-    fn sidebar(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn sidebar(&mut self, shown: f32, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
+        // in from the left edge, shadow and all, and up from a soft fade; with reduced
+        // motion it only fades
+        let slide = if self.sidebar_motion.reduced { 0. } else { -(1. - shown) * (SIDEBAR_W + 16.) };
         let current = self.page.read(cx).note_id().to_string();
         let hidden = self.page.read(cx).just_my_words;
         let store = cx.global::<Store>();
@@ -1367,7 +1431,10 @@ impl AppView {
             .child(
                 div()
                     .id("sidebar")
-                    .w(px(240.))
+                    .relative()
+                    .left(px(slide))
+                    .opacity(if self.sidebar_motion.reduced { shown } else { 0.4 + 0.6 * shown })
+                    .w(px(SIDEBAR_W))
                     .h_full()
                     .flex()
                     .flex_col()
@@ -1463,7 +1530,7 @@ impl AppView {
                     .id("sidebar-dim")
                     .flex_1()
                     .h_full()
-                    .bg(p.cloth.opacity(0.5))
+                    .bg(p.cloth.opacity(0.5 * shown))
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                         this.sidebar_open = false;
                         cx.notify();
@@ -1646,7 +1713,22 @@ impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
-        let sidebar = self.sidebar_open.then(|| self.sidebar(cx));
+        // The sidebar slides in and out (`SidebarMotion`), and is drawn while any of it shows.
+        let now = Instant::now();
+        if self.sidebar_open != self.sidebar_motion.open {
+            self.sidebar_motion.turn(self.sidebar_open, now, cx.reduce_motion());
+            // closing with the keyboard on one of its rows: the keyboard goes back to the
+            // note at once, not when the drawer has gone
+            if !self.sidebar_open && ui::focused_key(window, cx).is_some_and(|k| k.starts_with("sidebar:")) {
+                cx.defer_in(window, |this, window, cx| this.page.update(cx, |p, cx| p.restore_focus(window, cx)));
+            }
+        }
+        let shown = self.sidebar_motion.shown(now);
+        if self.sidebar_motion.moving(now) {
+            window.request_animation_frame();
+        }
+        cx.set_global(SidebarShown { open: self.sidebar_open, shown });
+        let sidebar = (shown > 0.).then(|| self.sidebar(shown, cx));
         let export = self.export_dialog(cx);
         let badge = self.listening_badge(cx);
         let blots = self.blot_layer(cx);

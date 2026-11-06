@@ -3166,7 +3166,9 @@ impl Element for EditorElement {
                 AvailableSpace::Definite(w) => w,
                 _ => px(600.),
             });
+            let started = Instant::now();
             let layout = layout_doc(&snap, width, window.text_system());
+            crate::perf::layout(layout.lines.len(), started.elapsed());
             let h = layout.height;
             *cache2.borrow_mut() = Some(layout);
             size(width, h)

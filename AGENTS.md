@@ -110,6 +110,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/welcome.rs` | the first-run note "Start here": a tour with real threads, whose own paragraphs are never read (`Note.left_alone`); the writer's first sentence is probed | `first_run_note` |
 | `src/theme.rs`, `src/ui.rs`, `src/palette.rs` | colours and fonts, small widgets, ⌘K | |
 | `src/loose_ends.rs` | Loose ends (⇧⌘K): every open thread in the notebook, oldest first, in ⌘K's card; rows show your words only; built from the notes in memory, no index. Going to a row: `app/goto.rs` (the window), `note_page/goto.rs` (the page) | `collect`, `narrow`, `start_at`, `Card`; the dump's `loose_ends` |
+| `src/perf.rs` | frame and layout counters for performance work, on with `INKLING_FRAME_LOG=1`; off, nothing runs | `frame`, `layout` |
 | `src/toast.rs` | every toast, in one stack at the bottom centre: a note deleted, a thread dismissed (Undo, ⌥⌘Z), a problem (ochre, closable), anything done | `show`, `Kind`, `stack`; the dump's `toasts` |
 | `src/stand.rs` | Let it stand: what every mind is told about the points you let stand (`ctx.letStand`), the Let stand button's words and toasts | `points` (which points, in what order, how short), `dismiss` (the reason from the tag's box) |
 | `src/back.rs` | Turn it over: the back of the note (⇧⌘B), every thread it has had, oldest first, with how each ended (`Thread::ending`), the words before and after, what was said, your reasons (added or changed there), Reopen and Show on the page; ⇧⌘C there copies the back as Markdown | `entries` (the pure model), `entry` (one thread, for any view), `view`, `to_markdown`, `turn` (the sheet's timing) |
@@ -189,6 +190,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `INKLING_WINDOW_TITLE` | the window title (`Inkling Agents` for agent runs) |
 | `INKLING_JIGGLE=<ms>` | keep a covered window drawing |
 | `INKLING_LOG_JSON=1` | JSON log lines (`ms`, `level`, `target`, `msg`) |
+| `INKLING_FRAME_LOG=1` | log frames per second and the editor's layout cost (`perf:` lines), for performance work |
 | `INKLING_OPEN=chat,sidebar,...` | panels open at launch |
 | `INKLING_SETTINGS_TAB=<pane>` | the pane Settings opens on (with `INKLING_OPEN=settings`) |
 | `INKLING_SETTINGS_RECORD=<action>`, `INKLING_SETTINGS_KEYS=settings:<keys>,main:<keys>`, `INKLING_SETTINGS_SEARCH=<text>` | drive the shortcut recorder without clicks: listen for an action's keys, press keys in Settings or the note, fill the search |

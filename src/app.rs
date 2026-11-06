@@ -1764,6 +1764,7 @@ impl AppView {
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::frame();
         let t = Theme::get(cx).clone();
         let p = t.p;
         // The sidebar slides in and out (`SidebarMotion`), and is drawn while any of it shows.

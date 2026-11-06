@@ -38,6 +38,11 @@ gpui_kit::actions!(
         CloseOverlay,
         ShowWelcome,
         ImportObsidian,
+        HideApp,
+        HideOthers,
+        ShowAll,
+        Minimize,
+        Zoom,
     ]
 );
 
@@ -53,11 +58,34 @@ pub fn init(cx: &mut App) {
         }
     }
     cx.on_action(|_: &Quit, cx| cx.quit());
+    // What every Mac app's menus have, with the keys macOS gives them (they stay out of
+    // Settings › Shortcuts, as System Settings can rename any menu item's keys).
+    cx.bind_keys([KeyBinding::new("cmd-h", HideApp, None), KeyBinding::new("alt-cmd-h", HideOthers, None), KeyBinding::new("cmd-m", Minimize, None)]);
+    cx.on_action(|_: &HideApp, cx| cx.hide());
+    cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
+    cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
+    // the window in front, Settings included
+    cx.on_action(|_: &Minimize, cx| {
+        if let Some(w) = cx.active_window() {
+            let _ = w.update(cx, |_, window, _| window.minimize_window());
+        }
+    });
+    cx.on_action(|_: &Zoom, cx| {
+        if let Some(w) = cx.active_window() {
+            let _ = w.update(cx, |_, window, _| window.zoom_window());
+        }
+    });
     cx.set_menus(vec![
         Menu {
             name: "Inkling".into(),
             items: vec![
                 MenuItem::action("Settings…", OpenSettings),
+                MenuItem::separator(),
+                MenuItem::os_submenu("Services", SystemMenuType::Services),
+                MenuItem::separator(),
+                MenuItem::action("Hide Inkling", HideApp),
+                MenuItem::action("Hide Others", HideOthers),
+                MenuItem::action("Show All", ShowAll),
                 MenuItem::separator(),
                 MenuItem::action("Quit Inkling", Quit),
             ],
@@ -83,6 +111,11 @@ pub fn init(cx: &mut App) {
                 MenuItem::action("Chat", ToggleChat),
                 MenuItem::action("Hide Threads", JustMyWords),
             ],
+            disabled: false,
+        },
+        Menu {
+            name: "Window".into(),
+            items: vec![MenuItem::action("Minimize", Minimize), MenuItem::action("Zoom", Zoom)],
             disabled: false,
         },
         Menu {

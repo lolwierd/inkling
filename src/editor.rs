@@ -1114,6 +1114,53 @@ impl State {
         self.edit(end..end, &insert, EditKind::Other)
     }
 
+    /// The last line of the block that holds `line`, looking down: the rest of its list
+    /// (bullets, numbers and checklist items in a row), its quote, its callout's patch or
+    /// its block of code. Any other line is a block of its own.
+    fn block_end(&self, line: usize) -> usize {
+        let kind = self.line_kind(line);
+        let mut end = line;
+        while let Some(next) = self.kinds.get(end + 1).copied() {
+            let same = match kind {
+                k if k.is_list() => next.is_list(),
+                BlockKind::Quote => next == BlockKind::Quote,
+                _ => self.kinds[end].joins(next),
+            };
+            if !same {
+                break;
+            }
+            end += 1;
+        }
+        end
+    }
+
+    /// Put `text` in a paragraph of its own under the block that holds `line` (Write it in
+    /// puts a reply under the paragraph its thread is about): under the line itself, or
+    /// under the rest of its list, quote, callout or code, so it never splits one. Line
+    /// breaks in `text` become spaces, so it is one paragraph, and it carries no marks.
+    /// One undo step; the caret ends after the words. Marks and anchors that end where the
+    /// block ends stay there. Returns the new paragraph's line; `None` when `text` has no
+    /// words, which changes nothing.
+    fn insert_paragraph_after(&mut self, line: usize, text: &str) -> Option<(usize, Fx)> {
+        let words = normalize_newlines(text).split('\n').map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ");
+        if words.is_empty() {
+            return None;
+        }
+        let last = self.block_end(line.min(self.kinds.len() - 1));
+        let at = self.line_range(last).end;
+        // threads whose words are gone (an empty anchor at the block's end) stay with it
+        let stay: Vec<String> = self.anchors.iter().filter(|a| a.range == (at..at)).map(|a| a.id.clone()).collect();
+        self.push_undo(EditKind::Other);
+        let end = self.replace(at..at, &format!("\n{words}"), Some(BlockKind::Paragraph));
+        // a mark that ran on past the block's end does not cover the new words
+        self.marks = remove_range(&self.marks, at..end, |_| true);
+        for a in self.anchors.iter_mut().filter(|a| stay.contains(&a.id)) {
+            a.range = at..at;
+        }
+        self.place_after_edit(end);
+        Some((last + 1, Fx { moved: true, ..Fx::edited(last) }))
+    }
+
     // ----- mouse ------------------------------------------------------------
 
     fn mouse_down(&mut self, hit: (usize, bool), clicks: usize, shift: bool) -> Fx {
@@ -2035,6 +2082,15 @@ impl NoteEditor {
     pub fn append_paragraph(&mut self, text: &str, cx: &mut Context<Self>) {
         let fx = self.st.append_paragraph(text);
         self.apply(fx, cx);
+    }
+
+    /// Put `text` in a paragraph of its own under the block that holds `line`, as one undo
+    /// step, the caret after it (see `State::insert_paragraph_after`). Returns the new
+    /// paragraph's line; `None` when `text` has no words.
+    pub fn insert_paragraph_after(&mut self, line: usize, text: &str, cx: &mut Context<Self>) -> Option<usize> {
+        let (new, fx) = self.st.insert_paragraph_after(line, text)?;
+        self.apply(fx, cx);
+        Some(new)
     }
 
     pub fn set_line_kind(&mut self, line: usize, kind: BlockKind, cx: &mut Context<Self>) {
@@ -4306,6 +4362,85 @@ mod tests {
         assert!(s.select_phrase("absent").is_none());
         assert!(s.select_all().settled);
         assert_eq!(s.selected, 0..s.text.len());
+    }
+
+    #[std::prelude::v1::test]
+    fn a_reply_goes_in_under_its_paragraph_as_one_undo_step() {
+        let mut s = st("T\nfirst words\nsecond");
+        let (w, nl) = (at(&s, "words"), at(&s, "\nsecond"));
+        s.marks = vec![MarkSpan { start: w, end: nl, mark: Mark::Bold }];
+        s.anchors = vec![Anchor { id: "t".into(), range: w..nl, open: false }, Anchor { id: "gone".into(), range: nl..nl, open: true }];
+        s.set_caret(2, false);
+        let (line, fx) = s.insert_paragraph_after(1, "I start at 8 km.").unwrap();
+        assert_eq!((s.text.as_str(), line), ("T\nfirst words\nI start at 8 km.\nsecond", 2));
+        assert_eq!(s.kinds, [K::Title, K::Paragraph, K::Paragraph, K::Paragraph]);
+        assert_eq!((fx.edited, fx.moved), (Some(1), true), "an edit that starts on the paragraph above, and the caret moved");
+        let after = at(&s, "\nsecond");
+        assert_eq!(s.selected, after..after, "the caret waits after the words");
+        // a mark or a thread that ended with the paragraph does not grow into the new one
+        assert_eq!(&s.text[s.marks[0].start..s.marks[0].end], "words");
+        assert_eq!(&s.text[s.anchors[0].range.clone()], "words");
+        assert_eq!(s.anchors[1].range, nl..nl, "a thread whose words are gone stays at the paragraph's end");
+        check(&s);
+        // typing on is a step of its own; then one undo takes the paragraph out, caret and all
+        typ(&mut s, "!");
+        s.undo();
+        assert_eq!(s.text, "T\nfirst words\nI start at 8 km.\nsecond");
+        s.undo();
+        assert_eq!((s.text.as_str(), s.selected.clone()), ("T\nfirst words\nsecond", 2..2));
+        assert_eq!(s.kinds.len(), 3);
+        s.redo();
+        assert_eq!(s.text, "T\nfirst words\nI start at 8 km.\nsecond");
+        check(&s);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_reply_never_splits_a_list_a_quote_a_callout_or_code() {
+        let rust = K::Code(Lang::new("rust"));
+        let lines = [
+            (K::Title, "T"),
+            (K::Bullet, "one"),
+            (K::Numbered, "two"),
+            (K::Check(true), "three"),
+            (K::Quote, "q1"),
+            (K::Quote, "q2"),
+            (K::Callout(Callout::Note), "n1"),
+            (K::Callout(Callout::Note), "n2"),
+            (K::Callout(Callout::Tip), "tip"),
+            (rust, "fn a() {"),
+            (rust, ""),
+            (rust, "}"),
+            (K::Paragraph, "end"),
+        ];
+        let kinds: Vec<BlockKind> = lines.iter().map(|(k, _)| *k).collect();
+        // the line a thread is on, and the last line of its block
+        for (from, under) in [(0, 0), (1, 3), (2, 3), (3, 3), (4, 5), (5, 5), (6, 7), (7, 7), (8, 8), (9, 11), (10, 11), (12, 12), (99, 12)] {
+            let mut s = st_kinds(&lines);
+            let (line, _) = s.insert_paragraph_after(from, "a reply").unwrap();
+            assert_eq!(line, under + 1, "from line {from}");
+            assert_eq!(s.lines()[line], (K::Paragraph, "a reply".to_string()), "from line {from}");
+            // every block around it is whole: the kinds above and below are as they were
+            assert_eq!(&s.kinds[..line], &kinds[..line], "from line {from}");
+            assert_eq!(&s.kinds[line + 1..], &kinds[line..], "from line {from}");
+            check(&s);
+        }
+    }
+
+    #[std::prelude::v1::test]
+    fn a_reply_is_one_paragraph_with_no_marks() {
+        // a mark across the paragraph break does not reach the new words
+        let mut s = st("T\nab\ncd");
+        s.marks = vec![MarkSpan { start: 3, end: 6, mark: Mark::Italic }];
+        let (line, _) = s.insert_paragraph_after(1, " one\r\ntwo \u{2029}\n three ").unwrap();
+        assert_eq!(s.text, "T\nab\none two three\ncd");
+        assert_eq!(line, 2);
+        let spans: Vec<&str> = s.marks.iter().map(|m| &s.text[m.start..m.end]).collect();
+        assert_eq!(spans, ["b", "\nc"], "the italic keeps its two ends and skips the reply");
+        check(&s);
+        // words alone: nothing to put in, and nothing changes, history included
+        let mut s = st("T\nab");
+        assert!(s.insert_paragraph_after(1, " \n\u{2028} ").is_none());
+        assert_eq!((s.text.as_str(), s.undo.len()), ("T\nab", 0));
     }
 
     #[std::prelude::v1::test]

@@ -2,8 +2,8 @@
 
 A pass over the small things, after the audit (`ui-audit.md`) and the critique
 (`ui-critique.md`). Branch `ui-polish-2` (the old, merged `ui-polish` worktree still
-exists, so `scripts/dev worktree ui-polish` refused the name). Every surface in
-`design/capabilities.md` was driven by a script against the fake brain and looked at in
+exists, so `scripts/dev worktree ui-polish` refused the name). The surfaces in
+`design/capabilities.md` were driven by scripts against the fake brain and looked at in
 shots, in Linen and Lamplight, at window widths of 760, 1000, 1320 and 1800 and at a
 520 px height, with the chat closed and open, on `running-plan`, `hard-content`,
 `sewn-blocks`, `beta`, the Obsidian vault and a first run.
@@ -113,8 +113,9 @@ keeps at least five threads (it has five).
 ## How it was checked
 
 - During the pass: `cargo test`, `scripts/dev lint` and the scenarios each change
-  touches, and `scripts/dev check` along the way. At the end: `scripts/dev check --e2e`
-  and the full `scripts/dev e2e`.
+  touches, and `scripts/dev check` along the way. At the end, on `dc370a0`:
+  `scripts/dev check --e2e` all green, and the full `scripts/dev e2e` 45 passed, none
+  failed (`real-1` skipped: it needs the model).
 - New scenarios: u12-polish (the no-answer line and Try again), u13-tags-clear-the-words
   (121 opened tags against the column), u14-sidebar-motion. New expects in u11 (the
   scroll at open) and t13 (what Copy writes). New unit test

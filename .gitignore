@@ -3,3 +3,4 @@ brain/node_modules/
 brain/dist/
 .DS_Store
 design/tools/fonts/
+.worktrees/

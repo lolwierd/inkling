@@ -92,7 +92,7 @@ passage, read the two places side by side, and decide which one you meant.
 
 | State | What shows |
 |---|---|
-| Linen, Lamplight | Theme tokens only: graphite lines, faint labels, the seam in the thread colour at 45%. Graphite and faint already pass 4.5:1 on the card in both. |
+| Linen, Lamplight | Theme tokens only: graphite lines, faint labels, the seam in the thread colour at 45%: the same tokens the tag already uses for your replies and its labels. |
 | Both margins, Right margin | The same tag. At the narrowest tag (200 px) a long expression wraps inside its column; the `=` and result stay together. |
 | Marks only | The × after the words opens the same tag beside them, working included. |
 | Folded tab | Unchanged: the × and the number. A folded tag stays quiet. |

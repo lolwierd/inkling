@@ -34,7 +34,7 @@ mod between;
 /// Threads between notes, as the page shows and follows them.
 mod ends;
 mod read_through;
-mod own;
+pub(crate) mod own;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;

@@ -16,7 +16,7 @@ use crate::store::{Folder, Note, Store, new_id};
 use crate::store::ThreadStatus;
 use crate::theme::{SANS, Theme, ts};
 use crate::toast::Kind;
-use crate::ui::{self, icon};
+use crate::ui::{self, Keyed, icon};
 
 gpui_kit::actions!(
     app,
@@ -1077,8 +1077,7 @@ impl AppView {
             .window_control_area(WindowControlArea::Drag)
             .opacity(next)
             .when(next > 0.02, |d| {
-                // ☰ comes first in the Tab order; Chat comes with the chat
-                d.child(div().tab_group().tab_index(ui::tab::CHROME).child(ui::keyed(
+                d.child(
                     div()
                         .id("toggle-sidebar")
                         .absolute()
@@ -1088,16 +1087,13 @@ impl AppView {
                         .rounded(px(5.))
                         .cursor_pointer()
                         .hover(move |s| s.bg(p.wash))
-                        .child(icon("menu", 14., p.graphite)),
-                    &ui::key("chrome:sidebar", cx),
-                    5.,
-                    t.voice_ink,
-                    cx,
-                    |this, _, cx| {
-                        this.sidebar_open = !this.sidebar_open;
-                        cx.notify();
-                    },
-                )))
+                        .child(icon("menu", 14., p.graphite))
+                        // first in the Tab order (no part of the window comes before it)
+                        .keyed_as("chrome:sidebar", 5., t.voice_ink, cx, |this, _, cx| {
+                            this.sidebar_open = !this.sidebar_open;
+                            cx.notify();
+                        }),
+                )
                 .child(
                     div()
                         .absolute()
@@ -1106,11 +1102,12 @@ impl AppView {
                         .flex()
                         .items_center()
                         .gap(px(12.))
+                        // Chat comes with the chat in the Tab order
                         .tab_group()
                         .tab_index(ui::tab::CHAT)
                         // an open chat has its own close button in the same corner
                         .when(!chat_open, |d| {
-                            d.child(ui::keyed(
+                            d.child(
                                 div()
                                     .id("chat-button")
                                     .flex()
@@ -1127,16 +1124,12 @@ impl AppView {
                                     .cursor_pointer()
                                     .hover(move |s| s.border_color(p.faint))
                                     .child(ui::small_dot(t.voice_ink, 5.))
-                                    .child("Chat"),
-                                &ui::key("chrome:chat", cx),
-                                12.,
-                                t.voice_ink,
-                                cx,
-                                |this, window, cx| {
-                                    this.page.update(cx, |p, cx| p.toggle_chat(window, cx));
-                                    cx.notify();
-                                },
-                            ))
+                                    .child("Chat")
+                                    .keyed_as("chrome:chat", 12., t.voice_ink, cx, |this, window, cx| {
+                                        this.page.update(cx, |p, cx| p.toggle_chat(window, cx));
+                                        cx.notify();
+                                    }),
+                            )
                         }),
                 )
             })
@@ -1181,8 +1174,7 @@ impl AppView {
             let id = n.id.clone();
             let on = n.id == current;
             let open = n.open_threads();
-            let key = ui::key(format!("sidebar:note-{}", n.id), cx);
-            let el = row(SharedString::from(format!("note-{}", n.id)), on)
+            row(SharedString::from(format!("note-{}", n.id)), on)
                 .pl(px(8. + indent))
                 .child(icon("file-text", 13., p.faint))
                 .child(
@@ -1206,8 +1198,8 @@ impl AppView {
                             .child(ui::small_dot(t.voice_ink.opacity(0.8), 5.))
                             .child(open.to_string()),
                     )
-                });
-            ui::keyed(el, &key, 6., ring, cx, move |this, window, cx| this.open_note(id.clone(), window, cx))
+                })
+                .keyed_as(format!("sidebar:note-{}", n.id), 6., ring, cx, move |this, window, cx| this.open_note(id.clone(), window, cx))
         };
 
         let mut list = div().flex().flex_col().gap(px(1.));
@@ -1216,8 +1208,7 @@ impl AppView {
             let collapsed = f.collapsed;
             let inside: Vec<&Note> = notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect();
             let group = SharedString::from(format!("folder-row-{}", f.id));
-            let key = ui::key(format!("sidebar:folder-{}", f.id), cx);
-            list = list.child(ui::keyed(
+            list = list.child(
                 row(SharedString::from(format!("folder-{}", f.id)), false)
                     .group(group.clone())
                     .text_color(p.graphite)
@@ -1247,20 +1238,16 @@ impl AppView {
                                 });
                                 this.toast("Folder removed; its notes are still here", cx);
                             }))
+                    })
+                    .keyed_as(format!("sidebar:folder-{}", f.id), 6., ring, cx, move |_, _, cx| {
+                        let store = cx.global_mut::<Store>();
+                        if let Some(f) = store.folders.iter_mut().find(|f| f.id == fid) {
+                            f.collapsed = !f.collapsed;
+                        }
+                        store.save_folders();
+                        cx.notify();
                     }),
-                &key,
-                6.,
-                ring,
-                cx,
-                move |_, _, cx| {
-                    let store = cx.global_mut::<Store>();
-                    if let Some(f) = store.folders.iter_mut().find(|f| f.id == fid) {
-                        f.collapsed = !f.collapsed;
-                    }
-                    store.save_folders();
-                    cx.notify();
-                },
-            ));
+            );
             if !collapsed {
                 if inside.is_empty() {
                     list = list.child(div().pl(px(42.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
@@ -1333,35 +1320,27 @@ impl AppView {
                             .pl(px(86.))
                             .pr(px(10.))
                             .child(ui::wordmark(&t, 18.))
-                            .child(ui::keyed(ui::icon_button("sidebar-close", "x", 13., &t), &ui::key("sidebar:close", cx), 5., ring, cx, |this, _, cx| {
+                            .child(ui::icon_button("sidebar-close", "x", 13., &t).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
                                 this.sidebar_open = false;
                                 cx.notify();
                             })),
                     )
-                    .child(ui::keyed(
+                    .child(
                         row("sidebar-search".into(), false)
                             .text_color(p.graphite)
                             .child(icon("search", 13., p.faint))
                             .child(div().flex_1().child("Find or start a note"))
-                            .child(ui::key_hint(k_find.clone(), &t)),
-                        &ui::key("sidebar:search", cx),
-                        6.,
-                        ring,
-                        cx,
-                        |this, window, cx| this.open_palette(window, cx),
-                    ))
-                    .child(ui::keyed(
+                            .child(ui::key_hint(k_find.clone(), &t))
+                            .keyed_as("sidebar:search", 6., ring, cx, |this, window, cx| this.open_palette(window, cx)),
+                    )
+                    .child(
                         row("sidebar-new".into(), false)
                             .text_color(p.graphite)
                             .child(icon("plus", 13., p.faint))
                             .child(div().flex_1().child("New note"))
-                            .child(ui::key_hint("\u{2318}N", &t)),
-                        &ui::key("sidebar:new", cx),
-                        6.,
-                        ring,
-                        cx,
-                        |this, window, cx| this.create_note("", None, window, cx),
-                    ))
+                            .child(ui::key_hint("\u{2318}N", &t))
+                            .keyed_as("sidebar:new", 6., ring, cx, |this, window, cx| this.create_note("", None, window, cx)),
+                    )
                     .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().child(list).child(
                         match new_folder {
                             Some(input) => div()
@@ -1379,15 +1358,13 @@ impl AppView {
                                 .child(icon("folder-plus", 13., p.faint))
                                 .child(div().flex_1().child(gpui_kit::component::input::Input::new(&input).appearance(false).px_0().text_size(px(ts::UI))))
                                 .into_any_element(),
-                            None => ui::keyed(
-                                row("new-folder".into(), false).mt(px(6.)).text_color(p.faint).child(icon("folder-plus", 13., p.faint)).child("New folder"),
-                                &ui::key("sidebar:new-folder", cx),
-                                6.,
-                                ring,
-                                cx,
-                                |this, window, cx| this.start_new_folder(window, cx),
-                            )
-                            .into_any_element(),
+                            None => row("new-folder".into(), false)
+                                .mt(px(6.))
+                                .text_color(p.faint)
+                                .child(icon("folder-plus", 13., p.faint))
+                                .child("New folder")
+                                .keyed_as("sidebar:new-folder", 6., ring, cx, |this, window, cx| this.start_new_folder(window, cx))
+                                .into_any_element(),
                         },
                     ))
                     .child(
@@ -1398,26 +1375,20 @@ impl AppView {
                             .border_color(p.rule)
                             .child(div().px(px(14.)).text_size(px(ts::SMALL)).text_color(p.ink).truncate().child(who))
                             .child(div().px(px(14.)).mb(px(6.)).text_size(px(ts::META)).text_color(p.faint).child("All notes saved on this Mac"))
-                            .child(ui::keyed(action("sb-copy", "Copy this note", k_copy), &ui::key("sidebar:copy", cx), 6., ring, cx, |this, _, cx| {
+                            .child(action("sb-copy", "Copy this note", k_copy).keyed_as("sidebar:copy", 6., ring, cx, |this, _, cx| {
                                 this.copy_note(cx);
                                 this.sidebar_open = false;
                             }))
-                            .child(ui::keyed(action("sb-export", "Export this note\u{2026}", k_export), &ui::key("sidebar:export", cx), 6., ring, cx, |this, window, cx| {
+                            .child(action("sb-export", "Export this note\u{2026}", k_export).keyed_as("sidebar:export", 6., ring, cx, |this, window, cx| {
                                 this.open_export(window, cx);
                             }))
-                            .child(ui::keyed(action("sb-jmw", if hidden { "Show threads" } else { "Hide threads" }, k_hide), &ui::key("sidebar:hide", cx), 6., ring, cx, |this, _, cx| {
+                            .child(action("sb-jmw", if hidden { "Show threads" } else { "Hide threads" }, k_hide).keyed_as("sidebar:hide", 6., ring, cx, |this, _, cx| {
                                 this.toggle_jmw(cx);
                                 this.sidebar_open = false;
                             }))
-                            .child(ui::keyed(action("sb-custom", "Customize Inkling", k_settings), &ui::key("sidebar:settings", cx), 6., ring, cx, |this, window, cx| {
-                                this.open_settings(Tab::Customize, window, cx)
-                            }))
-                            .child(ui::keyed(action("sb-minds", "Minds", String::new()), &ui::key("sidebar:minds", cx), 6., ring, cx, |this, window, cx| {
-                                this.open_settings(Tab::Minds, window, cx)
-                            }))
-                            .child(ui::keyed(action("sb-model", "Model", String::new()), &ui::key("sidebar:model", cx), 6., ring, cx, |this, window, cx| {
-                                this.open_settings(Tab::Model, window, cx)
-                            })),
+                            .child(action("sb-custom", "Customize Inkling", k_settings).keyed_as("sidebar:settings", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Customize, window, cx)))
+                            .child(action("sb-minds", "Minds", String::new()).keyed_as("sidebar:minds", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Minds, window, cx)))
+                            .child(action("sb-model", "Model", String::new()).keyed_as("sidebar:model", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Model, window, cx))),
                     ),
             )
             .child(
@@ -1493,7 +1464,7 @@ impl AppView {
         let title = self.page.read(cx).editor.read(cx).title();
         let ring = t.voice_ink;
         let choice = |id: &'static str, f: Format, name: &'static str, body: &'static str, cx: &mut Context<Self>| {
-            ui::keyed(ui::option_card(id, name, body, format == f, &t), &ui::key(format!("export:{id}"), cx), 9., ring, cx, move |this, _, cx| {
+            ui::option_card(id, name, body, format == f, &t).keyed_as(format!("export:{id}"), 9., ring, cx, move |this, _, cx| {
                 if let Some(e) = this.export.as_mut() {
                     e.1 = f;
                 }
@@ -1539,7 +1510,7 @@ impl AppView {
                                 .child(choice("ex-docx", Format::Word, "Word", "To keep editing in Word, Pages or Google Docs.", cx))
                                 .child(choice("ex-html", Format::Html, "HTML", "To read, or print to PDF.", cx)),
                         )
-                        .child(ui::keyed(
+                        .child(
                             div()
                                 .id("ex-threads-row")
                                 .mt(px(10.))
@@ -1559,18 +1530,14 @@ impl AppView {
                                         .child(div().text_size(px(ts::UI)).text_color(p.ink).child("Include the threads"))
                                         .child(div().text_size(px(ts::META)).text_color(p.graphite).child("Each thread sits under the paragraph it's about.")),
                                 )
-                                .child(ui::switch("ex-threads", with_threads, &t)),
-                            &ui::key("export:threads", cx),
-                            9.,
-                            ring,
-                            cx,
-                            |this, _, cx| {
-                                if let Some(e) = this.export.as_mut() {
-                                    e.2 = !e.2;
-                                }
-                                cx.notify();
-                            },
-                        ))
+                                .child(ui::switch("ex-threads", with_threads, &t))
+                                .keyed_as("export:threads", 9., ring, cx, |this, _, cx| {
+                                    if let Some(e) = this.export.as_mut() {
+                                        e.2 = !e.2;
+                                    }
+                                    cx.notify();
+                                }),
+                        )
                         .child(
                             div()
                                 .mt(px(16.))
@@ -1578,10 +1545,10 @@ impl AppView {
                                 .justify_end()
                                 .items_center()
                                 .gap(px(14.))
-                                .child(ui::keyed(ui::ghost_button("ex-cancel", "Cancel", &t), &ui::key("export:cancel", cx), 4., ring, cx, |this, window, cx| {
+                                .child(ui::ghost_button("ex-cancel", "Cancel", &t).keyed_as("export:cancel", 4., ring, cx, |this, window, cx| {
                                     this.close_export(window, cx)
                                 }))
-                                .child(ui::keyed(ui::primary_button("ex-go", "Export\u{2026}", &t), &ui::key("export:go", cx), 12., ring, cx, move |this, window, cx| {
+                                .child(ui::primary_button("ex-go", "Export\u{2026}", &t).keyed_as("export:go", 12., ring, cx, move |this, window, cx| {
                                     this.run_export(format, with_threads, window, cx)
                                 })),
                         ),

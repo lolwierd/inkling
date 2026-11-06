@@ -25,7 +25,7 @@ use crate::store::{
 };
 use crate::stitch::{self, Rope};
 use crate::theme::{SANS, TEXT_COLORS, Theme, ts};
-use crate::ui::{self, icon};
+use crate::ui::{self, Keyed, icon};
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -2512,93 +2512,79 @@ impl NotePage {
         };
         let mind_menu = (menu == Some(Menu::Mind)).then(|| self.menu_card(Menu::Mind, cx));
         let mode_menu = (menu == Some(Menu::Mode)).then(|| self.menu_card(Menu::Mode, cx));
-        // Two groups: the mind, the brief and the mode on the left; the open count and Hide
-        // threads on the right. A narrow column (a small window with the chat open) wraps
-        // the row, and the right-hand pair moves under the left one, together.
-        let row = || div().flex().flex_wrap().items_center().gap_x(px(16.)).gap_y(px(2.));
-        row()
-            .justify_between()
+        div()
+            .flex()
+            .flex_row()
+            // a narrow column (a small window with the chat open) wraps the row
+            .flex_wrap()
+            .items_center()
+            .gap_x(px(16.))
+            .gap_y(px(2.))
             .min_h(px(24.))
             // the controls step back while you write, like the window's own
             .opacity(self.chrome.get())
             .font_family(SANS)
-            .child(row().min_w(px(0.)).when(!jmw, |d| {
+            .when(!jmw, |d| {
                 d.child(
                     div()
                         .relative()
                         .child(
-                            ui::keyed(
-                                control("mind-picker", menu == Some(Menu::Mind))
-                                    .gap(px(6.))
-                                    .text_color(p.ink)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(ui::small_dot(t.voice_ink, 7.))
-                                    .child(mind_name)
-                                    .child(icon("chevron-down", 12., p.faint)),
-                                &ui::key("header:mind", cx),
-                                4.,
-                                t.voice_ink,
-                                cx,
-                                |this, window, cx| this.toggle_menu(Menu::Mind, window, cx),
-                            ),
+                            control("mind-picker", menu == Some(Menu::Mind))
+                                .gap(px(6.))
+                                .text_color(p.ink)
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(ui::small_dot(t.voice_ink, 7.))
+                                .child(mind_name)
+                                .child(icon("chevron-down", 12., p.faint))
+                                .keyed_as("header:mind", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mind, window, cx)),
                         )
                         .children(mind_menu.map(|card| self.drop_down(card, cx))),
                 )
                 .when(!has_brief, |d| {
-                    d.child(ui::keyed(
-                        control("tell", false).child(icon("pencil", 12., p.faint)).child("Tell Inkling"),
-                        &ui::key("header:tell", cx),
-                        4.,
-                        t.voice_ink,
-                        cx,
-                        |this, window, cx| this.edit_brief(window, cx),
-                    ))
+                    d.child(
+                        control("tell", false)
+                            .child(icon("pencil", 12., p.faint))
+                            .child("Tell Inkling")
+                            .keyed_as("header:tell", 4., t.voice_ink, cx, |this, window, cx| this.edit_brief(window, cx)),
+                    )
                 })
                 .child(
                     div()
                         .relative()
                         .child(
-                            ui::keyed(
-                                control("mode", menu == Some(Menu::Mode))
-                                    .child(match mode {
-                                        Mode::ThinksWithYou => "Reads along",
-                                        Mode::WhenYouAsk => "Waits to be asked",
-                                    })
-                                    .child(icon("chevron-down", 12., p.faint)),
-                                &ui::key("header:mode", cx),
-                                4.,
-                                t.voice_ink,
-                                cx,
-                                |this, window, cx| this.toggle_menu(Menu::Mode, window, cx),
-                            ),
+                            control("mode", menu == Some(Menu::Mode))
+                                .child(match mode {
+                                    Mode::ThinksWithYou => "Reads along",
+                                    Mode::WhenYouAsk => "Waits to be asked",
+                                })
+                                .child(icon("chevron-down", 12., p.faint))
+                                .keyed_as("header:mode", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mode, window, cx)),
                         )
                         .children(mode_menu.map(|card| self.drop_down(card, cx))),
                 )
-            }))
+            })
+            .child(div().flex_1())
+            // the open count and Hide threads wrap together
             .child(
-                row()
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(16.))
                     .when(!jmw && open > 0, |d| {
-                        d.child(ui::keyed(
+                        d.child(
                             control("open-count", false)
                                 .gap(px(6.))
                                 .child(ui::small_dot(t.voice_ink, 7.))
-                                .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") }),
-                            &ui::key("header:open-count", cx),
-                            4.,
-                            t.voice_ink,
-                            cx,
-                            |this, window, cx| this.jump_to_open(true, window, cx),
-                        ))
+                                .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") })
+                                .keyed_as("header:open-count", 4., t.voice_ink, cx, |this, window, cx| this.jump_to_open(true, window, cx)),
+                        )
                     })
                     .when(jmw || self.note.visible_threads() > 0, |d| {
-                        d.child(ui::keyed(
-                            control("hide-threads", false).child(if jmw { "Show threads" } else { "Hide threads" }),
-                            &ui::key("header:hide-threads", cx),
-                            4.,
-                            t.voice_ink,
-                            cx,
-                            move |this, _, cx| this.set_hidden(!jmw, cx),
-                        ))
+                        d.child(
+                            control("hide-threads", false)
+                                .child(if jmw { "Show threads" } else { "Hide threads" })
+                                .keyed_as("header:hide-threads", 4., t.voice_ink, cx, move |this, _, cx| this.set_hidden(!jmw, cx)),
+                        )
                     }),
             )
             .into_any_element()
@@ -2775,19 +2761,18 @@ impl NotePage {
                             .justify_end()
                             .items_center()
                             .gap(px(14.))
-                            .child(ui::keyed(ui::ghost_button("brief-cancel", "Cancel", &t), &ui::key("brief:cancel", cx), 4., t.voice_ink, cx, |this, window, cx| {
+                            .child(ui::ghost_button("brief-cancel", "Cancel", &t).keyed_as("brief:cancel", 4., t.voice_ink, cx, |this, window, cx| {
                                 this.brief_input = None;
                                 this.editor.update(cx, |e, cx| e.focus(window, cx));
                                 cx.notify();
                             }))
-                            .child(ui::keyed(ui::primary_button("brief-save", "Save", &t), &ui::key("brief:save", cx), 12., t.voice_ink, cx, |this, window, cx| this.save_brief(window, cx))),
+                            .child(ui::primary_button("brief-save", "Save", &t).keyed_as("brief:save", 12., t.voice_ink, cx, |this, window, cx| this.save_brief(window, cx))),
                     )
                     .into_any_element(),
             );
         }
         let brief = self.note.brief.clone()?;
-        let edit = ui::key("header:brief", cx);
-        Some(ui::keyed(
+        Some(
             div()
                 .id("brief")
                 .group("brief")
@@ -2809,14 +2794,10 @@ impl NotePage {
                         .child(icon("pencil", 10., p.faint))
                         .child("Tell Inkling"),
                 )
-                .child(div().min_w(px(0.)).text_size(px(ts::UI)).line_height(px(19.)).text_color(p.graphite).child(brief)),
-            &edit,
-            4.,
-            t.voice_ink,
-            cx,
-            |this, window, cx| this.edit_brief(window, cx),
+                .child(div().min_w(px(0.)).text_size(px(ts::UI)).line_height(px(19.)).text_color(p.graphite).child(brief))
+                .keyed_as("header:brief", 4., t.voice_ink, cx, |this, window, cx| this.edit_brief(window, cx))
+                .into_any_element(),
         )
-        .into_any_element())
     }
 
     /// The header's menus hang under their own buttons (see [`Self::drop_down`]), so
@@ -3347,36 +3328,24 @@ impl NotePage {
                     .flex_wrap()
                     .items_center()
                     .gap(px(12.))
-                    .child(ui::keyed(
-                        ui::ghost_button(SharedString::from(format!("res-{id_res}")), if tied { "Reopen" } else { "Resolve" }, &t),
-                        &ui::key("tag:resolve", cx),
-                        4.,
-                        thread_color,
-                        cx,
-                        move |this, _, cx| {
-                            let st = if tied { ThreadStatus::Open } else { ThreadStatus::Resolved };
-                            this.set_status(&id_res, st, cx)
-                        },
-                    ))
-                    .child(ui::keyed(
-                        ui::ghost_button(SharedString::from(format!("dis-{id_dis}")), "Dismiss", &t),
-                        &ui::key("tag:dismiss", cx),
-                        4.,
-                        thread_color,
-                        cx,
-                        move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx),
-                    ))
+                    .child(
+                        ui::ghost_button(SharedString::from(format!("res-{id_res}")), if tied { "Reopen" } else { "Resolve" }, &t)
+                            .keyed_as("tag:resolve", 4., thread_color, cx, move |this, _, cx| {
+                                let st = if tied { ThreadStatus::Open } else { ThreadStatus::Resolved };
+                                this.set_status(&id_res, st, cx)
+                            }),
+                    )
+                    .child(
+                        ui::ghost_button(SharedString::from(format!("dis-{id_dis}")), "Dismiss", &t)
+                            .keyed_as("tag:dismiss", 4., thread_color, cx, move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx)),
+                    )
                     .child(div().flex_1())
-                    .child(ui::keyed(
-                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t),
-                        &ui::key("tag:note", cx),
-                        4.,
-                        thread_color,
-                        cx,
-                        move |this, _, cx| this.make_note_from_thread(&id_note, cx),
-                    ))
+                    .child(
+                        ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
+                            .keyed_as("tag:note", 4., thread_color, cx, move |this, _, cx| this.make_note_from_thread(&id_note, cx)),
+                    )
                     // Copy is the least used of the four: an icon, so the row fits a margin
-                    .child(ui::keyed(
+                    .child(
                         div()
                             .id(SharedString::from(format!("copy-{id_copy}")))
                             .cursor_pointer()
@@ -3385,17 +3354,13 @@ impl NotePage {
                             .hover(move |s| s.bg(p.wash))
                             .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
                             // a tick where the pointer is, the words in the toasts (the row has no room)
-                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint })),
-                        &ui::key("tag:copy", cx),
-                        4.,
-                        thread_color,
-                        cx,
-                        move |this, _, cx| {
-                            let text = this.thread_text(&id_copy);
-                            cx.write_to_clipboard(ClipboardItem::new_string(text));
-                            this.show_copied(&id_copy, cx);
-                        },
-                    )),
+                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
+                            .keyed_as("tag:copy", 4., thread_color, cx, move |this, _, cx| {
+                                let text = this.thread_text(&id_copy);
+                                cx.write_to_clipboard(ClipboardItem::new_string(text));
+                                this.show_copied(&id_copy, cx);
+                            }),
+                    ),
             );
         }
 
@@ -3776,7 +3741,8 @@ impl NotePage {
             let off = full && !on;
             let color = mind_thread(&mind.name, &own, chosen, &t);
             let name = mind.name.clone();
-            let chip = div()
+            chips = chips.child(
+                div()
                     .id(SharedString::from(format!("room-{}", name)))
                     .flex()
                     .items_center()
@@ -3794,15 +3760,11 @@ impl NotePage {
                         d.cursor_pointer()
                             .hover(move |s| s.border_color(if on { color } else { p.faint }).text_color(p.ink))
                             .active(|s| s.opacity(0.8))
+                            .keyed_as(format!("ask:room-{name}"), 12., color, cx, move |this, _, cx| this.toggle_room(mind.clone(), cx))
                     })
                     .child(ui::small_dot(color, 6.))
-                    .child(name.clone());
-            // a mind that can sit down takes the keyboard as well as the click
-            chips = chips.child(if off {
-                chip.into_any_element()
-            } else {
-                ui::keyed(chip, &ui::key(format!("ask:room-{name}"), cx), 12., color, cx, move |this, _, cx| this.toggle_room(mind.clone(), cx)).into_any_element()
-            });
+                    .child(name),
+            );
         }
         let n = room.len();
         let hint = if n > 1 { format!("{n} minds answer side by side") } else { "Add minds to ask the room".to_string() };
@@ -3886,9 +3848,8 @@ impl NotePage {
                                 .into_iter()
                                 .enumerate()
                                 .map(|(i, q)| {
-                                    ui::keyed(ui::pill(SharedString::from(format!("suggest-{i}")), q, false, &t), &ui::key(format!("chat:suggest-{i}"), cx), 12., t.voice_ink, cx, move |this, window, cx| {
-                                        this.send_chat(Some(q.to_string()), window, cx)
-                                    })
+                                    ui::pill(SharedString::from(format!("suggest-{i}")), q, false, &t)
+                                        .keyed_as(format!("chat:suggest-{i}"), 12., t.voice_ink, cx, move |this, window, cx| this.send_chat(Some(q.to_string()), window, cx))
                                 }),
                         ),
                 );
@@ -3946,7 +3907,7 @@ impl NotePage {
                     .line_height(px(17.))
                     .text_color(p.graphite)
                     .child(err)
-                    .child(ui::keyed(ui::ghost_button("chat-retry", "Try again", &t), &ui::key("chat:retry", cx), 4., t.voice_ink, cx, |this, window, cx| this.retry_chat(window, cx))),
+                    .child(ui::ghost_button("chat-retry", "Try again", &t).keyed_as("chat:retry", 4., t.voice_ink, cx, |this, window, cx| this.retry_chat(window, cx))),
             );
         }
         let input = self.chat_input.clone();
@@ -3992,7 +3953,7 @@ impl NotePage {
                                 if self.note.chat.is_empty() {
                                     d.child(ui::ghost_button_off("Copy", &t)).child(ui::ghost_button_off("Clear", &t))
                                 } else {
-                                    d.child(ui::keyed(ui::ghost_button("chat-copy", "Copy", &t), &ui::key("chat:copy", cx), 4., t.voice_ink, cx, |this, _, cx| {
+                                    d.child(ui::ghost_button("chat-copy", "Copy", &t).keyed_as("chat:copy", 4., t.voice_ink, cx, |this, _, cx| {
                                         let text = this
                                             .note
                                             .chat
@@ -4003,12 +3964,10 @@ impl NotePage {
                                         cx.write_to_clipboard(ClipboardItem::new_string(text));
                                         cx.emit(PageEvent::Toast("Chat copied".into()));
                                     }))
-                                    .child(ui::keyed(ui::ghost_button("chat-clear", "Clear", &t), &ui::key("chat:clear", cx), 4., t.voice_ink, cx, |this, _, cx| this.clear_chat(cx)))
+                                    .child(ui::ghost_button("chat-clear", "Clear", &t).keyed_as("chat:clear", 4., t.voice_ink, cx, |this, _, cx| this.clear_chat(cx)))
                                 }
                             })
-                            .child(div().mr(px(-4.)).child(ui::keyed(ui::icon_button("chat-close", "x", 13., &t), &ui::key("chat:close", cx), 5., t.voice_ink, cx, |this, window, cx| {
-                                this.toggle_chat(window, cx)
-                            }))),
+                            .child(div().mr(px(-4.)).child(ui::icon_button("chat-close", "x", 13., &t).keyed_as("chat:close", 5., t.voice_ink, cx, |this, window, cx| this.toggle_chat(window, cx)))),
                     )
                     .child(
                         div()
@@ -4094,14 +4053,13 @@ impl NotePage {
                             // A press inside is for the sketch and its controls, not a
                             // press outside that closes it.
                             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .child(div().mr(px(-16.)).flex().justify_end().child(ui::keyed(
-                                ui::icon_button("enlarged-close", "x", 14., &t),
-                                &ui::key("sketch:close", cx),
-                                5.,
-                                t.voice_ink,
-                                cx,
-                                move |this, _, cx| close(this, cx),
-                            )))
+                            .child(
+                                div()
+                                    .mr(px(-16.))
+                                    .flex()
+                                    .justify_end()
+                                    .child(ui::icon_button("enlarged-close", "x", 14., &t).keyed_as("sketch:close", 5., t.voice_ink, cx, move |this, _, cx| close(this, cx))),
+                            )
                             .child(block),
                     ),
             )

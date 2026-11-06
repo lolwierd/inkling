@@ -16,8 +16,7 @@ use crate::theme::{Palette, SANS, Theme, ts};
 /// with no id it gets no focus handle of its own, so a click on it never takes the keyboard
 /// away from the note.
 pub mod tab {
-    /// ☰ and Chat, on the cloth above the sheet.
-    pub const CHROME: isize = 1;
+    // ☰, on the cloth above the sheet, is in no part: it comes first.
     /// The notes list, when it is open.
     pub const SIDEBAR: isize = 2;
     /// The page's header row and the brief under it.
@@ -28,7 +27,7 @@ pub mod tab {
     pub const TAG: isize = 5;
     /// The question box and the selection toolbar.
     pub const ASK: isize = 6;
-    /// The chat.
+    /// Chat, and the chat once it is open.
     pub const CHAT: isize = 7;
 }
 
@@ -61,8 +60,8 @@ pub fn is_press(k: &Keystroke) -> bool {
 }
 
 /// The ring that shows where the keyboard is: a running stitch in `color`, a couple of
-/// pixels outside the control, drawn while `focus` has the keyboard and the keyboard put it
-/// there (a click never leaves one behind). Its parent must be `.relative()`.
+/// pixels outside the control it is a child of, drawn while `focus` has the keyboard and
+/// the keyboard put it there (a click never leaves one behind).
 pub fn focus_ring(focus: &FocusHandle, radius: f32, color: Hsla) -> impl IntoElement {
     let focus = focus.clone();
     canvas(
@@ -92,8 +91,9 @@ pub fn keyed<V: 'static>(
 ) -> Stateful<Div> {
     let press = Rc::new(press);
     let by_key = press.clone();
-    el.relative()
-        .track_focus(focus)
+    // (no `.relative()`: every element already positions its absolute children, and it would
+    // undo a control's own `.absolute()`)
+    el.track_focus(focus)
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| press(this, window, cx)))
         .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
@@ -224,6 +224,32 @@ pub fn switch(id: impl Into<ElementId>, on: bool, t: &Theme) -> Stateful<Div> {
         .cursor_pointer()
         .hover(move |s| if on { s.opacity(0.88) } else { s.bg(p.faint.opacity(0.5)) })
         .child(div().absolute().top(px(2.)).left(if on { px(14.) } else { px(2.) }).size(px(14.)).rounded_full().bg(p.paper))
+}
+
+/// [`keyed`] in a builder chain, with the control's focus handle named `name` (see [`key`]).
+pub trait Keyed: Sized {
+    fn keyed_as<V: 'static>(
+        self,
+        name: impl Into<SharedString>,
+        radius: f32,
+        ring: Hsla,
+        cx: &mut Context<V>,
+        press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+    ) -> Self;
+}
+
+impl Keyed for Stateful<Div> {
+    fn keyed_as<V: 'static>(
+        self,
+        name: impl Into<SharedString>,
+        radius: f32,
+        ring: Hsla,
+        cx: &mut Context<V>,
+        press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+    ) -> Self {
+        let focus = key(name, cx);
+        keyed(self, &focus, radius, ring, cx, press)
+    }
 }
 
 /// The shadow under menus and popovers: lifted a little off the page.

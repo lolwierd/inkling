@@ -1,4 +1,4 @@
-//! Threads of your own: a question you hang on your own words (Ask yourself, ⇧⌘↵). It is
+//! Threads of your own: a question you hang on your own words (Ask yourself, ⇧⌘↩). It is
 //! sewn in your ink, the colour of your words, so a coloured thread is a mind and an ink
 //! one is you; its words get seed stitches rather than a running stitch, so it differs in
 //! shape too. No mind answers in it unless you call one: the tag's Ask button, or a line
@@ -48,7 +48,7 @@ fn more_lines(n: usize) -> String {
 }
 
 impl NotePage {
-    /// Ask yourself, from the selection menu or ⇧⌘↵: the question box, no mind seated.
+    /// Ask yourself, from the selection menu or ⇧⌘↩: the question box, no mind seated.
     /// Threads come back first if they were hidden, since you asked for one.
     pub fn ask_yourself(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.selection_range(cx).is_none() {

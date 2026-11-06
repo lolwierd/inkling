@@ -3,11 +3,11 @@
 Manifesto section 2, item 3, approved by the owner: "Select some words and hang your own
 question on them, in your colour. No mind answers unless you call one, and you tie it off or
 cut it like any other thread." Designed on 7 Nov 2026 on branch `feat-own-threads`, then built
-on the same branch.
+on the same branch. What changed while building is under "As built" at the end.
 
 ## The design in brief
 
-- Select words, then **Ask yourself** in the selection menu, or ⇧⌘↵. The question box opens
+- Select words, then **Ask yourself** in the selection menu, or ⇧⌘↩. The question box opens
   with no mind seated. Type the question and press Return: a thread hangs from your words, in
   your ink, and no mind answers.
 - Your thread is sewn in **ink**, the colour of your words. Every mind's thread is coloured,
@@ -41,9 +41,9 @@ From the selection menu. Select "four days a week". The menu's actions read:
 
 | Action | Hint on the right |
 |---|---|
-| Find a loose thread | ⌘↵ |
+| Find a loose thread | ⌘↩ |
 | Ask Inkling | Answered in the margin (was "Your own question", which now belongs to the next row) |
-| **Ask yourself** | ⇧⌘↵ |
+| **Ask yourself** | ⇧⌘↩ |
 | Sketch it | Stitched step by step |
 
 "Ask Inkling" names the note's mind, as it does today ("Ask Skeptic" on a Skeptic note).
@@ -62,8 +62,8 @@ stitches appears under "four days a week", its thread comes up beside the column
 folded tab hangs in the margin with its number and **?** in ink. It does not open: you wrote
 it, so there is nothing to read yet, and you can keep writing. Nothing is sent to the brain.
 
-From the keyboard: select with ⇧ and the arrows, press ⇧⌘↵, type, press Return. ⇧⌘↵ with
-nothing selected does nothing, as Ask does. If threads are hidden, ⇧⌘↵ shows them again
+From the keyboard: select with ⇧ and the arrows, press ⇧⌘↩, type, press Return. ⇧⌘↩ with
+nothing selected does nothing, as Ask does. If threads are hidden, ⇧⌘↩ shows them again
 first, because you asked for a thread and should see it hang.
 
 The question box is the same one Ask uses, so it also works the other way. In Ask Inkling's
@@ -129,7 +129,7 @@ Click the tab (or jump to it with ⌥⌘↓). It opens:
 
 ### 4. Tie it off, or cut it
 
-- **Resolve** (or ⌘↵ with the tag open and nothing selected) ties it off as any thread: the
+- **Resolve** (or ⌘↩ with the tag open and nothing selected) ties it off as any thread: the
   thread pulls taut, the knot pops in ink, the tag reads **You · tied off**, and the border
   grows one motif, the same rule as every tied-off thread. If the manifesto's change to the
   border lands (marking a note once nothing in it is open), your threads follow it like the
@@ -155,7 +155,7 @@ Click the tab (or jump to it with ⌥⌘↓). It opens:
 | Both margins | Your tag takes a side the way any new thread does (`pick_side`). |
 | Right margin | On the right with the rest. |
 | Marks only | A raised ? in ink after the words, set like a footnote mark; clicking it opens the tag. The seed stitches show under the words, as stitches do in this placement today. |
-| Hidden threads | Hidden with every other thread, the box and the menu (belief 4: your page exactly as you left it). ⇧⌘↵ brings threads back before it opens the box. |
+| Hidden threads | Hidden with every other thread, the box and the menu (belief 4: your page exactly as you left it). ⇧⌘↩ brings threads back before it opens the box. |
 | A note that waits to be asked | Works the same; nothing is read either way. This is where your own threads help most, because the minds are quiet until called. |
 | A note that reads along | The reading loop sees your threads as yours (see The brain) and does not ask your question back. |
 | Export | Markdown: `> **Me** on “four days a week”`, then `> *Me:* …` for your lines and `> *Inkling:* …` for a mind's answer, under the paragraph like every thread. HTML and Word: "Me" as the thread's name, a called mind's paragraphs start with its name. Follows the export's own threads switch. |
@@ -166,7 +166,7 @@ Click the tab (or jump to it with ⌥⌘↓). It opens:
 | A call fails | The usual toast (rate limit with its reset time, overloaded, the brain not running). Your thread and your line stay. An empty answer says "Inkling came back with nothing to say. Try again." |
 | Switching notes mid-call | The call is cancelled; the thread stays (it has your words). |
 | Learning about you | Lines you keep to yourself are never sent to the learn task. A line that calls a mind is sent like a reply, under the existing switch. |
-| Keyboard only | Select, ⇧⌘↵, type, Return. ⌥⌘↓ opens the next open thread with the keyboard in "Add to it…". Return adds; a name at the start calls; Tab reaches Resolve, Dismiss, Ask Inkling, Make a note and Copy, with the stitched ring; ⌘↵ ties it off; ⇧⌘⌫ cuts it; Esc folds it. ⇧⌘↵ is listed under Threads in Settings › Shortcuts and can be rebound. |
+| Keyboard only | Select, ⇧⌘↩, type, Return. ⌥⌘↓ opens the next open thread with the keyboard in "Add to it…". Return adds; a name at the start calls; Tab reaches Resolve, Dismiss, Ask Inkling, Make a note and Copy, with the stitched ring; ⌘↩ ties it off; ⇧⌘⌫ cuts it; Esc folds it. ⇧⌘↩ is listed under Threads in Settings › Shortcuts and can be rebound. |
 
 ## The data model
 
@@ -272,9 +272,9 @@ instead of "You", so a mind called into your thread sees who said what.
 | Feature | What it means for your threads | Shared types |
 |---|---|---|
 | Answer in the note + Write it in | Answer in the note should skip `own` threads: a mind deciding a paragraph answers your question is a mind answering. Write it in should treat a tied-off own thread like any tied-off thread and offer your last line. | reads `Thread.own` |
-| Let it stand + Turn it over | Cutting your own thread is not letting a point stand: the list of points let stand that goes to every mind must skip `own` threads. The back of the note lists your threads with the rest, named "You" (`own::asker`). | reads `Thread.own` |
+| Let it stand + Turn it over | Cutting your own thread is not letting a point stand: the list of points let stand that goes to every mind must skip `own` threads. The back of the note lists your threads with the rest, named "You" (`Thread::asker`). | reads `Thread.own` |
 | Show its working | No overlap: your threads hold no corrections. A mind called in answers as Ask does. | none |
-| Loose ends | Your open threads are loose ends. Show them in ink and named "You", through `own::ink` and `own::asker`. | reads `Thread.own` |
+| Loose ends | Your open threads are loose ends. Show them in ink and named "You", through `own::ink` and `Thread::asker`. | reads `Thread.own` |
 | Threads between notes | No overlap: those threads are always a mind's. | none |
 
 Shared types I change: `store::Thread` (+`own`, +`Default`), `store::Message` (+`mind`),
@@ -308,7 +308,7 @@ and `own` and `mind` survive `context()`.
 Scenarios, against the fake brain (whose `ask` answer adds "(history N)" when it gets a
 history):
 
-`u12-own-threads.txt` (fixture `running-plan`):
+`u15-own-threads.txt` (fixture `running-plan`):
 
 ```
 select: four days a week
@@ -347,7 +347,7 @@ dump: tied
 expect: d.threads.find(t => t.own).status === "Resolved"
 ```
 
-`u13-own-threads-states.txt` (fixture `running-plan`): ⇧⌘↵ from the keyboard opens the box
+`u16-own-threads-states.txt` (fixture `running-plan`): ⇧⌘↩ from the keyboard opens the box
 with nobody seated (`key: cmd-shift-enter`, `expect: d.asking && d.room.length === 0`);
 Marks only shows the ink ? (`d.marks`); hiding threads hides it; a note that waits to be asked
 still hangs it and sends nothing; export carries `**Me** on`; cutting it shows Undo, and ⌥⌘Z
@@ -372,13 +372,13 @@ something else), and a call into your own thread with history.
 | `src/editor.rs` | `AnchorStyle.own`; own runs drawn as seed stitches (about ten lines) |
 | `src/stitch.rs` | `seed_dots`, and its test |
 | `src/export.rs` | "Me" for your threads, each mind's name on its lines; a test |
-| `src/app.rs`, `src/shortcuts.rs` | the `AskYourself` action, ⇧⌘↵, its row in Settings › Shortcuts |
+| `src/app.rs`, `src/shortcuts.rs` | the `AskYourself` action, ⇧⌘↩, its row in Settings › Shortcuts |
 | `src/script.rs` | `ask-yourself:` and `call:` |
 | `src/welcome.rs` | `..Default::default()` at the end of its two thread literals, nothing else |
 | `brain/src/protocol.ts`, `main.ts`, `prompts.ts` | the optional fields, keeping them in `context()`, the margin label and rule, the own-thread Ask framing |
 | `brain/test/e2e/fake-brain.ts` | "(history N)" on an `ask` that has a history |
 | `brain/test/unit.test.ts`, `protocol.test.ts`, `live.ts` | as in Tests |
-| `brain/test/e2e/scenarios/u12-own-threads.txt`, `u13-own-threads-states.txt` | as in Tests |
+| `brain/test/e2e/scenarios/u15-own-threads.txt`, `u16-own-threads-states.txt` | as in Tests |
 | `design/capabilities.md` | "Ask yourself" under Asking; your threads under Threads |
 
 Size: S, at the top of S. About 450 lines with tests, two thirds of them in the new module and
@@ -393,3 +393,37 @@ the tests.
    your next plain line stays private. The alternative is a conversation that continues until
    you close the tag, which is friendlier for a long back-and-forth but means a plain line
    might reach a mind. Recommendation: keep one answer per call; the button is one Tab away.
+
+## As built (7 Nov 2026)
+
+Everything above works end to end on `feat-own-threads`, with these differences from the
+design:
+
+- **Names live on `Thread`.** `Thread::asker()` ("You", or the mind) and `Thread::author(m)`
+  (who wrote a message) are in `src/store.rs` rather than in the new module, because the
+  export, the page and the features to come (Loose ends, Turn it over) all need them and the
+  export should not depend on the page.
+- **A called mind stays on the thread's point.** The first real call answered the burst
+  question well, then went on to another paragraph and ran to three paragraphs. The
+  own-thread framing now ends "Stay on this thread's point; other parts of the note belong in
+  other threads.", the line the reply prompt already uses, and the second call stayed on point.
+- **The question box's hint wraps.** "No mind answers. Add one to ask it." is longer than the
+  hint it replaces and pushed "Enter to ask" past the box's edge; the hint now wraps.
+
+Real model, four calls through `brain/test/live.ts` (Opus 5.5): `read_note` on the rate
+limiter's "can never send more than 100 requests in any 60-second span" corrects the burst
+across the minute's edge; `read_own`, the same read with that question already hung there as
+the writer's own thread, stays silent; `ask_own`, a call into that thread with two lines of
+history, answers the burst directly (twice: before and after the stay-on-point line).
+
+Seen in the screenshots, not changed: a tag in the left margin at the default window width
+opens toward the words, over the column, as every left tag does today (`tag_panel` looks for
+room on the paper). It is more noticeable for your threads only because, like any new thread,
+every other one takes the left margin.
+
+Screenshots: `design/features/shots/own-threads-*.jpg`, Linen and Lamplight.
+
+Left for the owner or another agent: the welcome tour (`src/welcome.rs`, the film agent's)
+and the film do not show Ask yourself yet, though `design/capabilities.md` now lists it;
+Settings › Minds still says the note's mind "asks in your thread colour", which reads oddly
+next to threads of your own in ink.

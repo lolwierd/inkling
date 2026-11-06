@@ -4333,7 +4333,8 @@ impl NotePage {
                                     .gap(px(8.))
                                     .text_size(px(ts::META))
                                     .text_color(p.faint)
-                                    .child(hint)
+                                    // a long hint wraps rather than push the key off the box
+                                    .child(div().flex_1().min_w(px(0.)).child(hint))
                                     .child(div().flex_none().child("\u{21a9} ask")),
                             ),
                     )

@@ -1,0 +1,15 @@
+# A question that lands while you are typing waits, folded, until you pause.
+# Run with FAKE_DELAY_READ_MS=2500 so the read comes back mid-typing.
+wait: 1200
+keys: The first claim needs checking right now.
+caret: end
+wait: 2400
+enter
+keys: Second paragraph starts here
+wait: 1200
+keys: \sand keeps going
+wait: 1300
+dump: while-typing
+wait: 2600
+dump: paused
+quit

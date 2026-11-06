@@ -1,0 +1,5 @@
+note: Silent
+type: A finished paragraph that the mind reads silently [[silent]].
+wait: 3500
+dump: after-read
+quit

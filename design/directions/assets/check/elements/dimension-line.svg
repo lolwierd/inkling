@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 70" width="220" height="70" role="img" aria-label="Dimension line">
+<style>.ck-ink{fill:#22262A}.ck-ink-s{stroke:#22262A;fill:none}.ck-ink2{fill:#4C5550}.ck-label{fill:#57655A}.ck-rule-s{stroke:#C4D2BF;fill:none}.ck-sheet{fill:#F2F7EE}.ck-grid-s{stroke:#D3E2D0;fill:none}.ck-yel{fill:#F2C94C}.ck-red{fill:#C0362C}.ck-red-s{stroke:#C0362C;fill:none}.ck-blue{fill:#2D5DA8}.ck-blue-s{stroke:#2D5DA8;fill:none}.ck-steel{fill:#9AA5AA}.ck-steel-s{stroke:#9AA5AA;fill:none}.ck-oy{fill:#22262A}.ck-oy-s{stroke:#22262A;fill:none}.ck-hl{mix-blend-mode:multiply}.ck-t{font-family:'Atkinson Hyperlegible Mono',ui-monospace,monospace}.ck-l{font-family:'B612','Atkinson Hyperlegible Next',sans-serif}.ck-w{font-family:'Atkinson Hyperlegible Next',system-ui,sans-serif}@media (prefers-color-scheme:dark){.ck-ink{fill:#E8EEF6}.ck-ink-s{stroke:#E8EEF6;fill:none}.ck-ink2{fill:#A9BCD6}.ck-label{fill:#8FA6C4}.ck-rule-s{stroke:#2A4468;fill:none}.ck-sheet{fill:#12233D}.ck-grid-s{stroke:#1E3557;fill:none}.ck-yel{fill:#F2C94C}.ck-red{fill:#F0624F}.ck-red-s{stroke:#F0624F;fill:none}.ck-blue{fill:#8DB4F0}.ck-blue-s{stroke:#8DB4F0;fill:none}.ck-steel{fill:#6F8299}.ck-steel-s{stroke:#6F8299;fill:none}.ck-oy{fill:#22262A}.ck-oy-s{stroke:#22262A;fill:none}.ck-hl{mix-blend-mode:normal;opacity:.34}}</style>
+<line class="ck-ink-s" stroke-width=".9" x1="20" y1="62" x2="20" y2="34"/>
+<line class="ck-ink-s" stroke-width=".9" x1="200" y1="62" x2="200" y2="34"/>
+<line class="ck-ink-s" stroke-width=".9" x1="20" y1="44" x2="200" y2="44"/>
+<path class="ck-ink" d="M20 44 L29 41 L29 47 Z"/>
+<path class="ck-ink" d="M200 44 L191 41 L191 47 Z"/>
+<text class="ck-t ck-ink" x="110.0" y="37" font-size="12" text-anchor="middle">55:00</text>
+</svg>

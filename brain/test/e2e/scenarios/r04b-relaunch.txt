@@ -1,0 +1,5 @@
+caret: end
+enter
+wait: 3500
+dump: after-enter
+quit

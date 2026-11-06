@@ -1,0 +1,9 @@
+note: Inflight
+type: The first paragraph takes a while to read [[delay:4000]].
+wait: 2600
+keys: \nThe second paragraph is finished during the first read.
+wait: 2600
+dump: mid
+wait: 4000
+dump: after
+quit

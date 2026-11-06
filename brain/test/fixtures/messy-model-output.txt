@@ -1,0 +1,13 @@
+Here's the sketch:
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220">
+<!-- two windows -->
+<g data-step="1" data-caption="R&D window &rarr; reset">
+<path d="M20 60 Q160 58 300 60" stroke="ink" stroke-width="1.4" fill="none"/>
+<text x="160" y="40" class="voice" font-size="14" text-anchor="middle">0:59 &mdash; 1:00</text>
+</g>
+<g data-step="2" data-caption="100 + 100 < 2 s">
+<text x="160" y="120" class="voice" font-size="16" fill="ink" text-anchor="middle">200 in < 2 s&nbsp;!</text>
+</g>
+</svg>
+```

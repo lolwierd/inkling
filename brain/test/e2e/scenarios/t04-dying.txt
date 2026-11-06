@@ -1,0 +1,26 @@
+note: Dying
+mode: ask
+type: Ask about this sentence here please.
+wait: 300
+select: this sentence
+ask: What is it? [[exitmid]]
+wait: 1500
+dump: after-exit
+keys: \nInkling, are you back now?
+wait: 2700
+dump: after-restart
+select: here please
+riddle
+wait: 800
+dump: riddled
+type: Visualize this then die [[exitafter]] right away.
+wait: 300
+select: Visualize this then die [[exitafter]]
+visualize
+wait: 2500
+dump: after-exitafter
+select: right away
+riddle
+wait: 1000
+dump: final
+quit

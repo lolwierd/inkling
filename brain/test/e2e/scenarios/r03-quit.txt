@@ -1,0 +1,3 @@
+note: Quitter
+type: These words were typed just before quitting.
+quit

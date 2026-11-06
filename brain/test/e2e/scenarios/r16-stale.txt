@@ -1,0 +1,5 @@
+dump: loaded
+keys: \sx
+wait: 800
+dump: typed
+quit

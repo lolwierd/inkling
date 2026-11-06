@@ -1,0 +1,38 @@
+note: Lifecycle
+type: A rate limiter keeps one counter per user and resets every minute [[sketch]].
+wait: 2700
+dump: sketching
+wait: 2000
+dump: drawn
+activate: 1
+reply: Why does the reset matter? [[delay:800]]
+wait: 300
+dump: replying
+wait: 1000
+dump: replied
+reply: Then I get it, it is about bursts [[resolved]]
+wait: 700
+dump: resolved
+reopen: 1
+dump: reopened
+activate: 1
+reply: Draw the burst please [[redraw]]
+wait: 600
+dump: redrawing
+wait: 2200
+dump: redrawn
+copy: 1
+resolve: 1
+dump: manual-resolved
+reopen: 1
+escape
+dump: escaped
+makenote: 1
+wait: 800
+dump: new-note
+switch: Lifecycle
+wait: 500
+activate: 1
+dismiss: 1
+dump: dismissed
+quit

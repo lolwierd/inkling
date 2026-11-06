@@ -1,0 +1,6 @@
+note: Alpha
+type: Alpha paragraph is finished and long enough here.
+switch: Beta
+wait: 3500
+dump: on-beta
+quit

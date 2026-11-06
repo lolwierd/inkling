@@ -1,0 +1,11 @@
+note: Dismisser
+mode: ask
+type: Riddle this slow sentence about queues [[delay:1500]].
+wait: 300
+select: slow sentence about queues [[delay:1500]]
+riddle
+wait: 200
+dismiss: 1
+wait: 2500
+dump: after
+quit

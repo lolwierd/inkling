@@ -1,0 +1,22 @@
+# UX core on the running-plan note (design/tools/demo_notebook.py): jump, undo dismiss,
+# ask the room, and fix the words (the fake brain resolves when the message says [[resolved]])
+wait: 1500
+jump: next
+dump: jumped-1
+jump: next
+dump: jumped-2
+dismiss: 2
+dump: dismissed
+undo-dismiss
+dump: undone
+escape
+select: four days a week
+room: Inkling, Skeptic, Tutor
+ask: Is four days enough?
+wait: 2500
+dump: room
+edit: 5:30 for the whole race => 4:55 for the whole race [[resolved]]
+caret: end
+wait: 5000
+dump: fixed
+quit

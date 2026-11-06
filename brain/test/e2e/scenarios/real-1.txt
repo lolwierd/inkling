@@ -1,0 +1,9 @@
+note: Real check
+type: The Moon has no gravity at all, so astronauts there just float around the whole time.
+wait: 30000
+dump: after-read
+select: astronauts there just float around
+riddle
+wait: 30000
+dump: after-riddle
+quit

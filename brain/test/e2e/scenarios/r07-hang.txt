@@ -1,0 +1,7 @@
+note: Hanger
+type: The first paragraph hangs forever in the brain [[hang]].
+wait: 3500
+type: The second paragraph is finished and waits its turn.
+wait: 3500
+dump: after
+quit

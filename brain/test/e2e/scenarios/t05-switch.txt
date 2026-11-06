@@ -1,0 +1,18 @@
+note: Source
+type: A paragraph read slowly by the brain here [[delay:3000]].
+wait: 2500
+select: read slowly
+riddle
+select: by the brain
+visualize
+keys: \nInkling, answer slowly please?
+chat: Slow chat answer please [[delay:3000]]
+wait: 2600
+dump: before-switch
+switch: Beta
+wait: 4000
+dump: on-beta
+switch: Source
+wait: 800
+dump: back-on-source
+quit

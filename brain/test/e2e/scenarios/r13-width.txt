@@ -1,0 +1,13 @@
+dump: w1320
+width: 800
+wait: 500
+dump: w800
+width: 1100
+wait: 300
+chat: hello
+wait: 800
+dump: w1100-chat
+width: 720
+wait: 500
+dump: w720-chat
+quit

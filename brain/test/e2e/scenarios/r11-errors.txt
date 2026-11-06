@@ -1,0 +1,29 @@
+note: Errors
+mode: ask
+type: Auth fails [[error:auth]][[errmsg:401 Unauthorized: OAuth token has expired]] then rate [[error:rate_limit]] then busy [[error:overloaded]][[errmsg:overloaded, see the logs in brain.log]] then cancel [[error:cancelled]] then bad [[error:bad_output]] then other [[error:other]].
+wait: 300
+select: Auth fails [[error:auth]][[errmsg:401 Unauthorized: OAuth token has expired]]
+riddle
+wait: 600
+dump: auth
+select: rate [[error:rate_limit]]
+riddle
+wait: 600
+dump: rate
+select: busy [[error:overloaded]][[errmsg:overloaded, see the logs in brain.log]]
+riddle
+wait: 600
+dump: overloaded
+select: cancel [[error:cancelled]]
+riddle
+wait: 600
+dump: cancelled
+select: bad [[error:bad_output]]
+riddle
+wait: 600
+dump: bad_output
+select: other [[error:other]]
+riddle
+wait: 600
+dump: other
+quit

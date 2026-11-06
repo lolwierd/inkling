@@ -1,0 +1,5 @@
+note: Learner
+chat: I am a staff engineer at a payments company.
+switch: Beta
+wait: 3500
+quit

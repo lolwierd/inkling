@@ -1,0 +1,23 @@
+note: Chatty
+mode: ask
+type: First paragraph about queues and backpressure.
+wait: 300
+caret: backpressure
+chat: What am I missing? [[delay:400]]
+wait: 700
+dump: chat-streaming
+wait: 1500
+dump: chat-1
+chat: And what next?
+wait: 1800
+dump: chat-2
+set: learn=off
+chat: I am a teacher and I prefer short answers.
+wait: 1800
+set: learn=on
+chat: I am a teacher and I prefer short answers.
+wait: 1800
+dump: chat-4
+clear
+dump: cleared
+quit

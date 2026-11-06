@@ -1,0 +1,46 @@
+note: Selections
+mode: ask
+type: The   queue drains   at night when nobody   is watching it.
+wait: 300
+select: \squeue drains\s
+riddle
+wait: 600
+dump: riddle-trimmed
+select: \s\s
+riddle
+dump: ws-only
+escape
+caret: end
+riddle
+visualize
+ask: Nothing selected?
+dump: empty-selection
+select: nobody
+ask: Who is nobody? [[delay:600]]
+wait: 600
+dump: ask-streaming
+wait: 1500
+dump: asked
+select: at night
+visualize
+wait: 300
+dump: visualizing
+wait: 600
+dump: sketching
+wait: 2000
+dump: visualized
+type: Broken sketch here [[draw>badsvg]]. Missing sketch here [[draw>nosvg]]. Empty idea here [[sketch>empty]][[draw>nosvg]].
+wait: 300
+select: Broken sketch here [[draw>badsvg]]
+visualize
+wait: 3000
+dump: bad-svg
+select: Missing sketch here [[draw>nosvg]]
+visualize
+wait: 3000
+dump: no-svg
+select: Empty idea here [[sketch>empty]][[draw>nosvg]]
+visualize
+wait: 3000
+dump: empty-visualize
+quit

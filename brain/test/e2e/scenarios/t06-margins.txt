@@ -1,0 +1,30 @@
+note: Margins
+type: Alpha line is long enough to read.
+wait: 2500
+type: Bravo line is long enough to read.
+wait: 2500
+type: Charlie line is long enough to read.
+wait: 2500
+type: Delta line is long enough to read.
+wait: 2500
+type: Echo line is long enough to read.
+wait: 2500
+dump: both
+activate: 4
+wait: 800
+dump: active4
+set: placement=right
+wait: 800
+dump: right
+set: placement=marks
+escape
+wait: 800
+dump: marks-none
+mark: 2
+wait: 800
+dump: marks-2
+mark: 2
+wait: 500
+dump: marks-closed
+set: placement=both
+quit

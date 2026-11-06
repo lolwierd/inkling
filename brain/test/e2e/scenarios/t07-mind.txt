@@ -1,0 +1,23 @@
+note: Minds
+mind: Skeptic
+keys: Skeptic, is this claim true?
+wait: 2600
+dump: skeptic-call
+keys: \nThis is long but what do you think @skeptic about it
+enter
+wait: 2600
+keys: Hey Inkling what about the old name?
+enter
+wait: 2600
+keys: Mail me at me@skeptic.dev about this claim later
+enter
+wait: 2600
+dump: after
+mode: ask
+keys: Skeptic: in ask mode too?
+wait: 2600
+keys: \nA normal paragraph in ask mode stays quiet.
+enter
+wait: 2600
+dump: ask-mode
+quit

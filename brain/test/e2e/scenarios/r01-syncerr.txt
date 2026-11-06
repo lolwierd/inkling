@@ -1,0 +1,5 @@
+note: Sync error
+type: This paragraph is finished and should be read now.
+wait: 3500
+dump: after
+quit

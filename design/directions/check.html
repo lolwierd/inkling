@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chk'd · Inkling</title>
+<meta name="description" content="Direction 2 of 3 for Inkling: the engineer's computation pad. Inkling is the checker, and it initials the page when every check is answered.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,600;0,700;1,400&family=B612:wght@400;700&family=Atkinson+Hyperlegible+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="site.css">
+<script src="site.js"></script>
+<style>
+/* ------------------------------------------------------------------ tokens
+   Chk'd: the engineer's computation pad. Colours are the checker's code:
+   yellow = verified, red = must change, blue = conversation. Ink is your words.
+   .pal-light / .pal-dark re-declare the tokens on any element, so a tile can
+   show the other theme inside this one. */
+:root, .pal-light {
+  --desk: #E2E9DD;        /* the table the pad sits on */
+  --desk-2: #E9EFE4;      /* sidebar, quiet panels */
+  --sheet: #F2F7EE;       /* the pad itself: every surface you read on */
+  --grid: #D3E2D0;        /* the grid printed on the back; margins only */
+  --ink: #22262A;         /* your words */
+  --ink-2: #4C5550;       /* secondary text */
+  --label: #57655A;       /* title-block labels, captions */
+  --rule: #C4D2BF;        /* hairlines between quiet things */
+  --rule-ink: rgba(34, 38, 42, .46); /* ruled boxes: title block, cards */
+  --yellow: #F2C94C;      /* verified */
+  --on-yellow: #22262A;   /* anything drawn on yellow, in both themes */
+  --red: #C0362C;         /* must change */
+  --blue: #2D5DA8;        /* conversation: replies, answers, chat */
+  --hl-blend: multiply;   /* highlighter on paper */
+  --hl-alpha: 1;
+  --win-shadow: 0 1px 0 rgba(20, 40, 25, .05), 0 24px 60px -24px rgba(20, 45, 28, .45);
+  --chip: rgba(34, 38, 42, .07);
+  --sel: rgba(45, 93, 168, .2);
+
+  --bg: var(--desk); --surface: var(--sheet); --fg: var(--ink); --fg-2: var(--ink-2); --fg-3: var(--label);
+  --line: var(--rule); --accent: var(--ink); --focus: var(--ink);
+}
+:root[data-theme="dark"], .pal-dark {
+  /* blueprint: the same sheet, printed the old way, read at night */
+  --desk: #0E1C33; --desk-2: #10203A; --sheet: #12233D; --grid: #1E3557;
+  --ink: #E8EEF6; --ink-2: #A9BCD6; --label: #8FA6C4; --rule: #2A4468;
+  --rule-ink: rgba(232, 238, 246, .42);
+  --yellow: #F2C94C; --red: #F0624F; --blue: #8DB4F0;
+  --hl-blend: normal; --hl-alpha: .42;
+  --win-shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 24px 60px -20px rgba(0, 0, 0, .7);
+  --chip: rgba(232, 238, 246, .08);
+  --sel: rgba(141, 180, 240, .26);
+}
+:root {
+  --font-body: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-ui: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-label: "B612", "Atkinson Hyperlegible Next", sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
+  /* five sizes, each with a job */
+  --fs-label: 12px;  /* title-block labels, captions, tags */
+  --fs-ui: 14px;     /* controls, check notes, sidebar */
+  --fs-body: 17px;   /* your words */
+  --fs-lead: 22px;   /* note titles, the concept line */
+  --fs-title: 28px;  /* sheet titles */
+  --t2: var(--fs-ui); --t4: var(--fs-title);
+}
+::selection { background: var(--sel); }
+
+/* ------------------------------------------------------------------ page */
+body { background: var(--desk); }
+.kicker, .lab { font: 400 var(--fs-label)/1.3 var(--font-label); letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
+p { margin: 0; }
+a { color: var(--ink); text-underline-offset: 3px; }
+kbd { font: 400 var(--fs-label)/1 var(--font-mono); padding: 2px 5px; border: 1px solid var(--rule-ink); border-radius: 3px; color: var(--ink-2); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* section heads become title-block strips: sheet number left, title right */
+.sec-head {
+  align-items: stretch; gap: 0; background: var(--sheet);
+  border: 1.5px solid var(--rule-ink);
+}
+.sec-num {
+  font-family: var(--font-label);
+  padding: 10px 12px; border-right: 1px solid var(--rule-ink);
+  font-size: var(--fs-label); letter-spacing: .06em; text-transform: uppercase; color: var(--label);
+}
+.sec-num b { display: block; margin: 6px 0 2px; font-family: var(--font-mono); font-weight: 400; font-size: var(--fs-lead); letter-spacing: 0; color: var(--ink); }
+.sec-head > div:last-child { padding: 10px 16px 14px; }
+.sec-title { font-family: var(--font-body); font-weight: 700; letter-spacing: -.005em; }
+.sec-lede { font-size: var(--fs-ui); line-height: 1.55; }
+@media (max-width: 720px) {
+  .sec-num { border-right: 0; border-bottom: 1px solid var(--rule-ink); display: flex; gap: 10px; align-items: baseline; }
+  .sec-num b { margin: 0; font-size: var(--fs-ui); }
+}
+
+/* ------------------------------------------------------------------ buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 600 var(--fs-ui)/1 var(--font-ui); padding: 8px 11px; min-height: 32px;
+  color: var(--ink); background: var(--sheet); border: 1px solid var(--rule-ink); border-radius: 3px;
+  cursor: pointer; transition: background-color 120ms ease-out, color 120ms ease-out, transform 80ms ease-out;
+}
+.btn:hover { background: color-mix(in srgb, var(--ink) 7%, var(--sheet)); }
+.btn:active { transform: translateY(1px); transition-duration: 40ms; }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+.btn-primary { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.btn-primary:hover { background: color-mix(in srgb, var(--ink) 86%, var(--sheet)); }
+.btn-quiet { border-color: transparent; background: transparent; padding-inline: 8px; }
+.btn-quiet:hover { background: var(--chip); }
+.btn:focus-visible, .card:focus-visible, .tb-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn .k { font: 400 var(--fs-label)/1 var(--font-mono); color: inherit; opacity: .7; }
+
+/* ------------------------------------------------------------------ hero */
+.hero { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); grid-template-areas: "copy demo" "obj demo"; gap: 0 56px; align-items: start; padding-top: 40px; padding-bottom: 64px; }
+.hero-copy { grid-area: copy; padding-top: 6px; }
+.hero-demo { grid-area: demo; }
+.hero .object { grid-area: obj; }
+.hero .wm { width: 300px; height: auto; margin: 14px 0 18px -10px; }
+.concept { font: 400 var(--fs-lead)/1.35 var(--font-body); color: var(--ink); max-width: 30ch; }
+.object { margin-top: 28px; border-top: 1.5px solid var(--rule-ink); }
+.object .lab { margin: 12px 0 4px; }
+.od { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.od svg { width: 32px; height: 32px; }
+.od b { font-weight: 700; }
+.od p { font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); }
+.od p + p { margin-top: 4px; color: var(--ink); }
+.hero-demo .demo-cap { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 8px; }
+.demo-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.demo-ctl .status-msg { margin-left: auto; }
+@media (max-width: 1080px) { .hero { grid-template-columns: 1fr; grid-template-areas: "copy" "demo" "obj"; gap: 0; } .hero-demo { margin-top: 28px; } .concept { max-width: 40ch; } }
+
+/* ------------------------------------------------------------------ the sheet: one component for the hero and the app */
+.doc { background: var(--sheet); color: var(--ink); position: relative; }
+.tb {
+  display: grid; grid-template-columns: 2.3fr 1fr 1fr 1fr 1fr; gap: 1px;
+  background: var(--rule-ink); border: 1.5px solid var(--ink);
+}
+.tb-c { background: var(--sheet); padding: 6px 9px 7px; min-width: 0; }
+.tb-c.span2 { grid-column: span 2; }
+.tb-l { display: block; font: 400 var(--fs-label)/1.2 var(--font-label); letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
+.tb-v { display: block; margin-top: 4px; min-height: 20px; font: 400 var(--fs-ui)/20px var(--font-mono); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-note .tb-v { font-family: var(--font-body); font-weight: 700; }
+.tb-open { all: unset; display: block; margin-top: 4px; font: 700 var(--fs-ui)/20px var(--font-mono); color: var(--ink); cursor: pointer; border-radius: 2px; }
+.tb-open:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tb-open.has-open { color: var(--red); }
+.tb-chk { position: relative; }
+.tb-chk.stamped { animation: stamp 160ms cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes stamp { 0% { transform: scale(1.04); } 100% { transform: scale(1); } }
+.tb-v svg.ik { display: inline-block; width: 28px; height: 24px; vertical-align: -4px; overflow: visible; }
+
+.body { position: relative; display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) var(--mw) var(--rp, 0px); align-items: start;
+  /* the grid shows through from the back of the sheet, and fades out behind your words */
+  background-color: var(--sheet);
+  background-image:
+    linear-gradient(90deg, transparent calc(var(--gw) - 8px), var(--sheet) calc(var(--gw) + 14px), var(--sheet) calc(100% - var(--mw) - var(--rp, 0px) - 10px), transparent calc(100% - var(--mw) - var(--rp, 0px) + 14px)),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 100% 100%, 19.2px 19.2px, 19.2px 19.2px; /* five squares to the inch */
+  background-position: 0 0, -1px -1px, -1px -1px;
+}
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.layer.under { z-index: 0; }
+.layer.over { z-index: 2; }
+.text { grid-column: 2; position: relative; z-index: 1; padding: var(--tp, 22px) 0 26px; }
+.margin { grid-column: 3; position: relative; z-index: 3; align-self: stretch; }
+.note-title { font: 700 var(--fs-lead)/1.25 var(--font-body); margin: 0 0 14px; }
+.para { font: 400 var(--fs-body)/1.6 var(--font-body); margin: 0 0 14px; color: var(--ink); }
+.para:last-child { margin-bottom: 0; }
+.para.ph { color: var(--label); }
+[data-value] { white-space: nowrap; }
+.typing::after { content: ""; display: inline-block; width: 1.5px; height: 1.05em; margin-left: 1px; vertical-align: -2px; background: var(--ink); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.sel-on { background: var(--sel); border-radius: 2px; }
+
+/* marks drawn in SVG take their colour from the tokens */
+.m-red { fill: var(--red); } .m-red-s { stroke: var(--red); fill: none; }
+.m-ink { fill: var(--ink); } .m-ink-s { stroke: var(--ink); fill: none; }
+.m-yel { fill: var(--yellow); } .m-sheet { fill: var(--sheet); }
+.m-onyel-s { stroke: var(--on-yellow); fill: none; }
+.m-hl { fill: var(--yellow); mix-blend-mode: var(--hl-blend); opacity: var(--hl-alpha); }
+.m-label { fill: var(--label); }
+.m-t { font: 700 var(--fs-label) var(--font-mono); }
+.m-bar-unread { fill: none; stroke: var(--rule-ink); stroke-dasharray: 2 3; }
+.m-pop { transform-box: fill-box; transform-origin: center; }
+.m-swipe { transform-box: fill-box; transform-origin: 0 50%; }
+
+/* margin cards: drawn boxes, square-cornered */
+.card {
+  position: absolute; left: var(--cx, 26px); right: 0; top: 0;
+  background: var(--sheet); border: 1px solid var(--rule-ink); padding: 9px 11px 10px;
+  font: 400 var(--fs-ui)/1.5 var(--font-label); color: var(--ink);
+  transition: opacity 160ms ease-out, border-color 120ms ease-out;
+  cursor: pointer; outline: none;
+}
+.card.is-active { border: 1.5px solid var(--ink); padding: 8.5px 10.5px 9.5px; cursor: default; }
+.card.enter { animation: card-in 160ms ease-out; }
+@keyframes card-in { from { opacity: 0; transform: translateY(4px); } }
+.card-h { display: flex; align-items: center; gap: 7px; }
+.card-h .tagi { width: 18px; height: 18px; flex: none; }
+.card-k { font: 400 var(--fs-label)/1 var(--font-label); letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
+.card-st { margin-left: auto; font: 400 var(--fs-label)/1 var(--font-label); letter-spacing: .04em; text-transform: uppercase; color: var(--label); }
+.msgs { margin-top: 6px; }
+.msg + .msg { margin-top: 8px; }
+.msg-ik { color: var(--ink); }
+.card:not(.is-active) .msg-ik { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card:not(.is-active) .msg:not(.msg-ik) { display: none; }
+.msg-you { font-family: var(--font-body); color: var(--ink); padding-left: 10px; border-left: 2px solid var(--rule-ink); }
+.msg-ans { color: var(--blue); }
+.who { display: block; font: 400 var(--fs-label)/1.4 var(--font-label); letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
+.msg-ans .who { color: var(--blue); }
+.acts { display: none; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.card.is-active .acts { display: flex; }
+.acts .btn { padding: 6px 9px; min-height: 30px; }
+.thinking { display: inline-flex; gap: 4px; margin-top: 8px; }
+.thinking i { width: 5px; height: 5px; background: var(--blue); border-radius: 50%; animation: think 1s ease-in-out infinite; }
+.thinking i:nth-child(2) { animation-delay: .15s; } .thinking i:nth-child(3) { animation-delay: .3s; }
+@keyframes think { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+.reply { display: none; margin-top: 10px; }
+.card.replying .reply { display: block; }
+.reply textarea { width: 100%; min-height: 54px; resize: vertical; font: 400 var(--fs-ui)/1.45 var(--font-body); color: var(--ink); background: var(--sheet); border: 1px solid var(--rule-ink); border-radius: 0; padding: 7px 8px; }
+.reply textarea:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+.reply .row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.chipb { font: 400 var(--fs-label)/1.3 var(--font-mono); color: var(--blue); background: transparent; border: 1px dashed currentColor; border-radius: 3px; padding: 5px 7px; cursor: pointer; text-align: left; }
+.chipb:hover { background: var(--chip); }
+.fold { display: none; }
+.card.folded { padding: 6px 10px; cursor: default; }
+.card.folded .msgs, .card.folded .acts, .card.folded .reply, .card.folded .drawing, .card.folded .card-h { display: none; }
+.card.folded .fold { display: flex; gap: 8px; align-items: flex-start; }
+.fold .tagi { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.fold p { font-size: var(--fs-ui); line-height: 1.45; }
+.fold .why { color: var(--blue); }
+.fold .left { color: var(--label); }
+.card.left { border-style: dashed; }
+
+/* drawing: drafted on the grid */
+.drawing { display: none; margin-top: 10px; border-top: 1px solid var(--rule); padding-top: 8px; }
+.card.drawing-on .drawing { display: block; }
+.drawing svg { width: 100%; height: auto; display: block; }
+.drawing .d-grid line { stroke: var(--grid); stroke-width: 1; }
+.drawing .d-ink { stroke: var(--ink); fill: none; stroke-width: 1.3; stroke-linecap: round; }
+.drawing .d-ext { stroke: var(--ink-2); fill: none; stroke-width: .9; stroke-dasharray: 3 3; }
+.drawing .d-t { font: 400 var(--fs-label) var(--font-mono); fill: var(--ink); }
+.drawing .d-hl { fill: var(--yellow); mix-blend-mode: var(--hl-blend); opacity: var(--hl-alpha); }
+.drawing .d-red { stroke: var(--red); fill: none; stroke-width: 1.6; }
+.drawing .d-arrow { fill: var(--ink); }
+.dctl { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.dctl .cap { font: 400 var(--fs-label)/1.3 var(--font-label); color: var(--label); margin-right: auto; }
+.dctl .btn { padding: 4px 8px; min-height: 28px; }
+
+/* status line */
+.status { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.status-msg { font: 400 var(--fs-label)/1.3 var(--font-label); letter-spacing: .04em; text-transform: uppercase; color: var(--label); }
+.status-msg.ok { color: var(--ink); }
+
+/* hero geometry */
+.hero-doc { --gw: 52px; --mw: 292px; --tp: 20px; border: 1.5px solid var(--ink); box-shadow: var(--win-shadow); }
+.hero-doc .tb { border: 0; border-bottom: 1.5px solid var(--ink); }
+.hero-doc .body { min-height: 252px; }
+.hero-doc .card { --cx: 40px; }
+@media (max-width: 760px) {
+  .hero-doc { --gw: 44px; --mw: 0px; }
+  .hero-doc .tb { grid-template-columns: 1fr 1fr 1fr; grid-auto-flow: row dense; }
+  .hero-doc .tb-note { grid-column: span 3; }
+  .hero-doc .margin { grid-column: 2; grid-row: 2; padding-bottom: 18px; }
+  .hero-doc .margin .card { position: relative; left: 0; top: 0 !important; }
+  .hero-doc .text { padding-right: 12px; }
+}
+
+/* ------------------------------------------------------------------ app window (1200 x 780 design px) */
+.app-wrap { margin-top: 8px; }
+.win { display: grid; grid-template-columns: 232px 968px; height: 780px; overflow: hidden; border-radius: 12px; background: var(--sheet); box-shadow: var(--win-shadow); border: 1px solid var(--rule-ink); position: relative; }
+.side { background: var(--desk-2); border-right: 1px solid var(--rule); padding: 46px 12px 12px; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-ui); }
+.lights { position: absolute; left: 14px; top: 15px; display: flex; gap: 8px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.2); }
+.lights i:nth-child(2) { background: #FEBC2E; } .lights i:nth-child(3) { background: #28C840; }
+.side-search { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; margin-bottom: 10px; color: var(--label); border: 1px solid var(--rule); background: var(--sheet); }
+.side-h { margin: 12px 9px 4px; }
+.nrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; color: var(--ink); }
+.nrow span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nrow.cur { background: var(--sheet); box-shadow: inset 2px 0 0 var(--ink); font-weight: 600; }
+.nst svg { width: 18px; height: 18px; display: block; }
+.side-legend { margin-top: auto; padding: 10px 9px 2px; border-top: 1px solid var(--rule); color: var(--label); font: 400 var(--fs-label)/1.6 var(--font-label); }
+.main { position: relative; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) 34px; min-width: 0; }
+.head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: stretch; padding: 14px 20px 12px; border-bottom: 1px solid var(--rule); }
+.head .tb { grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr; }
+.tools { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.tools .btn { justify-content: space-between; min-width: 132px; }
+.main .body { --gw: 56px; --mw: 320px; --rp: 32px; overflow: hidden; }
+.main .card { --cx: 36px; }
+.main .status { padding: 0 20px; border-top: 1px solid var(--rule); background: var(--sheet); }
+.status .pencil { width: 46px; height: 8px; }
+.status .grow { margin-left: auto; display: flex; gap: 6px; }
+.status .btn { padding: 4px 9px; min-height: 26px; }
+.doc.clean .layer, .doc.clean .margin { opacity: 0; transition: opacity 240ms ease-out; pointer-events: none; }
+.doc .layer, .doc .margin { transition: opacity 200ms ease-out; }
+
+.banner { margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--ink); background: var(--sheet); font-size: var(--fs-ui); line-height: 1.5; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; }
+.banner svg { width: 20px; height: 20px; margin-top: 1px; }
+.banner .btn { margin-top: 8px; }
+
+/* chat panel over the margin */
+.chat { position: absolute; top: 0; right: 0; bottom: 34px; width: 352px; background: var(--sheet); border-left: 1.5px solid var(--ink); z-index: 8; display: flex; flex-direction: column; transform: translateX(102%); visibility: hidden; transition: transform 220ms cubic-bezier(.2, .7, .2, 1), visibility 0s linear 220ms; }
+.chat.open { transform: none; visibility: visible; transition: transform 220ms cubic-bezier(.2, .7, .2, 1), visibility 0s; }
+.chat-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--rule-ink); }
+.chat-h b { font-size: var(--fs-ui); }
+.chat-h .btn { margin-left: auto; }
+.chat-b { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: var(--fs-ui); line-height: 1.5; }
+.chat-b .you { align-self: flex-end; max-width: 85%; padding: 8px 10px; border: 1px solid var(--rule-ink); font-family: var(--font-body); }
+.chat-b .ik { color: var(--blue); font-family: var(--font-label); }
+.chat-sugg { display: flex; flex-direction: column; gap: 6px; }
+.chat-f { padding: 10px 14px 14px; border-top: 1px solid var(--rule); }
+.chat-f input { width: 100%; font: 400 var(--fs-ui)/1.4 var(--font-body); padding: 8px 9px; border: 1px solid var(--rule-ink); background: var(--sheet); color: var(--ink); border-radius: 0; }
+
+/* ask the room */
+.room { position: absolute; z-index: 9; background: var(--sheet); border: 1.5px solid var(--ink); padding: 12px 14px 14px; box-shadow: var(--win-shadow); }
+.room-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.room-h p { font-size: var(--fs-ui); }
+.room-h .btn { margin-left: auto; }
+.room-g { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--rule-ink); }
+.room-c { padding: 10px 12px 2px 0; }
+.room-c + .room-c { padding-left: 12px; border-left: 1px solid var(--rule-ink); }
+.ibox { display: inline-grid; grid-template-columns: auto auto; border: 1px solid var(--ink); font: 400 var(--fs-label)/1 var(--font-mono); margin-bottom: 8px; }
+.ibox span { padding: 4px 6px; }
+.ibox span + span { border-left: 1px solid var(--ink); font-weight: 700; }
+.room-c p { color: var(--blue); font: 400 var(--fs-ui)/1.5 var(--font-label); }
+
+/* toast */
+.toast { position: absolute; left: 50%; bottom: 48px; transform: translate(-50%, 8px); opacity: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 14px; background: var(--ink); color: var(--sheet); font-size: var(--fs-ui); transition: opacity 160ms ease-out, transform 160ms ease-out; pointer-events: none; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast .btn { background: transparent; color: var(--sheet); border-color: color-mix(in srgb, var(--sheet) 50%, transparent); padding: 5px 9px; min-height: 28px; }
+.toast i { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--yellow); width: 100%; transform-origin: 0 50%; }
+
+.trybar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
+.trybar .lab { margin-right: 4px; }
+
+/* ------------------------------------------------------------------ states gallery */
+.states { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.st { margin: 0; background: var(--sheet); border: 1px solid var(--rule-ink); display: flex; flex-direction: column; }
+.st-view { position: relative; overflow: hidden; aspect-ratio: 16 / 10; border-bottom: 1px solid var(--rule-ink); background: var(--sheet); }
+.st-view.cut { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 36px); mask-image: linear-gradient(90deg, transparent 0, #000 36px); }
+.st-cam { position: absolute; left: 0; top: 0; width: 1200px; height: 780px; transform-origin: 0 0; pointer-events: none; }
+.st-cam .win { border-radius: 0; box-shadow: none; border: 0; }
+.st figcaption { padding: 10px 12px 12px; font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.st figcaption b { color: var(--ink); font-weight: 700; }
+.st .lab { display: flex; justify-content: space-between; gap: 8px; }
+.st .go { margin-top: auto; align-self: flex-start; font: 600 var(--fs-ui)/1 var(--font-ui); color: var(--ink); background: none; border: 0; padding: 6px 0 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ------------------------------------------------------------------ logo sheet */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; }
+.tile { background: var(--sheet); color: var(--ink); border: 1px solid var(--rule-ink); padding: 18px; position: relative; }
+.tile .lab { margin-bottom: 12px; }
+.tile .wm { width: 100%; max-width: 320px; height: auto; display: block; margin: 8px auto 4px; }
+.tile.wmt { display: flex; flex-direction: column; }
+.tile.wmt .wm { margin: auto; }
+.ckw-ink { fill: var(--ink); } .ckw-hi { fill: var(--yellow); }
+.wm-detail { width: 100%; height: auto; display: block; }
+.wm-detail .dt-line { stroke: var(--ink-2); stroke-width: .5; fill: none; }
+.wm-detail .dt-t { font: 700 9px var(--font-mono); fill: var(--ink); }
+.dt-notes { display: grid; gap: 8px; margin-top: 12px; font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); }
+.dt-notes b { color: var(--ink); }
+.icons { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px 22px; }
+.icons figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.icons img { display: block; }
+.icons figcaption { font: 400 var(--fs-label)/1 var(--font-mono); color: var(--label); }
+.clear { position: relative; padding: 22px; display: grid; place-items: center; }
+.clear-box { position: relative; outline: 1px dashed var(--ink-2); outline-offset: 0; padding: 20px; }
+.clear-box .wm { width: 230px; margin: 0; }
+.clear-note { margin-top: 12px; font-size: var(--fs-ui); color: var(--ink-2); line-height: 1.5; }
+.dodont { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin-top: 20px; }
+.dodont div { border-top: 2px solid var(--ink); padding-top: 8px; font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); }
+.dodont div.no { border-top-color: var(--red); }
+.dodont b { color: var(--ink); display: block; }
+
+/* ------------------------------------------------------------------ elements */
+.els { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 20px; }
+.elt { background: var(--sheet); border: 1px solid var(--rule-ink); display: flex; flex-direction: column; }
+.elt-v { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 18px; min-height: 190px; border-bottom: 1px solid var(--rule-ink);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 19.2px 19.2px; background-position: -1px -1px; }
+.elt-v .one { display: flex; align-items: center; gap: 10px; }
+.elt-v .big { display: flex; justify-content: center; }
+.elt-v .big svg { max-width: 100%; height: auto; }
+.elt-v .one svg { height: auto; }
+.elt-v .x { font: 400 var(--fs-label)/1 var(--font-mono); color: var(--label); background: var(--sheet); padding: 0 3px; }
+.elt-t { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.elt-t .lab { display: flex; gap: 8px; }
+.elt-t b { font-size: var(--fs-ui); }
+.elt-t p { font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); }
+.elt-t p.where { font: 400 var(--fs-label)/1.4 var(--font-label); color: var(--label); }
+.el .ck-ink { fill: var(--ink); } .el .ck-ink-s { stroke: var(--ink); fill: none; } .el .ck-ink2 { fill: var(--ink-2); }
+.el .ck-label { fill: var(--label); } .el .ck-rule-s { stroke: var(--rule-ink); fill: none; } .el .ck-sheet { fill: var(--sheet); }
+.el .ck-grid-s { stroke: var(--grid); fill: none; } .el .ck-yel { fill: var(--yellow); } .el .ck-red { fill: var(--red); }
+.el .ck-red-s { stroke: var(--red); fill: none; } .el .ck-blue { fill: var(--blue); } .el .ck-steel { fill: #9AA5AA; } .el .ck-steel-s { stroke: #7B878C; fill: none; }
+.el .ck-hl { mix-blend-mode: var(--hl-blend); opacity: var(--hl-alpha); }
+.el .ck-t { font-family: var(--font-mono); } .el .ck-w { font-family: var(--font-body); } .el .ck-l { font-family: var(--font-label); }
+.el .ck-oy { fill: var(--on-yellow); } .el .ck-oy-s { stroke: var(--on-yellow); fill: none; }
+
+/* ------------------------------------------------------------------ colour */
+.pals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.pal { background: var(--sheet); color: var(--ink); border: 1.5px solid var(--ink); }
+.pal-h { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--rule-ink); }
+.pal-h b { font-size: var(--fs-ui); }
+.tok { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+.tok:last-child { border-bottom: 0; }
+.tok .sw { width: 40px; height: 28px; border: 1px solid var(--rule-ink); }
+.tok b { font-size: var(--fs-ui); }
+.tok p { font-size: var(--fs-label); font-family: var(--font-label); color: var(--label); margin-top: 2px; }
+.tok .cr { font: 400 var(--fs-label)/1.3 var(--font-label); text-align: right; color: var(--ink-2); white-space: nowrap; }
+.code3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1.5px solid var(--ink); margin-bottom: 20px; background: var(--sheet); }
+.code3 div { padding: 12px 14px; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; font-size: var(--fs-ui); line-height: 1.5; }
+.code3 div + div { border-left: 1px solid var(--rule-ink); }
+.code3 svg { width: 26px; height: 26px; }
+.code3 b { display: block; }
+@media (max-width: 720px) { .code3 { grid-template-columns: 1fr; } .code3 div + div { border-left: 0; border-top: 1px solid var(--rule-ink); } }
+
+/* ------------------------------------------------------------------ type */
+.spec { background: var(--sheet); border: 1px solid var(--rule-ink); padding: 18px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; }
+.spec + .spec { margin-top: 16px; }
+.spec .why { font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); }
+.spec .why b { display: block; color: var(--ink); font-size: var(--fs-ui); margin-bottom: 4px; }
+.spec .s-body { font: 400 var(--fs-body)/1.6 var(--font-body); }
+.spec .s-lead { font: 700 var(--fs-lead)/1.3 var(--font-body); margin-bottom: 8px; }
+.spec .s-lab { font: 400 var(--fs-ui)/1.5 var(--font-label); }
+.spec .s-mono { font: 400 var(--fs-ui)/1.6 var(--font-mono); font-variant-numeric: tabular-nums; }
+.glyphs { margin-top: 10px; font: 400 var(--fs-lead)/1.3 var(--font-body); letter-spacing: .08em; color: var(--ink-2); }
+@media (max-width: 720px) { .spec { grid-template-columns: 1fr; gap: 10px; } }
+.scale { margin-top: 20px; background: var(--sheet); border: 1px solid var(--rule-ink); }
+.scale-r { display: grid; grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.scale-r:last-child { border-bottom: 0; }
+.scale-r .mono { font-size: var(--fs-label); color: var(--label); }
+.scale-r .job { font-size: var(--fs-ui); color: var(--ink-2); }
+.scale-r .smp { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 720px) { .scale-r { grid-template-columns: 56px minmax(0, 1fr); } .scale-r .job { grid-column: 2; } }
+
+/* ------------------------------------------------------------------ motion */
+.mots { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.mot { background: var(--sheet); border: 1px solid var(--rule-ink); display: flex; flex-direction: column; }
+.mot-v { height: 120px; display: grid; place-items: center; border-bottom: 1px solid var(--rule-ink); position: relative; }
+.mot-v svg { overflow: visible; }
+.mot-t { padding: 10px 12px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+.mot-t b { font-size: var(--fs-ui); }
+.mot-t p { grid-column: 1; font-size: var(--fs-ui); color: var(--ink-2); line-height: 1.5; }
+.mot-t .mono { grid-column: 1; font-size: var(--fs-label); color: var(--label); }
+.mot-t .btn { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+.sounds { margin-top: 20px; background: var(--sheet); border: 1px solid var(--rule-ink); }
+.snd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+.snd:last-child { border-bottom: 0; }
+.snd p { font-size: var(--fs-ui); color: var(--ink-2); line-height: 1.5; }
+.snd b { color: var(--ink); }
+.hint { font-size: var(--fs-ui); color: var(--ink-2); margin-top: 10px; }
+
+/* ------------------------------------------------------------------ words, aha, refuses, missed, build */
+.words { background: var(--sheet); border: 1.5px solid var(--ink); }
+.wr { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; padding: 10px 14px; border-bottom: 1px solid var(--rule); align-items: baseline; }
+.wr:last-child { border-bottom: 0; }
+.wr .lab { padding-top: 2px; }
+.wr p { font-size: var(--fs-ui); line-height: 1.55; }
+.wr p q { quotes: "\201C" "\201D"; }
+.wr .ctl { display: inline-block; font: 600 var(--fs-ui)/1 var(--font-ui); border: 1px solid var(--rule-ink); border-radius: 3px; padding: 5px 8px; margin: 2px 4px 2px 0; }
+.wr .stat { font-family: var(--font-label); font-size: var(--fs-label); letter-spacing: .04em; text-transform: uppercase; color: var(--label); }
+@media (max-width: 720px) { .wr { grid-template-columns: 1fr; gap: 4px; } }
+.cards4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 228px), 1fr)); gap: 20px; }
+.aha { background: var(--sheet); border: 1px solid var(--rule-ink); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.aha .n { font: 400 var(--fs-lead)/1 var(--font-mono); color: var(--ink); }
+.aha .pic { height: 96px; display: grid; place-items: center; border: 1px solid var(--rule); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 19.2px 19.2px; }
+.aha .pic svg { max-height: 80px; width: auto; max-width: 90%; }
+.aha b { font-size: var(--fs-ui); }
+.aha p { font-size: var(--fs-ui); line-height: 1.55; color: var(--ink-2); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+.list { background: var(--sheet); border: 1.5px solid var(--ink); }
+.list-h { padding: 10px 14px; border-bottom: 1px solid var(--rule-ink); }
+.li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--rule); font-size: var(--fs-ui); line-height: 1.55; color: var(--ink-2); }
+.li:last-child { border-bottom: 0; }
+.li b { color: var(--ink); }
+.li .no { width: 22px; height: 22px; }
+.li .mono { color: var(--label); font-size: var(--fs-label); padding-top: 3px; }
+.build { background: var(--sheet); border: 1.5px solid var(--ink); }
+.br { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, 1.6fr) 44px; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--rule); font-size: var(--fs-ui); line-height: 1.5; align-items: baseline; }
+.br:last-child { border-bottom: 0; }
+.br.h { font: 400 var(--fs-label)/1.3 var(--font-label); letter-spacing: .06em; text-transform: uppercase; color: var(--label); border-bottom: 1px solid var(--rule-ink); }
+.br code { font: 400 var(--fs-label)/1.4 var(--font-mono); color: var(--ink); }
+.br p { color: var(--ink-2); }
+.br .cost { font: 700 var(--fs-ui)/1 var(--font-mono); text-align: center; }
+@media (max-width: 760px) { .br { grid-template-columns: minmax(0, 1fr) 40px; } .br > :nth-child(2), .br > :nth-child(3) { grid-column: 1; } .br .cost { grid-column: 2; grid-row: 1; } .br.h { display: none; } }
+.total { margin-top: 14px; font-size: var(--fs-ui); color: var(--ink-2); line-height: 1.55; }
+
+.foot { border-top: 1.5px solid var(--rule-ink); padding: 28px 0 56px; }
+.foot .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; justify-content: space-between; }
+.foot p { font-size: var(--fs-ui); color: var(--ink-2); }
+.foot nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.foot nav a { font: 600 var(--fs-ui)/1 var(--font-ui); text-decoration: none; border: 1px solid var(--rule-ink); border-radius: 3px; padding: 9px 12px; background: var(--sheet); }
+.foot nav a:hover { background: var(--chip); }
+</style>
+</head>
+<body>
+<header class="bar"><a class="bar-home" href="index.html">Inkling <span>directions</span></a><nav class="bar-nav" aria-label="Directions"><a href="index.html">Overview</a><a href="proof.html">Proof</a><a href="check.html">Chk'd</a><a href="threads.html">Loose Threads</a></nav><div class="bar-tools"><button class="bar-btn" data-board="theme">Light</button><button class="bar-btn" data-board="sound">Sound off</button></div></header>
+
+<main>
+<!-- ============================================================ 01 hero -->
+<section class="wrap hero" id="top" aria-labelledby="hero-h">
+  <div class="hero-copy">
+    <p class="kicker">Direction 2 of 3 · Engineering</p>
+    <h1 class="sr" id="hero-h">Chk'd: Inkling as the checker</h1>
+    <svg class="wm" xmlns="http://www.w3.org/2000/svg" viewBox="-12 -90.7 342.7 134.3" role="img" aria-label="Inkling">
+  <path class="ckw-ink" transform="translate(0 0)" d="M10.1 0V-39H2.1V-49.6H24.1V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M35.7 0V-49.6H47.6L49.6 -42.8Q50.7 -44.8 52.85 -46.6Q55 -48.4 58.05 -49.65Q61.1 -50.9 65 -50.9Q71.3 -50.9 74.95 -48.5Q78.6 -46.1 80.15 -41.5Q81.7 -36.9 81.7 -30.4V0H67.7V-26.9Q67.7 -30.4 67.25 -33.4Q66.8 -36.4 65.1 -38.2Q63.4 -40 59.5 -40Q54.5 -40 52.05 -36.4Q49.6 -32.8 49.6 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M92.8 0V-70.8H106.7V-30.1L123.9 -49.6H140.4L121.2 -28.9L142.1 0H125.6L112 -19L106.7 -13.3V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M163.5 0Q157.7 0 154.3 -1.05Q150.9 -2.1 149.4 -5.05Q147.9 -8 147.9 -13.6V-70.8H161.9V-17Q161.9 -13.6 163.2 -12.55Q164.5 -11.5 168.3 -11.5H172.4V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M182.4 0V-39H174.4V-49.6H196.4V0ZM188.7 -58Q185.2 -58 182.7 -60.5Q180.2 -63 180.2 -66.5Q180.2 -70.1 182.7 -72.55Q185.2 -75 188.7 -75Q192.3 -75 194.75 -72.55Q197.2 -70.1 197.2 -66.5Q197.2 -63 194.7 -60.5Q192.2 -58 188.7 -58Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M208 0V-49.6H219.9L221.9 -42.8Q223 -44.8 225.15 -46.6Q227.3 -48.4 230.35 -49.65Q233.4 -50.9 237.3 -50.9Q243.6 -50.9 247.25 -48.5Q250.9 -46.1 252.45 -41.5Q254 -36.9 254 -30.4V0H240V-26.9Q240 -30.4 239.55 -33.4Q239.1 -36.4 237.4 -38.2Q235.7 -40 231.8 -40Q226.8 -40 224.35 -36.4Q221.9 -32.8 221.9 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M288.6 20.1Q284.5 20.1 280.35 19.05Q276.2 18 272.65 15.5Q269.1 13 267 8.7L278.5 4Q279.8 6.4 282.4 7.9Q285 9.4 289.1 9.4Q291.7 9.4 294.05 8.45Q296.4 7.5 297.9 5.25Q299.4 3 299.4 -0.9V-9.6Q296.4 -5.6 292.3 -3.6Q288.2 -1.6 283.7 -1.6Q278.3 -1.6 273.4 -4.5Q268.5 -7.4 265.45 -12.85Q262.4 -18.3 262.4 -25.8Q262.4 -34.4 265.45 -39.95Q268.5 -45.5 273.3 -48.25Q278.1 -51 283.3 -51Q288.2 -51 292.45 -48.85Q296.7 -46.7 299.4 -42.6L301.5 -49.6H313.2V-3.2Q313.2 5 310.15 10.15Q307.1 15.3 301.55 17.7Q296 20.1 288.6 20.1ZM288.5 -12.5Q291.6 -12.5 294.2 -13.8Q296.8 -15.1 298.35 -18.1Q299.9 -21.1 299.9 -26.2Q299.9 -31.3 298.35 -34.3Q296.8 -37.3 294.2 -38.65Q291.6 -40 288.5 -40Q283.7 -40 280.3 -36.7Q276.9 -33.4 276.9 -26.5Q276.9 -19.5 280.3 -16Q283.7 -12.5 288.5 -12.5Z"/>
+  <rect class="ckw-hi" x="6.2" y="-76.7" width="20.4" height="20.4" rx="1.4" transform="rotate(-7 16.4 -66.5)"/>
+  
+</svg>
+    <p class="concept">Inkling is the checker. It goes over your note in yellow for what holds and red for what doesn’t, and when every red mark is answered, it initials the page.</p>
+  </div>
+    <div class="object">
+      <p class="lab">Modelled on an engineer’s computation pad</p>
+      <div class="od">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect x=".5" y=".5" width="31" height="31" class="m-sheet" stroke="var(--rule-ink)"/><g stroke="var(--grid)" stroke-width="1.2"><path d="M6.4 0V32M12.8 0V32M19.2 0V32M25.6 0V32M0 6.4H32M0 12.8H32M0 19.2H32M0 25.6H32"/></g></svg>
+        <div><p><b>The grid is printed on the back.</b> Engineering paper is pale green with its grid on the reverse, so it shows through, survives erasing, and doesn’t photocopy.</p><p>Here it lives in the margins and fades out behind your words.</p></div>
+      </div>
+      <div class="od">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="3" width="28" height="7" class="m-yel"/><circle cx="9" cy="20" r="6" fill="none" stroke="var(--red)" stroke-width="2"/><rect x="18" y="17" width="12" height="2.4" fill="var(--blue)"/><rect x="18" y="22" width="8" height="2.4" fill="var(--blue)"/></svg>
+        <div><p><b>The checker’s colours.</b> Yellow over everything verified, red for anything that must change, another colour for notes that aren’t changes.</p><p>Here: yellow holds, red is a check, blue is conversation.</p></div>
+      </div>
+      <div class="od">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="6" width="30" height="20" class="m-sheet" stroke="var(--ink)" stroke-width="1.4"/><path d="M1 13H31M14 6V26" stroke="var(--ink)" stroke-width="1"/><path d="M4 21 L7 23.5 L11 17" stroke="var(--ink)" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <div><p><b>The title block.</b> By, Date, Chk’d, Date. A sheet isn’t done until the checker initials it, and a revision gets a cloud and a Δ.</p><p>Here it is the note’s header, and the sign-off you earn.</p></div>
+      </div>
+    </div>
+
+  <div class="hero-demo">
+    <div class="demo-cap"><p class="lab">Live · the sign-off</p><p class="lab" aria-hidden="true">¶2 of the note</p></div>
+    <div class="doc hero-doc" id="hero-doc" data-doc="hero">
+      <div class="tb">
+        <div class="tb-c tb-note"><span class="tb-l">Note</span><span class="tb-v" data-cell="note"></span></div>
+        <div class="tb-c"><span class="tb-l">By</span><span class="tb-v">You</span></div>
+        <div class="tb-c"><span class="tb-l">Date</span><span class="tb-v" data-cell="date"></span></div>
+        <div class="tb-c tb-chk"><span class="tb-l">Chk’d</span><span class="tb-v" data-cell="chkd"></span></div>
+        <div class="tb-c"><span class="tb-l">Date</span><span class="tb-v" data-cell="chkdate"></span></div>
+        <div class="tb-c"><span class="tb-l">Mind</span><span class="tb-v">Inkling</span></div>
+        <div class="tb-c span2"><span class="tb-l">Mode</span><span class="tb-v">Checks as you write</span></div>
+        <div class="tb-c"><span class="tb-l">Open</span><button class="tb-open" data-cell="open" title="Jump to the next open check">–</button></div>
+        <div class="tb-c"><span class="tb-l">Rev</span><span class="tb-v" data-cell="rev">–</span></div>
+      </div>
+      <div class="body">
+        <svg class="layer under" aria-hidden="true"></svg>
+        <div class="text"></div>
+        <div class="margin"></div>
+        <svg class="layer over" aria-hidden="true"></svg>
+      </div>
+    </div>
+    <div class="demo-ctl">
+      <button class="btn" id="hero-reset">Reset</button>
+      <span class="hint" id="hero-hint" style="margin:0">Press <b>Change 5:30 to 4:55</b> in the note, or click the ringed number.</span>
+      <span class="status-msg" id="hero-status" role="status" aria-live="polite"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 the app -->
+<section class="sec" id="app"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>02</b>of 13</div><div><h2 class="sec-title">The app</h2><p class="sec-lede">The whole window, and it works. Open a check, change the number, answer the long-run question, and the page gets initialled. <kbd>⌥⌘↓</kbd> jumps to the next open check; <kbd>⌘⇧.</kbd> hides every mark.</p></div></div>
+  <div class="app-wrap">
+    <div class="fit" data-w="1200" data-h="780" id="app-fit"><div class="fit-inner" id="app-host"></div></div>
+    <div class="trybar" aria-label="Drive the app">
+      <span class="lab">Try</span>
+      <button class="btn" data-try="fix">Fix ①</button>
+      <button class="btn" data-try="reply">Answer ②</button>
+      <button class="btn" data-try="room">Ask the room</button>
+      <button class="btn" data-try="sketch">Sketch ①</button>
+      <button class="btn" data-try="chat">Chat</button>
+      <button class="btn" data-try="clean">Hide checks</button>
+      <button class="btn btn-quiet" data-try="reset">Reset</button>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 03 every state -->
+<section class="sec" id="states"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>03</b>of 13</div><div><h2 class="sec-title">Every state</h2><p class="sec-lede">Each panel is the same window as above, set to one state and cropped. Nothing here is a picture of the app; it is the app.</p></div></div>
+  <div class="states" id="states-grid"></div>
+</div></section>
+
+<!-- ============================================================ 04 logo and icon -->
+<section class="sec" id="logo"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>04</b>of 13</div><div><h2 class="sec-title">Logo and icon</h2><p class="sec-lede">The word is outlined from Atkinson Hyperlegible Next Bold. The dot of the first i is a highlighter square: the checker’s mark for “verified”. The second i keeps its round dot, so the change reads as a choice and not a glitch.</p></div></div>
+  <div class="sec-body">
+    <div class="tiles">
+      <div class="tile wmt pal-light"><p class="lab">Pad · light</p><svg class="wm" xmlns="http://www.w3.org/2000/svg" viewBox="-12 -90.7 342.7 134.3" role="img" aria-label="Inkling">
+  <path class="ckw-ink" transform="translate(0 0)" d="M10.1 0V-39H2.1V-49.6H24.1V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M35.7 0V-49.6H47.6L49.6 -42.8Q50.7 -44.8 52.85 -46.6Q55 -48.4 58.05 -49.65Q61.1 -50.9 65 -50.9Q71.3 -50.9 74.95 -48.5Q78.6 -46.1 80.15 -41.5Q81.7 -36.9 81.7 -30.4V0H67.7V-26.9Q67.7 -30.4 67.25 -33.4Q66.8 -36.4 65.1 -38.2Q63.4 -40 59.5 -40Q54.5 -40 52.05 -36.4Q49.6 -32.8 49.6 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M92.8 0V-70.8H106.7V-30.1L123.9 -49.6H140.4L121.2 -28.9L142.1 0H125.6L112 -19L106.7 -13.3V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M163.5 0Q157.7 0 154.3 -1.05Q150.9 -2.1 149.4 -5.05Q147.9 -8 147.9 -13.6V-70.8H161.9V-17Q161.9 -13.6 163.2 -12.55Q164.5 -11.5 168.3 -11.5H172.4V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M182.4 0V-39H174.4V-49.6H196.4V0ZM188.7 -58Q185.2 -58 182.7 -60.5Q180.2 -63 180.2 -66.5Q180.2 -70.1 182.7 -72.55Q185.2 -75 188.7 -75Q192.3 -75 194.75 -72.55Q197.2 -70.1 197.2 -66.5Q197.2 -63 194.7 -60.5Q192.2 -58 188.7 -58Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M208 0V-49.6H219.9L221.9 -42.8Q223 -44.8 225.15 -46.6Q227.3 -48.4 230.35 -49.65Q233.4 -50.9 237.3 -50.9Q243.6 -50.9 247.25 -48.5Q250.9 -46.1 252.45 -41.5Q254 -36.9 254 -30.4V0H240V-26.9Q240 -30.4 239.55 -33.4Q239.1 -36.4 237.4 -38.2Q235.7 -40 231.8 -40Q226.8 -40 224.35 -36.4Q221.9 -32.8 221.9 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M288.6 20.1Q284.5 20.1 280.35 19.05Q276.2 18 272.65 15.5Q269.1 13 267 8.7L278.5 4Q279.8 6.4 282.4 7.9Q285 9.4 289.1 9.4Q291.7 9.4 294.05 8.45Q296.4 7.5 297.9 5.25Q299.4 3 299.4 -0.9V-9.6Q296.4 -5.6 292.3 -3.6Q288.2 -1.6 283.7 -1.6Q278.3 -1.6 273.4 -4.5Q268.5 -7.4 265.45 -12.85Q262.4 -18.3 262.4 -25.8Q262.4 -34.4 265.45 -39.95Q268.5 -45.5 273.3 -48.25Q278.1 -51 283.3 -51Q288.2 -51 292.45 -48.85Q296.7 -46.7 299.4 -42.6L301.5 -49.6H313.2V-3.2Q313.2 5 310.15 10.15Q307.1 15.3 301.55 17.7Q296 20.1 288.6 20.1ZM288.5 -12.5Q291.6 -12.5 294.2 -13.8Q296.8 -15.1 298.35 -18.1Q299.9 -21.1 299.9 -26.2Q299.9 -31.3 298.35 -34.3Q296.8 -37.3 294.2 -38.65Q291.6 -40 288.5 -40Q283.7 -40 280.3 -36.7Q276.9 -33.4 276.9 -26.5Q276.9 -19.5 280.3 -16Q283.7 -12.5 288.5 -12.5Z"/>
+  <rect class="ckw-hi" x="6.2" y="-76.7" width="20.4" height="20.4" rx="1.4" transform="rotate(-7 16.4 -66.5)"/>
+  
+</svg></div>
+      <div class="tile wmt pal-dark"><p class="lab">Blueprint · dark</p><svg class="wm" xmlns="http://www.w3.org/2000/svg" viewBox="-12 -90.7 342.7 134.3" role="img" aria-label="Inkling">
+  <path class="ckw-ink" transform="translate(0 0)" d="M10.1 0V-39H2.1V-49.6H24.1V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M35.7 0V-49.6H47.6L49.6 -42.8Q50.7 -44.8 52.85 -46.6Q55 -48.4 58.05 -49.65Q61.1 -50.9 65 -50.9Q71.3 -50.9 74.95 -48.5Q78.6 -46.1 80.15 -41.5Q81.7 -36.9 81.7 -30.4V0H67.7V-26.9Q67.7 -30.4 67.25 -33.4Q66.8 -36.4 65.1 -38.2Q63.4 -40 59.5 -40Q54.5 -40 52.05 -36.4Q49.6 -32.8 49.6 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M92.8 0V-70.8H106.7V-30.1L123.9 -49.6H140.4L121.2 -28.9L142.1 0H125.6L112 -19L106.7 -13.3V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M163.5 0Q157.7 0 154.3 -1.05Q150.9 -2.1 149.4 -5.05Q147.9 -8 147.9 -13.6V-70.8H161.9V-17Q161.9 -13.6 163.2 -12.55Q164.5 -11.5 168.3 -11.5H172.4V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M182.4 0V-39H174.4V-49.6H196.4V0ZM188.7 -58Q185.2 -58 182.7 -60.5Q180.2 -63 180.2 -66.5Q180.2 -70.1 182.7 -72.55Q185.2 -75 188.7 -75Q192.3 -75 194.75 -72.55Q197.2 -70.1 197.2 -66.5Q197.2 -63 194.7 -60.5Q192.2 -58 188.7 -58Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M208 0V-49.6H219.9L221.9 -42.8Q223 -44.8 225.15 -46.6Q227.3 -48.4 230.35 -49.65Q233.4 -50.9 237.3 -50.9Q243.6 -50.9 247.25 -48.5Q250.9 -46.1 252.45 -41.5Q254 -36.9 254 -30.4V0H240V-26.9Q240 -30.4 239.55 -33.4Q239.1 -36.4 237.4 -38.2Q235.7 -40 231.8 -40Q226.8 -40 224.35 -36.4Q221.9 -32.8 221.9 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M288.6 20.1Q284.5 20.1 280.35 19.05Q276.2 18 272.65 15.5Q269.1 13 267 8.7L278.5 4Q279.8 6.4 282.4 7.9Q285 9.4 289.1 9.4Q291.7 9.4 294.05 8.45Q296.4 7.5 297.9 5.25Q299.4 3 299.4 -0.9V-9.6Q296.4 -5.6 292.3 -3.6Q288.2 -1.6 283.7 -1.6Q278.3 -1.6 273.4 -4.5Q268.5 -7.4 265.45 -12.85Q262.4 -18.3 262.4 -25.8Q262.4 -34.4 265.45 -39.95Q268.5 -45.5 273.3 -48.25Q278.1 -51 283.3 -51Q288.2 -51 292.45 -48.85Q296.7 -46.7 299.4 -42.6L301.5 -49.6H313.2V-3.2Q313.2 5 310.15 10.15Q307.1 15.3 301.55 17.7Q296 20.1 288.6 20.1ZM288.5 -12.5Q291.6 -12.5 294.2 -13.8Q296.8 -15.1 298.35 -18.1Q299.9 -21.1 299.9 -26.2Q299.9 -31.3 298.35 -34.3Q296.8 -37.3 294.2 -38.65Q291.6 -40 288.5 -40Q283.7 -40 280.3 -36.7Q276.9 -33.4 276.9 -26.5Q276.9 -19.5 280.3 -16Q283.7 -12.5 288.5 -12.5Z"/>
+  <rect class="ckw-hi" x="6.2" y="-76.7" width="20.4" height="20.4" rx="1.4" transform="rotate(-7 16.4 -66.5)"/>
+  
+</svg></div>
+      <div class="tile">
+        <p class="lab">Detail A · the dot · scale 4:1</p>
+        <svg class="wm-detail" viewBox="-22 -100 262 128" role="img" aria-label="Detail A: the dot of the first i is a yellow highlighter square, rotated seven degrees; the second i keeps its round dot">
+  <g transform="translate(18 0)">
+    <path class="ckw-ink" d="M10.1 0V-39H2.1V-49.6H24.1V0Z"/>
+    <rect class="ckw-hi" x="6.2" y="-76.7" width="20.4" height="20.4" rx="1.4" transform="rotate(-7 16.4 -66.5)"/>
+    <circle class="dt-line" cx="16.4" cy="-66.5" r="24" stroke-dasharray="8 3 2 3"/>
+    <line class="dt-line" x1="33" y1="-83" x2="62" y2="-92"/><line class="dt-line" x1="62" y1="-92" x2="78" y2="-92"/>
+    <text class="dt-t" x="80" y="-88.5">A</text>
+    <line class="dt-line" x1="2" y1="-52" x2="2" y2="-46"/><line class="dt-line" x1="30.8" y1="-52" x2="30.8" y2="-46"/>
+    <line class="dt-line" x1="2" y1="-49" x2="30.8" y2="-49"/>
+  </g>
+  <g transform="translate(150 0)">
+    <path class="ckw-ink" transform="translate(-185.4 0)" d="M182.4 0V-39H174.4V-49.6H196.4V0ZM188.7 -58Q185.2 -58 182.7 -60.5Q180.2 -63 180.2 -66.5Q180.2 -70.1 182.7 -72.55Q185.2 -75 188.7 -75Q192.3 -75 194.75 -72.55Q197.2 -70.1 197.2 -66.5Q197.2 -63 194.7 -60.5Q192.2 -58 188.7 -58Z"/>
+  </g>
+</svg>
+        <div class="dt-notes">
+          <p><b>A square, not a dot.</b> A highlighter has a chisel tip; it leaves corners.</p>
+          <p><b>1.2 × the round dot, turned 7°,</b> the angle a hand lands at. The yellow is the same in both themes, because verified means the same thing at night.</p>
+        </div>
+      </div>
+    </div>
+    <div class="tile" style="margin-top:20px">
+      <p class="lab">App icon · the CHK’D cell, ticked past its edge · light</p>
+      <div class="icons" id="icons-light"></div>
+      <p class="lab" style="margin-top:22px">Dark (blueprint)</p>
+      <div class="icons" id="icons-dark"></div>
+      <p class="hint">The tick overshoots the box because a real checker’s hand does. The label CHK’D is gone below 64 px; what survives at 16 px is a green square, a box and a red tick.</p>
+    </div>
+    <div class="tiles" style="margin-top:20px">
+      <div class="tile clear">
+        <p class="lab" style="align-self:start">Clear space</p>
+        <div class="clear-box"><svg class="wm" xmlns="http://www.w3.org/2000/svg" viewBox="-12 -90.7 342.7 134.3" role="img" aria-label="Inkling">
+  <path class="ckw-ink" transform="translate(0 0)" d="M10.1 0V-39H2.1V-49.6H24.1V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M35.7 0V-49.6H47.6L49.6 -42.8Q50.7 -44.8 52.85 -46.6Q55 -48.4 58.05 -49.65Q61.1 -50.9 65 -50.9Q71.3 -50.9 74.95 -48.5Q78.6 -46.1 80.15 -41.5Q81.7 -36.9 81.7 -30.4V0H67.7V-26.9Q67.7 -30.4 67.25 -33.4Q66.8 -36.4 65.1 -38.2Q63.4 -40 59.5 -40Q54.5 -40 52.05 -36.4Q49.6 -32.8 49.6 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M92.8 0V-70.8H106.7V-30.1L123.9 -49.6H140.4L121.2 -28.9L142.1 0H125.6L112 -19L106.7 -13.3V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M163.5 0Q157.7 0 154.3 -1.05Q150.9 -2.1 149.4 -5.05Q147.9 -8 147.9 -13.6V-70.8H161.9V-17Q161.9 -13.6 163.2 -12.55Q164.5 -11.5 168.3 -11.5H172.4V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M182.4 0V-39H174.4V-49.6H196.4V0ZM188.7 -58Q185.2 -58 182.7 -60.5Q180.2 -63 180.2 -66.5Q180.2 -70.1 182.7 -72.55Q185.2 -75 188.7 -75Q192.3 -75 194.75 -72.55Q197.2 -70.1 197.2 -66.5Q197.2 -63 194.7 -60.5Q192.2 -58 188.7 -58Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M208 0V-49.6H219.9L221.9 -42.8Q223 -44.8 225.15 -46.6Q227.3 -48.4 230.35 -49.65Q233.4 -50.9 237.3 -50.9Q243.6 -50.9 247.25 -48.5Q250.9 -46.1 252.45 -41.5Q254 -36.9 254 -30.4V0H240V-26.9Q240 -30.4 239.55 -33.4Q239.1 -36.4 237.4 -38.2Q235.7 -40 231.8 -40Q226.8 -40 224.35 -36.4Q221.9 -32.8 221.9 -25.8V0Z"/>
+  <path class="ckw-ink" transform="translate(0 0)" d="M288.6 20.1Q284.5 20.1 280.35 19.05Q276.2 18 272.65 15.5Q269.1 13 267 8.7L278.5 4Q279.8 6.4 282.4 7.9Q285 9.4 289.1 9.4Q291.7 9.4 294.05 8.45Q296.4 7.5 297.9 5.25Q299.4 3 299.4 -0.9V-9.6Q296.4 -5.6 292.3 -3.6Q288.2 -1.6 283.7 -1.6Q278.3 -1.6 273.4 -4.5Q268.5 -7.4 265.45 -12.85Q262.4 -18.3 262.4 -25.8Q262.4 -34.4 265.45 -39.95Q268.5 -45.5 273.3 -48.25Q278.1 -51 283.3 -51Q288.2 -51 292.45 -48.85Q296.7 -46.7 299.4 -42.6L301.5 -49.6H313.2V-3.2Q313.2 5 310.15 10.15Q307.1 15.3 301.55 17.7Q296 20.1 288.6 20.1ZM288.5 -12.5Q291.6 -12.5 294.2 -13.8Q296.8 -15.1 298.35 -18.1Q299.9 -21.1 299.9 -26.2Q299.9 -31.3 298.35 -34.3Q296.8 -37.3 294.2 -38.65Q291.6 -40 288.5 -40Q283.7 -40 280.3 -36.7Q276.9 -33.4 276.9 -26.5Q276.9 -19.5 280.3 -16Q283.7 -12.5 288.5 -12.5Z"/>
+  <rect class="ckw-hi" x="6.2" y="-76.7" width="20.4" height="20.4" rx="1.4" transform="rotate(-7 16.4 -66.5)"/>
+  
+</svg></div>
+        <p class="clear-note">Keep one dot-height clear on every side: the size of the yellow square. Nothing else touches the word inside the dashed line.</p>
+      </div>
+      <div class="tile">
+        <p class="lab">Use</p>
+        <div class="dodont" style="margin-top:0">
+          <div><b>Word on the pad or on blueprint.</b> Ink on green, or white on navy.</div>
+          <div><b>Square stays yellow.</b> It is the only colour in the mark.</div>
+          <div class="no"><b>Never a red dot.</b> Red means “must change”; the name is not a check.</div>
+          <div class="no"><b>Never the square alone.</b> Without the i it is a sticky note.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 05 elements -->
+<section class="sec" id="elements"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>05</b>of 13</div><div><h2 class="sec-title">Elements</h2><p class="sec-lede">Every mark the checker makes, drawn once and used everywhere. Each one is its own SVG file in <span class="mono">assets/check/elements/</span>, drawn at the size the app uses, shown here at that size and enlarged.</p></div></div>
+  <div class="els" id="els">
+    <!-- filled from the templates below -->
+  </div>
+  <template id="el-src">
+    <div data-el="red-ring" data-name="Red ring" data-job="Marks a short phrase that must change: a number, a name, three words at most." data-where="In your text, around the words.">
+      <svg class="el el-red-ring" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 44" role="img" aria-label="Red ring">
+<text class="ck-ink ck-w" x="42" y="28.5" font-size="17" text-anchor="middle">5:30</text>
+<path class="ck-red" d="M11.9 19.1 L12.2 18.6 L12.4 18.2 L12.6 17.8 L12.9 17.4 L13.2 17 L13.5 16.6 L13.9 16.3 L14.1 15.9 L14.5 15.6 L14.9 15.3 L15.2 15 L15.6 14.7 L16 14.3 L16.4 14.1 L16.8 13.8 L17.2 13.5 L17.6 13.3 L18 13 L18.4 12.8 L18.9 12.6 L19.3 12.3 L19.7 12.1 L20.2 11.9 L20.6 11.7 L21 11.4 L21.5 11.3 L21.9 11.1 L22.4 11 L22.9 10.8 L23.3 10.6 L23.8 10.5 L24.2 10.3 L24.7 10.2 L25.2 10 L25.7 9.9 L26.1 9.7 L26.5 9.5 L27 9.4 L27.5 9.3 L28 9.2 L28.5 9 L28.9 8.9 L29.4 8.8 L29.9 8.7 L30.4 8.6 L30.9 8.5 L31.3 8.4 L31.8 8.4 L32.3 8.3 L32.8 8.2 L33.3 8.2 L33.8 8.1 L34.2 8.1 L34.7 8 L35.2 7.9 L35.7 7.9 L36.2 7.8 L36.7 7.8 L37.2 7.7 L37.7 7.7 L38.1 7.6 L38.7 7.7 L39.1 7.6 L39.6 7.6 L40.1 7.5 L40.6 7.6 L41.1 7.6 L41.6 7.5 L42.1 7.6 L42.6 7.6 L43 7.5 L43.5 7.6 L44 7.7 L44.5 7.7 L45 7.6 L45.5 7.7 L46 7.7 L46.5 7.8 L47 7.8 L47.5 7.9 L47.9 8 L48.4 8 L48.9 8.1 L49.4 8.1 L49.9 8.1 L50.4 8.2 L50.9 8.2 L51.3 8.4 L51.8 8.5 L52.3 8.6 L52.8 8.6 L53.3 8.7 L53.7 8.9 L54.2 9 L54.7 9.2 L55.2 9.3 L55.7 9.3 L56.1 9.5 L56.6 9.6 L57 9.8 L57.5 9.9 L58 10 L58.4 10.2 L58.9 10.4 L59.3 10.5 L59.8 10.7 L60.2 10.9 L60.7 11 L61.1 11.2 L61.6 11.5 L62 11.7 L62.4 11.8 L62.9 12 L63.3 12.3 L63.7 12.5 L64.2 12.7 L64.5 13 L64.9 13.3 L65.4 13.5 L65.7 13.8 L66.1 14.1 L66.4 14.4 L66.9 14.7 L67.2 15 L67.5 15.3 L67.9 15.5 L68.2 15.9 L68.5 16.3 L68.7 16.6 L69.1 17 L69.3 17.3 L69.5 17.7 L69.8 18.1 L70 18.5 L70.2 18.8 L70.3 19.3 L70.4 19.7 L70.6 20.1 L70.6 20.5 L70.6 20.9 L70.7 21.3 L70.7 21.8 L70.6 22.2 L70.6 22.6 L70.5 23 L70.4 23.4 L70.3 23.8 L70.1 24.3 L69.9 24.6 L69.7 25 L69.5 25.4 L69.2 25.8 L69 26.1 L68.6 26.4 L68.3 26.8 L68 27.1 L67.8 27.5 L67.4 27.8 L67 28.1 L66.7 28.4 L66.3 28.7 L65.9 29 L65.6 29.3 L65.2 29.5 L64.8 29.8 L64.3 30 L63.9 30.2 L63.6 30.5 L63.1 30.7 L62.7 30.9 L62.2 31.1 L61.8 31.3 L61.4 31.6 L61 31.8 L60.5 32 L60 32.1 L59.6 32.3 L59.2 32.5 L58.7 32.6 L58.2 32.8 L57.8 33 L57.3 33.1 L56.9 33.3 L56.4 33.4 L55.9 33.5 L55.4 33.6 L54.9 33.7 L54.5 33.9 L54 34 L53.5 34.1 L53.1 34.3 L52.6 34.3 L52.1 34.4 L51.6 34.5 L51.2 34.6 L50.7 34.7 L50.2 34.8 L49.7 34.9 L49.2 35 L48.8 35 L48.3 35 L47.8 35 L47.3 35.2 L46.8 35.1 L46.3 35.2 L45.8 35.2 L45.3 35.3 L44.8 35.3 L44.3 35.4 L43.8 35.5 L43.4 35.4 L42.9 35.5 L42.4 35.5 L41.9 35.4 L41.4 35.5 L40.9 35.5 L40.4 35.4 L39.9 35.4 L39.4 35.5 L38.9 35.5 L38.4 35.4 L38 35.4 L37.5 35.3 L37 35.3 L36.5 35.3 L36 35.3 L35.5 35.2 L35 35.2 L34.6 35.1 L34.1 35 L33.6 35 L33.1 34.9 L32.6 34.9 L32.1 34.8 L31.7 34.7 L31.1 34.7 L30.7 34.6 L30.2 34.5 L29.7 34.4 L29.2 34.3 L28.8 34.2 L28.3 34.1 L27.8 34 L27.3 33.9 L26.8 33.8 L26.4 33.7 L25.9 33.6 L25.4 33.3 L25 33.2 L24.5 33.1 L24 33 L23.6 32.8 L23.1 32.7 L22.6 32.5 L22.2 32.3 L21.7 32.1 L21.3 32 L20.8 31.8 L20.4 31.6 L19.9 31.4 L19.5 31.2 L19.1 31 L18.6 30.8 L18.2 30.6 L17.7 30.4 L17.4 30.1 L17 29.8 L16.5 29.6 L16.1 29.3 L15.7 29.1 L15.4 28.8 L14.9 28.5 L14.5 28.2 L14.2 27.9 L13.9 27.6 L13.5 27.3 L13.1 27 L12.8 26.7 L12.5 26.3 L12.2 25.9 L11.9 25.6 L11.6 25.3 L11.3 24.8 L11.1 24.4 L10.9 24 L10.7 23.6 L10.4 23.2 L10.3 22.8 L10.2 22.4 L10 21.9 L9.9 21.5 L9.8 21 L9.9 20.5 L9.8 20.1 L9.9 19.7 L9.9 19.2 L10 18.7 L10.1 18.3 L10.2 17.8 L10.3 17.4 L10.5 17 L10.7 16.5 L10.9 16.1 L11.2 15.7 L11.4 15.3 L11.7 14.9 L11.9 14.5 L12.3 14.2 L12.6 13.7 L12.9 13.3 L13.3 13.1 L13.6 12.7 L14 12.4 L14.4 12.1 L14.7 11.8 L15.1 11.5 L15.5 11.1 L15.9 10.9 L16.3 10.5 L16.5 10.4 L16.2 9.9 L15.9 10 L15.5 10.3 L15.1 10.6 L14.7 10.9 L14.3 11.1 L13.8 11.5 L13.5 11.8 L13 12 L12.7 12.4 L12.2 12.7 L11.9 13.1 L11.6 13.5 L11.2 13.8 L10.8 14.2 L10.5 14.6 L10.3 15.1 L9.9 15.5 L9.7 16 L9.5 16.5 L9.2 16.9 L9 17.4 L8.9 17.9 L8.7 18.5 L8.6 19 L8.6 19.5 L8.5 20 L8.5 20.6 L8.4 21.1 L8.5 21.7 L8.6 22.2 L8.7 22.7 L8.9 23.3 L9 23.8 L9.2 24.2 L9.4 24.8 L9.7 25.3 L9.9 25.7 L10.1 26.2 L10.5 26.6 L10.8 27 L11.1 27.5 L11.5 27.9 L11.9 28.2 L12.2 28.6 L12.6 29 L13 29.4 L13.4 29.7 L13.8 30 L14.2 30.3 L14.6 30.6 L15 31 L15.5 31.2 L15.9 31.5 L16.3 31.8 L16.8 32.1 L17.2 32.4 L17.7 32.6 L18.1 32.8 L18.6 33.1 L19 33.3 L19.5 33.5 L20 33.7 L20.4 33.9 L20.9 34.1 L21.4 34.3 L21.9 34.5 L22.4 34.7 L22.8 34.9 L23.3 35 L23.8 35.2 L24.3 35.3 L24.8 35.4 L25.3 35.7 L25.8 35.8 L26.3 36 L26.8 36.1 L27.3 36.2 L27.8 36.2 L28.2 36.4 L28.8 36.5 L29.3 36.6 L29.8 36.7 L30.3 36.8 L30.7 36.9 L31.3 36.9 L31.8 37 L32.3 37.2 L32.8 37.2 L33.3 37.2 L33.8 37.3 L34.3 37.4 L34.8 37.5 L35.3 37.5 L35.8 37.5 L36.3 37.6 L36.8 37.6 L37.3 37.6 L37.9 37.7 L38.4 37.7 L38.9 37.8 L39.4 37.8 L39.9 37.8 L40.4 37.7 L40.9 37.8 L41.4 37.8 L41.9 37.8 L42.4 37.8 L42.9 37.8 L43.4 37.7 L44 37.8 L44.5 37.7 L45 37.6 L45.5 37.6 L46 37.6 L46.5 37.6 L47 37.5 L47.5 37.5 L48 37.4 L48.5 37.4 L49 37.3 L49.5 37.3 L50.1 37.2 L50.6 37.1 L51.1 37 L51.5 36.9 L52 36.8 L52.6 36.7 L53.1 36.6 L53.6 36.6 L54.1 36.4 L54.5 36.3 L55.1 36.2 L55.6 36 L56.1 35.9 L56.5 35.8 L57 35.8 L57.5 35.6 L58 35.4 L58.5 35.2 L59 35.1 L59.5 34.9 L60 34.8 L60.5 34.6 L60.9 34.3 L61.4 34.2 L61.9 34 L62.4 33.8 L62.8 33.5 L63.3 33.3 L63.8 33.1 L64.2 32.9 L64.7 32.6 L65.2 32.3 L65.6 32 L66.1 31.8 L66.5 31.5 L67 31.2 L67.4 30.9 L67.8 30.6 L68.2 30.2 L68.6 29.9 L69 29.6 L69.4 29.2 L69.8 28.8 L70.2 28.4 L70.5 28 L70.9 27.6 L71.2 27.1 L71.5 26.7 L71.7 26.2 L72.1 25.7 L72.3 25.2 L72.5 24.7 L72.7 24.1 L72.9 23.6 L73 23.1 L73 22.4 L73.1 21.9 L73.1 21.3 L73 20.7 L73 20.1 L72.9 19.6 L72.7 19 L72.6 18.5 L72.4 18 L72.1 17.4 L71.9 16.9 L71.6 16.5 L71.3 16 L71 15.5 L70.6 15.2 L70.3 14.7 L69.9 14.2 L69.6 13.9 L69.2 13.6 L68.7 13.2 L68.3 12.8 L67.9 12.5 L67.5 12.2 L67.1 11.9 L66.7 11.5 L66.2 11.3 L65.8 11 L65.3 10.7 L64.8 10.5 L64.4 10.2 L64 9.9 L63.5 9.7 L63 9.5 L62.5 9.4 L62.1 9.1 L61.6 8.9 L61.1 8.7 L60.6 8.5 L60.1 8.3 L59.7 8.2 L59.2 8 L58.7 7.8 L58.2 7.7 L57.7 7.6 L57.2 7.4 L56.7 7.2 L56.2 7.1 L55.7 7 L55.2 6.9 L54.7 6.7 L54.2 6.7 L53.7 6.5 L53.2 6.4 L52.7 6.4 L52.2 6.2 L51.7 6.1 L51.2 6 L50.7 6 L50.2 5.9 L49.7 5.8 L49.2 5.9 L48.7 5.7 L48.2 5.7 L47.7 5.7 L47.2 5.6 L46.7 5.6 L46.2 5.5 L45.7 5.5 L45.1 5.4 L44.6 5.5 L44.1 5.5 L43.6 5.4 L43.1 5.4 L42.6 5.4 L42.1 5.4 L41.6 5.3 L41.1 5.5 L40.6 5.4 L40.1 5.4 L39.5 5.4 L39 5.5 L38.5 5.5 L38 5.5 L37.5 5.6 L37 5.6 L36.5 5.7 L36 5.7 L35.5 5.8 L35 5.8 L34.5 5.9 L34 6 L33.5 6 L33 6.1 L32.5 6.2 L32 6.3 L31.5 6.3 L31 6.4 L30.4 6.5 L29.9 6.6 L29.5 6.7 L29 6.8 L28.5 7 L28 7.1 L27.5 7.3 L27 7.3 L26.5 7.4 L26 7.6 L25.5 7.8 L25 8 L24.5 8.1 L24.1 8.3 L23.6 8.4 L23.1 8.7 L22.6 8.9 L22.2 9.1 L21.7 9.3 L21.2 9.4 L20.8 9.7 L20.3 9.9 L19.8 10.1 L19.4 10.4 L19 10.7 L18.5 10.9 L18.1 11.2 L17.7 11.5 L17.2 11.8 L16.8 12.1 L16.4 12.4 L16 12.7 L15.6 13 L15.2 13.4 L14.8 13.8 L14.4 14.1 L14.1 14.5 L13.7 14.8 L13.4 15.2 L13.1 15.7 L12.7 16 L12.4 16.5 L12.2 16.9 L12 17.4 L11.7 17.9 L11.6 18.3 L11.3 18.8 Z"/>
+</svg>
+    </div>
+    <div data-el="tags" data-name="Numbered tag" data-job="Numbers a check in the gutter and on its note; fills yellow with a tick once verified." data-where="Gutter, check notes, note list.">
+      <svg class="el el-tags" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 26" role="img" aria-label="Numbered tag: open and verified">
+<circle class="ck-sheet" cx="13" cy="13" r="9"/><circle class="ck-red-s" stroke-width="1.6" cx="13" cy="13" r="9"/><text class="ck-t ck-red" x="13" y="17.2" font-size="12" font-weight="700" text-anchor="middle">1</text>
+<circle class="ck-yel" cx="44" cy="13" r="9"/><circle class="ck-oy-s" stroke-width="1.3" cx="44" cy="13" r="9"/><path class="ck-oy-s" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M40.4 13.2 L43 16 L48 9.6"/>
+</svg>
+    </div>
+    <div data-el="leader" data-name="Drafting leader" data-job="Joins a note to its line. Straight and angled, with a dot on the line and a shoulder at the note. Never curved." data-where="Between the text column and the margin.">
+      <svg class="el el-leader" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 60" role="img" aria-label="Drafting leader">
+<circle class="ck-red" cx="10" cy="50" r="2.6"/>
+<path class="ck-red-s" stroke-width="1.3" stroke-linecap="round" d="M10 50 L96 14 L122 14"/>
+</svg>
+    </div>
+    <div data-el="gutter-states" data-name="Gutter bar" data-job="Shows what Inkling has read: dashed if not yet, striped while reading, yellow once read, red where a check sits." data-where="Left gutter, one bar per paragraph.">
+      <svg class="el el-gutter-states" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 100" role="img" aria-label="Gutter read states">
+<rect class="ck-rule-s" stroke-width="1" stroke-dasharray="2 3" x="27.5" y="8.5" width="5" height="62" rx="1"/>
+<text class="ck-l ck-label" x="30" y="92" font-size="12" text-anchor="middle">UNREAD</text>
+<defs><pattern id="ckstripe" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="ck-yel" width="3" height="6"/></pattern></defs>
+<rect fill="url(#ckstripe)" x="91" y="8" width="6" height="38" rx="1"/>
+<rect class="ck-yel" x="91" y="44" width="6" height="3" rx="1"/>
+<text class="ck-l ck-label" x="94" y="92" font-size="12" text-anchor="middle">READING</text>
+<rect class="ck-yel" x="155" y="8" width="6" height="63" rx="1"/>
+<text class="ck-l ck-label" x="158" y="92" font-size="12" text-anchor="middle">READ</text>
+<rect class="ck-yel" x="219" y="8" width="6" height="63" rx="1"/>
+<rect class="ck-red" x="219" y="30" width="6" height="19" rx="1"/>
+<text class="ck-l ck-label" x="222" y="92" font-size="12" text-anchor="middle">QUESTION</text>
+</svg>
+    </div>
+    <div data-el="highlighter-swipe" data-name="Highlighter swipe" data-job="Verified. Goes over a check once it is answered, never over unread text." data-where="Under the words of a resolved check.">
+      <svg class="el el-highlighter-swipe" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 34" role="img" aria-label="Highlighter swipe">
+<path class="ck-yel ck-hl" d="M7 10.2 L41 8.8 L75 8 L75.4 13.4 L75.7 17.9 L75.9 22.4 L76 25.4 L41 26.4 L8 27.4 L9.3 21.5 L8.7 17 L9.3 12.5 Z"/>
+<text class="ck-ink ck-w" x="41" y="23" font-size="17" text-anchor="middle">4:55</text>
+</svg>
+    </div>
+    <div data-el="revision-cloud" data-name="Revision cloud" data-job="You changed words that were already checked. Inkling re-checks only what is inside the cloud." data-where="Around edited words, until re-checked.">
+      <svg class="el el-revision-cloud" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 64" role="img" aria-label="Revision cloud with delta">
+<text class="ck-ink ck-w" x="56" y="38.5" font-size="17" text-anchor="middle">4:55</text>
+<path class="ck-ink-s" stroke-width="1.3" stroke-linejoin="round" d="M27 15 A6 6 0 0 1 37.2 15 A6 6 0 0 1 47.4 15 A6 6 0 0 1 57.7 15 A6 6 0 0 1 67.9 15 A6 6 0 0 1 78.1 15 A6 6 0 0 1 85 18.3 A6 6 0 0 1 85 28.6 A6 6 0 0 1 85 38.8 A6 6 0 0 1 85 49 A6 6 0 0 1 74.8 49 A6 6 0 0 1 64.6 49 A6 6 0 0 1 54.3 49 A6 6 0 0 1 44.1 49 A6 6 0 0 1 33.9 49 A6 6 0 0 1 27 45.7 A6 6 0 0 1 27 35.4 A6 6 0 0 1 27 25.2 A6 6 0 0 1 27 15" opacity=".85"/>
+<path class="ck-sheet" d="M100 2.1 L112 22.9 L88 22.9 Z"/><path class="ck-ink-s" stroke-width="1.4" stroke-linejoin="round" d="M100 2.1 L112 22.9 L88 22.9 Z"/><text class="ck-t ck-ink" x="100" y="19.9" font-size="12" font-weight="700" text-anchor="middle">1</text>
+</svg>
+    </div>
+    <div data-el="delta" data-name="Revision delta" data-job="Numbers each revision of a checked note, in the cloud and in the title block." data-where="Cloud corner, the Rev cell.">
+      <svg class="el el-delta" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 30" role="img" aria-label="Revision delta">
+<path class="ck-sheet" d="M16 0.8 L30 25.1 L2 25.1 Z"/><path class="ck-ink-s" stroke-width="1.4" stroke-linejoin="round" d="M16 0.8 L30 25.1 L2 25.1 Z"/><text class="ck-t ck-ink" x="16" y="22.1" font-size="12" font-weight="700" text-anchor="middle">1</text>
+</svg>
+    </div>
+    <div data-el="title-block" data-name="Title block" data-job="The note’s header: what it is, who wrote it, who checked it, and when." data-where="Top of every note.">
+      <svg class="el el-title-block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 72" role="img" aria-label="Title block">
+<rect class="ck-sheet" x="0.75" y="0.75" width="598.5" height="70.5"/>
+<rect class="ck-ink-s" stroke-width="1.5" x="0.75" y="0.75" width="598.5" height="70.5"/>
+<text class="ck-l ck-label" x="8" y="19" font-size="12" letter-spacing=".4">NOTE</text>
+<text class="ck-ink ck-w" x="8" y="52" font-size="14">Sub-50 10k by March</text>
+<line class="ck-ink-s" stroke-width="1" x1="232" y1="0" x2="232" y2="72"/>
+<text class="ck-l ck-label" x="240" y="19" font-size="12" letter-spacing=".4">BY</text>
+<text class="ck-t ck-ink" x="240" y="52" font-size="14">You</text>
+<line class="ck-ink-s" stroke-width="1" x1="300" y1="0" x2="300" y2="72"/>
+<text class="ck-l ck-label" x="308" y="19" font-size="12" letter-spacing=".4">DATE</text>
+<text class="ck-t ck-ink" x="308" y="52" font-size="14">6 NOV</text>
+<line class="ck-ink-s" stroke-width="1" x1="376" y1="0" x2="376" y2="72"/>
+<text class="ck-l ck-label" x="384" y="19" font-size="12" letter-spacing=".4">CHK'D</text>
+<line class="ck-ink-s" stroke-width="1" x1="448" y1="0" x2="448" y2="72"/>
+<text class="ck-l ck-label" x="456" y="19" font-size="12" letter-spacing=".4">DATE</text>
+<line class="ck-ink-s" stroke-width="1" x1="524" y1="0" x2="524" y2="72"/>
+<text class="ck-l ck-label" x="532" y="19" font-size="12" letter-spacing=".4">MIND</text>
+<text class="ck-t ck-ink" x="532" y="52" font-size="14">Inkling</text>
+</svg>
+    </div>
+    <div data-el="initials-box" data-name="Initialled cell" data-job="The sign-off. Written only when every check is answered; cleared if you edit checked words." data-where="The Chk’d and Date cells.">
+      <svg class="el el-initials-box" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 72" role="img" aria-label="CHK'D cell, initialled">
+<rect class="ck-sheet" x=".75" y=".75" width="158.5" height="70.5"/>
+<rect class="ck-ink-s" stroke-width="1.5" x=".75" y=".75" width="158.5" height="70.5"/>
+<line class="ck-ink-s" stroke-width="1" x1="76" y1="0" x2="76" y2="72"/>
+<text class="ck-l ck-label" x="8" y="19" font-size="12" letter-spacing=".4">CHK'D</text>
+<text class="ck-l ck-label" x="84" y="19" font-size="12" letter-spacing=".4">DATE</text>
+<path class="ck-ink" d="M16.5 31.4 L16.9 31.8 L17.3 31.8 L17.7 31.8 L18.1 31.8 L18.5 31.7 L18.8 31.7 L19.2 31.6 L19.6 31.6 L20 31.6 L20.4 31.6 L20.8 31.5 L21.2 31.5 L21.6 31.5 L22 31.5 L22.4 31.4 L22.8 31.3 L23.2 31.2 L23.6 31 L24 30.8 L24.2 30.6 L24.2 30.1 L23.9 30 L23.5 29.9 L23.1 29.9 L22.7 29.8 L22.3 29.8 L21.9 29.8 L21.5 29.8 L21.1 29.8 L20.7 29.8 L20.4 29.8 L20 29.8 L19.5 29.8 L19.1 29.8 L18.7 29.8 L18.3 29.9 L17.9 29.9 L17.5 29.9 L17.1 29.9 L16.7 30.2 L16.4 30.7 Z"/><path class="ck-ink" d="M20 30.8 L19.8 31.2 L19.6 31.6 L19.5 32 L19.4 32.4 L19.4 32.8 L19.4 33.2 L19.4 33.6 L19.4 34 L19.4 34.4 L19.4 34.8 L19.4 35.2 L19.4 35.6 L19.4 36 L19.4 36.4 L19.5 36.8 L19.4 37.2 L19.4 37.6 L19.4 38 L19.4 38.4 L19.4 38.8 L19.5 39.2 L19.4 39.6 L19.4 40 L19.4 40.4 L19.5 40.8 L19.4 41.2 L19.4 41.6 L19.4 42 L19.4 42.4 L19.4 42.8 L19.4 43.2 L19.4 43.6 L19.4 44 L19.4 44.4 L19.3 44.8 L19.3 45.2 L19.4 45.6 L19.4 46 L19.4 46.4 L19.3 46.8 L19.4 47.2 L19.4 47.6 L19.4 48 L19.4 48.4 L19.4 48.8 L19.5 49.2 L19.5 49.6 L19.5 50 L19.5 50.4 L19.6 50.8 L19.6 51.2 L19.7 51.6 L19.7 52 L19.8 52.4 L19.9 52.8 L19.9 53 L20.4 53 L20.5 52.8 L20.5 52.4 L20.6 52 L20.6 51.6 L20.6 51.2 L20.7 50.8 L20.7 50.4 L20.8 50 L20.8 49.6 L20.9 49.2 L20.9 48.8 L20.9 48.4 L21 48 L21 47.6 L21 47.2 L21 46.8 L21 46.4 L21.1 46 L21.1 45.6 L21 45.2 L21 44.8 L21.1 44.4 L21.1 44 L21.1 43.6 L21.1 43.2 L21.1 42.8 L21.1 42.4 L21.2 42 L21.2 41.6 L21.2 41.2 L21.2 40.8 L21.2 40.4 L21.2 40 L21.2 39.6 L21.3 39.2 L21.3 38.8 L21.3 38.4 L21.3 38 L21.3 37.6 L21.3 37.2 L21.3 36.8 L21.3 36.4 L21.3 36 L21.3 35.6 L21.3 35.2 L21.3 34.8 L21.4 34.4 L21.4 34 L21.3 33.6 L21.4 33.2 L21.4 32.8 L21.3 32.4 L21.2 32 L21 31.6 L20.8 31.2 L20.7 30.8 Z"/><path class="ck-ink" d="M16.6 53.7 L17.1 54.1 L17.5 54.3 L17.9 54.2 L18.2 54.2 L18.6 54.2 L19 54.2 L19.4 54.1 L19.8 54.1 L20.2 54.1 L20.6 54.1 L21 54.1 L21.4 54 L21.8 54 L22.2 54 L22.6 54 L23 53.9 L23.4 53.8 L23.8 53.6 L24.2 53.4 L24.4 53.3 L24.4 52.7 L24.1 52.6 L23.7 52.6 L23.3 52.5 L22.9 52.4 L22.6 52.4 L22.2 52.3 L21.8 52.3 L21.4 52.3 L21 52.3 L20.6 52.3 L20.2 52.3 L19.8 52.3 L19.4 52.3 L19 52.3 L18.6 52.3 L18.1 52.3 L17.7 52.3 L17.3 52.3 L16.9 52.5 L16.6 53 Z"/><path class="ck-ink" d="M28.6 30.5 L28.5 30.9 L28.4 31.3 L28.2 31.7 L28.2 32.1 L28.1 32.5 L28.2 32.9 L28.2 33.3 L28.1 33.7 L28.2 34.1 L28.2 34.5 L28.2 34.9 L28.2 35.3 L28.2 35.7 L28.2 36.1 L28.2 36.5 L28.2 36.9 L28.2 37.3 L28.2 37.7 L28.2 38.1 L28.2 38.5 L28.2 38.9 L28.2 39.3 L28.2 39.7 L28.2 40.1 L28.2 40.5 L28.2 40.9 L28.1 41.3 L28.2 41.7 L28.2 42.1 L28.1 42.5 L28.1 42.9 L28.1 43.3 L28.1 43.7 L28.1 44.1 L28.1 44.5 L28.1 44.9 L28.1 45.3 L28.1 45.7 L28.1 46.1 L28.1 46.5 L28.1 46.9 L28.1 47.3 L28.1 47.7 L28.1 48.1 L28.2 48.5 L28.2 48.9 L28.2 49.3 L28.2 49.7 L28.2 50.1 L28.3 50.5 L28.3 50.9 L28.4 51.3 L28.4 51.7 L28.5 52.1 L28.6 52.5 L28.6 52.9 L28.7 53.3 L28.7 53.5 L29.2 53.5 L29.3 53.3 L29.3 52.9 L29.4 52.5 L29.4 52.1 L29.4 51.7 L29.4 51.3 L29.5 50.9 L29.5 50.5 L29.5 50.1 L29.6 49.7 L29.6 49.3 L29.7 48.9 L29.7 48.5 L29.7 48.1 L29.7 47.7 L29.7 47.3 L29.8 46.9 L29.7 46.5 L29.7 46.1 L29.8 45.7 L29.8 45.3 L29.8 44.9 L29.8 44.5 L29.8 44.1 L29.8 43.7 L29.9 43.3 L29.9 42.9 L29.9 42.5 L29.9 42.1 L29.9 41.7 L29.9 41.3 L30 40.9 L30 40.5 L30 40.1 L30 39.7 L30 39.3 L30 38.9 L30 38.5 L30 38.1 L30.1 37.7 L30.1 37.3 L30.1 36.9 L30.1 36.5 L30.1 36.1 L30.1 35.7 L30.1 35.3 L30.1 34.9 L30.1 34.5 L30.1 34.1 L30.1 33.7 L30.1 33.3 L30.1 32.9 L30 32.5 L30 32.1 L29.8 31.7 L29.7 31.3 L29.5 30.9 L29.3 30.5 Z"/><path class="ck-ink" d="M39.7 30.3 L39.4 30.5 L39.1 30.8 L38.7 31.1 L38.4 31.3 L38.1 31.6 L37.8 31.9 L37.5 32.1 L37.3 32.5 L37 32.8 L36.8 33.1 L36.6 33.4 L36.3 33.7 L36.1 34 L35.8 34.3 L35.6 34.6 L35.3 34.9 L35.1 35.2 L34.8 35.5 L34.6 35.8 L34.3 36.1 L34 36.4 L33.8 36.7 L33.5 37 L33.3 37.3 L33 37.6 L32.7 37.9 L32.4 38.2 L32.2 38.5 L31.9 38.8 L31.6 39 L31.4 39.3 L31.1 39.6 L30.8 39.9 L30.5 40.2 L30.2 40.5 L30 40.8 L29.7 41 L29.4 41.3 L29 41.8 L29 43 L29.5 43.5 L29.8 43.7 L30.1 44 L30.4 44.2 L30.7 44.4 L31 44.7 L31.3 44.9 L31.6 45.2 L31.9 45.5 L32.1 45.8 L32.5 46 L32.8 46.3 L33 46.6 L33.3 46.8 L33.6 47.1 L33.9 47.4 L34.2 47.7 L34.5 48 L34.7 48.3 L35 48.5 L35.3 48.8 L35.6 49.1 L35.9 49.3 L36.2 49.6 L36.4 49.9 L36.7 50.2 L37 50.4 L37.3 50.7 L37.6 51 L37.9 51.2 L38.2 51.6 L38.5 51.8 L38.8 52.1 L39.1 52.3 L39.4 52.6 L39.7 52.9 L40 53.1 L40.3 53.4 L40.6 53.7 L40.9 53.9 L41.2 54.2 L41.3 54.2 L41.7 53.8 L41.7 53.8 L41.4 53.5 L41.1 53.2 L40.9 52.9 L40.7 52.5 L40.4 52.2 L40.1 51.9 L39.9 51.6 L39.6 51.3 L39.4 51 L39.1 50.7 L38.9 50.4 L38.6 50.1 L38.3 49.8 L38.1 49.5 L37.8 49.2 L37.5 48.9 L37.3 48.6 L37 48.2 L36.7 48 L36.5 47.7 L36.2 47.4 L35.9 47.1 L35.6 46.8 L35.4 46.5 L35.1 46.2 L34.8 45.9 L34.5 45.6 L34.2 45.4 L33.9 45.1 L33.6 44.8 L33.3 44.5 L33.1 44.2 L32.7 44 L32.5 43.7 L32.1 43.4 L31.9 43.1 L31.6 42.8 L31.2 42.6 L30.9 42.3 L30.6 42.1 L30.5 42.1 L30.5 42.7 L30.7 42.6 L30.9 42.3 L31.2 42 L31.5 41.7 L31.8 41.5 L32.1 41.2 L32.4 40.9 L32.7 40.6 L32.9 40.3 L33.2 40 L33.5 39.7 L33.8 39.4 L34 39.1 L34.3 38.8 L34.6 38.6 L34.9 38.3 L35.1 37.9 L35.4 37.7 L35.7 37.4 L36 37.1 L36.2 36.7 L36.5 36.4 L36.8 36.2 L37 35.8 L37.3 35.5 L37.6 35.2 L37.8 34.9 L38.1 34.6 L38.3 34.3 L38.6 34 L38.8 33.7 L39.1 33.3 L39.3 33 L39.5 32.6 L39.7 32.3 L39.9 31.9 L40 31.5 L40.1 31.1 L40.3 30.7 Z"/>
+<text class="ck-t ck-ink" x="84" y="52" font-size="14">6 NOV</text>
+</svg>
+    </div>
+    <div data-el="left-as-is" data-name="Left as is" data-job="You dismissed a check. The ring stays, faint and struck through, so the decision is visible." data-where="In your text, until the note is signed.">
+      <svg class="el el-left-as-is" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 84 44" role="img" aria-label="Left as is: the ring struck through">
+<text class="ck-ink ck-w" x="42" y="28.5" font-size="17" text-anchor="middle">5:30</text>
+<path class="ck-red" opacity=".45" d="M11.9 19.1 L12.2 18.6 L12.4 18.2 L12.6 17.8 L12.9 17.4 L13.2 17 L13.5 16.6 L13.9 16.3 L14.1 15.9 L14.5 15.6 L14.9 15.3 L15.2 15 L15.6 14.7 L16 14.3 L16.4 14.1 L16.8 13.8 L17.2 13.5 L17.6 13.3 L18 13 L18.4 12.8 L18.9 12.6 L19.3 12.3 L19.7 12.1 L20.2 11.9 L20.6 11.7 L21 11.4 L21.5 11.3 L21.9 11.1 L22.4 11 L22.9 10.8 L23.3 10.6 L23.8 10.5 L24.2 10.3 L24.7 10.2 L25.2 10 L25.7 9.9 L26.1 9.7 L26.5 9.5 L27 9.4 L27.5 9.3 L28 9.2 L28.5 9 L28.9 8.9 L29.4 8.8 L29.9 8.7 L30.4 8.6 L30.9 8.5 L31.3 8.4 L31.8 8.4 L32.3 8.3 L32.8 8.2 L33.3 8.2 L33.8 8.1 L34.2 8.1 L34.7 8 L35.2 7.9 L35.7 7.9 L36.2 7.8 L36.7 7.8 L37.2 7.7 L37.7 7.7 L38.1 7.6 L38.7 7.7 L39.1 7.6 L39.6 7.6 L40.1 7.5 L40.6 7.6 L41.1 7.6 L41.6 7.5 L42.1 7.6 L42.6 7.6 L43 7.5 L43.5 7.6 L44 7.7 L44.5 7.7 L45 7.6 L45.5 7.7 L46 7.7 L46.5 7.8 L47 7.8 L47.5 7.9 L47.9 8 L48.4 8 L48.9 8.1 L49.4 8.1 L49.9 8.1 L50.4 8.2 L50.9 8.2 L51.3 8.4 L51.8 8.5 L52.3 8.6 L52.8 8.6 L53.3 8.7 L53.7 8.9 L54.2 9 L54.7 9.2 L55.2 9.3 L55.7 9.3 L56.1 9.5 L56.6 9.6 L57 9.8 L57.5 9.9 L58 10 L58.4 10.2 L58.9 10.4 L59.3 10.5 L59.8 10.7 L60.2 10.9 L60.7 11 L61.1 11.2 L61.6 11.5 L62 11.7 L62.4 11.8 L62.9 12 L63.3 12.3 L63.7 12.5 L64.2 12.7 L64.5 13 L64.9 13.3 L65.4 13.5 L65.7 13.8 L66.1 14.1 L66.4 14.4 L66.9 14.7 L67.2 15 L67.5 15.3 L67.9 15.5 L68.2 15.9 L68.5 16.3 L68.7 16.6 L69.1 17 L69.3 17.3 L69.5 17.7 L69.8 18.1 L70 18.5 L70.2 18.8 L70.3 19.3 L70.4 19.7 L70.6 20.1 L70.6 20.5 L70.6 20.9 L70.7 21.3 L70.7 21.8 L70.6 22.2 L70.6 22.6 L70.5 23 L70.4 23.4 L70.3 23.8 L70.1 24.3 L69.9 24.6 L69.7 25 L69.5 25.4 L69.2 25.8 L69 26.1 L68.6 26.4 L68.3 26.8 L68 27.1 L67.8 27.5 L67.4 27.8 L67 28.1 L66.7 28.4 L66.3 28.7 L65.9 29 L65.6 29.3 L65.2 29.5 L64.8 29.8 L64.3 30 L63.9 30.2 L63.6 30.5 L63.1 30.7 L62.7 30.9 L62.2 31.1 L61.8 31.3 L61.4 31.6 L61 31.8 L60.5 32 L60 32.1 L59.6 32.3 L59.2 32.5 L58.7 32.6 L58.2 32.8 L57.8 33 L57.3 33.1 L56.9 33.3 L56.4 33.4 L55.9 33.5 L55.4 33.6 L54.9 33.7 L54.5 33.9 L54 34 L53.5 34.1 L53.1 34.3 L52.6 34.3 L52.1 34.4 L51.6 34.5 L51.2 34.6 L50.7 34.7 L50.2 34.8 L49.7 34.9 L49.2 35 L48.8 35 L48.3 35 L47.8 35 L47.3 35.2 L46.8 35.1 L46.3 35.2 L45.8 35.2 L45.3 35.3 L44.8 35.3 L44.3 35.4 L43.8 35.5 L43.4 35.4 L42.9 35.5 L42.4 35.5 L41.9 35.4 L41.4 35.5 L40.9 35.5 L40.4 35.4 L39.9 35.4 L39.4 35.5 L38.9 35.5 L38.4 35.4 L38 35.4 L37.5 35.3 L37 35.3 L36.5 35.3 L36 35.3 L35.5 35.2 L35 35.2 L34.6 35.1 L34.1 35 L33.6 35 L33.1 34.9 L32.6 34.9 L32.1 34.8 L31.7 34.7 L31.1 34.7 L30.7 34.6 L30.2 34.5 L29.7 34.4 L29.2 34.3 L28.8 34.2 L28.3 34.1 L27.8 34 L27.3 33.9 L26.8 33.8 L26.4 33.7 L25.9 33.6 L25.4 33.3 L25 33.2 L24.5 33.1 L24 33 L23.6 32.8 L23.1 32.7 L22.6 32.5 L22.2 32.3 L21.7 32.1 L21.3 32 L20.8 31.8 L20.4 31.6 L19.9 31.4 L19.5 31.2 L19.1 31 L18.6 30.8 L18.2 30.6 L17.7 30.4 L17.4 30.1 L17 29.8 L16.5 29.6 L16.1 29.3 L15.7 29.1 L15.4 28.8 L14.9 28.5 L14.5 28.2 L14.2 27.9 L13.9 27.6 L13.5 27.3 L13.1 27 L12.8 26.7 L12.5 26.3 L12.2 25.9 L11.9 25.6 L11.6 25.3 L11.3 24.8 L11.1 24.4 L10.9 24 L10.7 23.6 L10.4 23.2 L10.3 22.8 L10.2 22.4 L10 21.9 L9.9 21.5 L9.8 21 L9.9 20.5 L9.8 20.1 L9.9 19.7 L9.9 19.2 L10 18.7 L10.1 18.3 L10.2 17.8 L10.3 17.4 L10.5 17 L10.7 16.5 L10.9 16.1 L11.2 15.7 L11.4 15.3 L11.7 14.9 L11.9 14.5 L12.3 14.2 L12.6 13.7 L12.9 13.3 L13.3 13.1 L13.6 12.7 L14 12.4 L14.4 12.1 L14.7 11.8 L15.1 11.5 L15.5 11.1 L15.9 10.9 L16.3 10.5 L16.5 10.4 L16.2 9.9 L15.9 10 L15.5 10.3 L15.1 10.6 L14.7 10.9 L14.3 11.1 L13.8 11.5 L13.5 11.8 L13 12 L12.7 12.4 L12.2 12.7 L11.9 13.1 L11.6 13.5 L11.2 13.8 L10.8 14.2 L10.5 14.6 L10.3 15.1 L9.9 15.5 L9.7 16 L9.5 16.5 L9.2 16.9 L9 17.4 L8.9 17.9 L8.7 18.5 L8.6 19 L8.6 19.5 L8.5 20 L8.5 20.6 L8.4 21.1 L8.5 21.7 L8.6 22.2 L8.7 22.7 L8.9 23.3 L9 23.8 L9.2 24.2 L9.4 24.8 L9.7 25.3 L9.9 25.7 L10.1 26.2 L10.5 26.6 L10.8 27 L11.1 27.5 L11.5 27.9 L11.9 28.2 L12.2 28.6 L12.6 29 L13 29.4 L13.4 29.7 L13.8 30 L14.2 30.3 L14.6 30.6 L15 31 L15.5 31.2 L15.9 31.5 L16.3 31.8 L16.8 32.1 L17.2 32.4 L17.7 32.6 L18.1 32.8 L18.6 33.1 L19 33.3 L19.5 33.5 L20 33.7 L20.4 33.9 L20.9 34.1 L21.4 34.3 L21.9 34.5 L22.4 34.7 L22.8 34.9 L23.3 35 L23.8 35.2 L24.3 35.3 L24.8 35.4 L25.3 35.7 L25.8 35.8 L26.3 36 L26.8 36.1 L27.3 36.2 L27.8 36.2 L28.2 36.4 L28.8 36.5 L29.3 36.6 L29.8 36.7 L30.3 36.8 L30.7 36.9 L31.3 36.9 L31.8 37 L32.3 37.2 L32.8 37.2 L33.3 37.2 L33.8 37.3 L34.3 37.4 L34.8 37.5 L35.3 37.5 L35.8 37.5 L36.3 37.6 L36.8 37.6 L37.3 37.6 L37.9 37.7 L38.4 37.7 L38.9 37.8 L39.4 37.8 L39.9 37.8 L40.4 37.7 L40.9 37.8 L41.4 37.8 L41.9 37.8 L42.4 37.8 L42.9 37.8 L43.4 37.7 L44 37.8 L44.5 37.7 L45 37.6 L45.5 37.6 L46 37.6 L46.5 37.6 L47 37.5 L47.5 37.5 L48 37.4 L48.5 37.4 L49 37.3 L49.5 37.3 L50.1 37.2 L50.6 37.1 L51.1 37 L51.5 36.9 L52 36.8 L52.6 36.7 L53.1 36.6 L53.6 36.6 L54.1 36.4 L54.5 36.3 L55.1 36.2 L55.6 36 L56.1 35.9 L56.5 35.8 L57 35.8 L57.5 35.6 L58 35.4 L58.5 35.2 L59 35.1 L59.5 34.9 L60 34.8 L60.5 34.6 L60.9 34.3 L61.4 34.2 L61.9 34 L62.4 33.8 L62.8 33.5 L63.3 33.3 L63.8 33.1 L64.2 32.9 L64.7 32.6 L65.2 32.3 L65.6 32 L66.1 31.8 L66.5 31.5 L67 31.2 L67.4 30.9 L67.8 30.6 L68.2 30.2 L68.6 29.9 L69 29.6 L69.4 29.2 L69.8 28.8 L70.2 28.4 L70.5 28 L70.9 27.6 L71.2 27.1 L71.5 26.7 L71.7 26.2 L72.1 25.7 L72.3 25.2 L72.5 24.7 L72.7 24.1 L72.9 23.6 L73 23.1 L73 22.4 L73.1 21.9 L73.1 21.3 L73 20.7 L73 20.1 L72.9 19.6 L72.7 19 L72.6 18.5 L72.4 18 L72.1 17.4 L71.9 16.9 L71.6 16.5 L71.3 16 L71 15.5 L70.6 15.2 L70.3 14.7 L69.9 14.2 L69.6 13.9 L69.2 13.6 L68.7 13.2 L68.3 12.8 L67.9 12.5 L67.5 12.2 L67.1 11.9 L66.7 11.5 L66.2 11.3 L65.8 11 L65.3 10.7 L64.8 10.5 L64.4 10.2 L64 9.9 L63.5 9.7 L63 9.5 L62.5 9.4 L62.1 9.1 L61.6 8.9 L61.1 8.7 L60.6 8.5 L60.1 8.3 L59.7 8.2 L59.2 8 L58.7 7.8 L58.2 7.7 L57.7 7.6 L57.2 7.4 L56.7 7.2 L56.2 7.1 L55.7 7 L55.2 6.9 L54.7 6.7 L54.2 6.7 L53.7 6.5 L53.2 6.4 L52.7 6.4 L52.2 6.2 L51.7 6.1 L51.2 6 L50.7 6 L50.2 5.9 L49.7 5.8 L49.2 5.9 L48.7 5.7 L48.2 5.7 L47.7 5.7 L47.2 5.6 L46.7 5.6 L46.2 5.5 L45.7 5.5 L45.1 5.4 L44.6 5.5 L44.1 5.5 L43.6 5.4 L43.1 5.4 L42.6 5.4 L42.1 5.4 L41.6 5.3 L41.1 5.5 L40.6 5.4 L40.1 5.4 L39.5 5.4 L39 5.5 L38.5 5.5 L38 5.5 L37.5 5.6 L37 5.6 L36.5 5.7 L36 5.7 L35.5 5.8 L35 5.8 L34.5 5.9 L34 6 L33.5 6 L33 6.1 L32.5 6.2 L32 6.3 L31.5 6.3 L31 6.4 L30.4 6.5 L29.9 6.6 L29.5 6.7 L29 6.8 L28.5 7 L28 7.1 L27.5 7.3 L27 7.3 L26.5 7.4 L26 7.6 L25.5 7.8 L25 8 L24.5 8.1 L24.1 8.3 L23.6 8.4 L23.1 8.7 L22.6 8.9 L22.2 9.1 L21.7 9.3 L21.2 9.4 L20.8 9.7 L20.3 9.9 L19.8 10.1 L19.4 10.4 L19 10.7 L18.5 10.9 L18.1 11.2 L17.7 11.5 L17.2 11.8 L16.8 12.1 L16.4 12.4 L16 12.7 L15.6 13 L15.2 13.4 L14.8 13.8 L14.4 14.1 L14.1 14.5 L13.7 14.8 L13.4 15.2 L13.1 15.7 L12.7 16 L12.4 16.5 L12.2 16.9 L12 17.4 L11.7 17.9 L11.6 18.3 L11.3 18.8 Z"/>
+<path class="ck-red" opacity=".8" d="M14.1 36.2 L14.5 36.1 L14.9 35.9 L15.2 35.8 L15.6 35.6 L16 35.5 L16.4 35.4 L16.8 35.2 L17.1 35.1 L17.5 34.9 L17.9 34.8 L18.2 34.6 L18.6 34.4 L18.9 34.3 L19.3 34.1 L19.7 34 L20 33.8 L20.4 33.6 L20.8 33.4 L21.1 33.2 L21.5 33 L21.8 32.9 L22.2 32.7 L22.5 32.5 L22.9 32.3 L23.2 32.1 L23.6 32 L24 31.8 L24.3 31.6 L24.7 31.4 L25 31.3 L25.4 31.1 L25.8 30.9 L26.1 30.7 L26.5 30.5 L26.8 30.4 L27.2 30.2 L27.6 30 L27.9 29.8 L28.3 29.7 L28.6 29.5 L29 29.3 L29.3 29.1 L29.7 28.9 L30 28.7 L30.4 28.6 L30.8 28.4 L31.1 28.2 L31.5 28 L31.8 27.9 L32.2 27.7 L32.6 27.5 L32.9 27.3 L33.3 27.1 L33.6 27 L34 26.8 L34.3 26.6 L34.7 26.4 L35.1 26.3 L35.4 26.1 L35.8 25.9 L36.1 25.7 L36.5 25.5 L36.9 25.4 L37.2 25.2 L37.6 25 L37.9 24.8 L38.3 24.6 L38.6 24.5 L39 24.3 L39.4 24.1 L39.7 23.9 L40.1 23.7 L40.4 23.6 L40.8 23.4 L41.2 23.2 L41.5 23 L41.9 22.9 L42.2 22.7 L42.6 22.5 L42.9 22.3 L43.3 22.1 L43.7 22 L44 21.8 L44.4 21.6 L44.7 21.4 L45.1 21.2 L45.4 21.1 L45.8 20.9 L46.1 20.7 L46.5 20.5 L46.9 20.3 L47.2 20.2 L47.6 20 L47.9 19.8 L48.3 19.6 L48.6 19.4 L49 19.3 L49.4 19.1 L49.7 18.9 L50.1 18.7 L50.4 18.5 L50.8 18.4 L51.2 18.2 L51.5 18 L51.9 17.8 L52.2 17.6 L52.6 17.5 L53 17.3 L53.3 17.1 L53.7 16.9 L54 16.8 L54.4 16.6 L54.8 16.4 L55.1 16.2 L55.5 16.1 L55.8 15.9 L56.2 15.7 L56.5 15.5 L56.9 15.3 L57.2 15.1 L57.6 15 L58 14.8 L58.3 14.6 L58.7 14.4 L59 14.3 L59.4 14.1 L59.7 13.9 L60.1 13.7 L60.5 13.5 L60.8 13.3 L61.2 13.2 L61.5 13 L61.9 12.8 L62.2 12.6 L62.6 12.4 L63 12.3 L63.3 12.1 L63.7 11.9 L64 11.7 L64.4 11.5 L64.7 11.3 L65.1 11.1 L65.4 10.9 L65.8 10.7 L66.1 10.5 L66.4 10.3 L66.8 10.1 L67.2 9.9 L67.5 9.7 L67.8 9.5 L68.2 9.3 L68.5 9.1 L68.9 8.9 L69.2 8.7 L69.6 8.5 L69.9 8.3 L70.1 8.2 L69.9 7.8 L69.7 7.9 L69.3 8 L69 8.2 L68.6 8.3 L68.2 8.5 L67.9 8.7 L67.5 8.8 L67.1 9 L66.8 9.1 L66.4 9.3 L66 9.4 L65.6 9.6 L65.3 9.8 L64.9 9.9 L64.6 10.1 L64.2 10.3 L63.8 10.4 L63.5 10.6 L63.1 10.8 L62.7 10.9 L62.4 11.1 L62 11.2 L61.6 11.4 L61.3 11.6 L60.9 11.8 L60.6 11.9 L60.2 12.1 L59.8 12.3 L59.5 12.5 L59.1 12.7 L58.8 12.8 L58.4 13 L58 13.2 L57.7 13.4 L57.3 13.5 L57 13.7 L56.6 13.9 L56.3 14.1 L55.9 14.3 L55.5 14.4 L55.2 14.6 L54.8 14.8 L54.5 15 L54.1 15.2 L53.8 15.3 L53.4 15.5 L53 15.7 L52.7 15.9 L52.3 16.1 L52 16.2 L51.6 16.4 L51.2 16.6 L50.9 16.8 L50.5 16.9 L50.2 17.1 L49.8 17.3 L49.5 17.5 L49.1 17.7 L48.8 17.9 L48.4 18 L48 18.2 L47.7 18.4 L47.3 18.6 L47 18.8 L46.6 18.9 L46.2 19.1 L45.9 19.3 L45.5 19.4 L45.2 19.6 L44.8 19.8 L44.5 20 L44.1 20.2 L43.7 20.3 L43.4 20.5 L43 20.7 L42.7 20.9 L42.3 21 L42 21.3 L41.6 21.4 L41.2 21.6 L40.9 21.8 L40.5 22 L40.2 22.1 L39.8 22.3 L39.4 22.5 L39.1 22.7 L38.7 22.8 L38.4 23 L38 23.2 L37.7 23.4 L37.3 23.5 L36.9 23.7 L36.6 23.9 L36.2 24.1 L35.9 24.3 L35.5 24.5 L35.1 24.6 L34.8 24.8 L34.4 25 L34.1 25.2 L33.7 25.4 L33.4 25.5 L33 25.7 L32.6 25.9 L32.3 26.1 L31.9 26.3 L31.6 26.4 L31.2 26.6 L30.8 26.8 L30.5 26.9 L30.2 27.2 L29.8 27.3 L29.4 27.5 L29.1 27.7 L28.7 27.9 L28.4 28 L28 28.2 L27.6 28.4 L27.3 28.6 L26.9 28.8 L26.6 29 L26.2 29.1 L25.9 29.3 L25.5 29.5 L25.1 29.7 L24.8 29.8 L24.4 30 L24.1 30.2 L23.7 30.4 L23.4 30.6 L23 30.7 L22.6 30.9 L22.3 31.1 L21.9 31.3 L21.6 31.4 L21.2 31.6 L20.8 31.8 L20.5 32 L20.1 32.2 L19.8 32.3 L19.4 32.5 L19.1 32.7 L18.7 32.9 L18.3 33 L18 33.2 L17.6 33.4 L17.3 33.7 L16.9 33.8 L16.6 34.1 L16.3 34.3 L15.9 34.5 L15.6 34.7 L15.2 34.9 L14.9 35.1 L14.6 35.3 L14.2 35.5 L13.9 35.8 Z"/>
+</svg>
+    </div>
+    <div data-el="status-glyphs" data-name="Note status" data-job="Checked, how many open, or re-checking: the note list becomes a board of what is done." data-where="Sidebar, ⌘K results, the Dock badge.">
+      <svg class="el el-status-glyphs" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 26" role="img" aria-label="Note list status: checked, one open, re-checking">
+<rect class="ck-yel" x="3" y="4" width="16" height="16" rx="2"/>
+<path class="ck-oy" d="M6.2 12.9 L6.2 13.4 L6.2 13.9 L6.3 14.2 L6.4 14.4 L6.6 14.6 L6.8 14.9 L6.9 15.3 L7.3 15.8 L7.7 16.3 L8.1 16.6 L8.7 17 L10.2 17 L10.9 16.1 L11 15.7 L11.2 15.3 L11.3 15 L11.5 14.6 L11.6 14.1 L11.8 13.6 L11.9 12.7 L10.6 11.6 L9.4 12.1 L11.2 13.6 L11.5 13.2 L11.8 12.9 L12.1 12.6 L12.4 12.4 L12.7 12 L12.9 11.7 L13.2 11.4 L13.4 11.1 L13.7 10.8 L13.9 10.4 L14.1 10.1 L14.4 9.8 L14.6 9.5 L14.9 9.1 L15.1 8.8 L15.3 8.4 L15.5 8.1 L15.7 7.8 L15.7 7.7 L15.3 7.3 L15.2 7.3 L14.9 7.5 L14.6 7.8 L14.3 8 L13.9 8.3 L13.6 8.5 L13.3 8.8 L13 9 L12.7 9.3 L12.4 9.5 L12.1 9.8 L11.8 10.1 L11.5 10.3 L11.2 10.6 L10.9 10.9 L10.6 11.1 L10.3 11.4 L10 11.6 L9.8 11.8 L10.9 13.8 L10.5 13.9 L9.6 13.1 L9.5 13.1 L9.4 13.3 L9.3 13.7 L9.1 14 L8.9 14.3 L8.7 14.7 L8.6 15 L8.9 14.8 L9.8 14.6 L9.7 14.6 L9.5 14.4 L9.5 14.3 L9.3 14.1 L9.2 13.8 L9 13.4 L8.8 12.9 L8.5 12.4 L8 12.2 L7.4 12 L6.8 12.1 Z"/>
+<circle class="ck-sheet" cx="44" cy="12" r="8"/><circle class="ck-red-s" stroke-width="1.6" cx="44" cy="12" r="8"/><text class="ck-t ck-red" x="44" y="16.2" font-size="12" font-weight="700" text-anchor="middle">1</text>
+<path class="ck-sheet" d="M80 0.1 L92 20.9 L68 20.9 Z"/><path class="ck-ink-s" stroke-width="1.4" stroke-linejoin="round" d="M80 0.1 L92 20.9 L68 20.9 Z"/><text class="ck-t ck-ink" x="80" y="17.9" font-size="12" font-weight="700" text-anchor="middle">1</text>
+</svg>
+    </div>
+    <div data-el="dimension-line" data-name="Dimension line" data-job="How Inkling’s sketches show a quantity: extension lines, arrows, the value above." data-where="Sketches.">
+      <svg class="el el-dimension-line" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 70" role="img" aria-label="Dimension line">
+<line class="ck-ink-s" stroke-width=".9" x1="20" y1="62" x2="20" y2="34"/>
+<line class="ck-ink-s" stroke-width=".9" x1="200" y1="62" x2="200" y2="34"/>
+<line class="ck-ink-s" stroke-width=".9" x1="20" y1="44" x2="200" y2="44"/>
+<path class="ck-ink" d="M20 44 L29 41 L29 47 Z"/>
+<path class="ck-ink" d="M200 44 L191 41 L191 47 Z"/>
+<text class="ck-t ck-ink" x="110.0" y="37" font-size="12" text-anchor="middle">55:00</text>
+</svg>
+    </div>
+    <div data-el="detail-callout" data-name="Detail callout" data-job="Points at a part of a sketch and enlarges it, labelled like a drawing would be." data-where="Sketches with a step that zooms in.">
+      <svg class="el el-detail-callout" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 120" role="img" aria-label="Detail callout">
+<circle class="ck-ink-s" stroke-width="1" stroke-dasharray="10 3 2 3" cx="62" cy="62" r="40"/>
+<path class="ck-ink-s" stroke-width="1" d="M90 33 L130 20 L150 20"/>
+<circle class="ck-sheet" cx="166" cy="20" r="14"/><circle class="ck-ink-s" stroke-width="1.3" cx="166" cy="20" r="14"/>
+<text class="ck-t ck-ink" x="166" y="25" font-size="14" font-weight="700" text-anchor="middle">A</text>
+<text class="ck-l ck-ink" x="132" y="94" font-size="12">DETAIL A</text>
+<text class="ck-l ck-label" x="132" y="112" font-size="12">SCALE 2:1</text>
+<line class="ck-ink-s" stroke-width="1" x1="132" y1="99" x2="206" y2="99"/>
+</svg>
+    </div>
+    <div data-el="grid-tile" data-name="Grid tile" data-job="The show-through grid, five squares to the inch. Margins, gutters and sketches only." data-where="Behind the margins; the sketch ground.">
+      <svg class="el el-grid-tile" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Grid tile, five squares to the inch">
+<rect class="ck-sheet" width="64" height="64"/>
+<g class="ck-grid-s" stroke-width="1"><line x1="0" y1="0" x2="0" y2="64"/><line x1="0" y1="0" x2="64" y2="0"/><line x1="12.8" y1="0" x2="12.8" y2="64"/><line x1="0" y1="12.8" x2="64" y2="12.8"/><line x1="25.6" y1="0" x2="25.6" y2="64"/><line x1="0" y1="25.6" x2="64" y2="25.6"/><line x1="38.4" y1="0" x2="38.4" y2="64"/><line x1="0" y1="38.4" x2="64" y2="38.4"/><line x1="51.2" y1="0" x2="51.2" y2="64"/><line x1="0" y1="51.2" x2="64" y2="51.2"/><line x1="64" y1="0" x2="64" y2="64"/><line x1="0" y1="64" x2="64" y2="64"/></g>
+</svg>
+    </div>
+    <div data-el="mechanical-pencil" data-name="Mechanical pencil" data-job="Inkling’s tool: shown in the status line while it reads, and as the cursor while it sketches." data-where="Status line, drawing cursor.">
+      <svg class="el el-mechanical-pencil" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 28" role="img" aria-label="Mechanical pencil">
+<path class="ck-ink2" d="M4 14 L14 12.9 L14 15.1 Z"/>
+<path class="ck-steel" d="M14 12.4 L34 8.8 L34 19.2 L14 15.6 Z"/>
+<rect class="ck-ink" x="34" y="8.4" width="42" height="11.2" rx="1.5"/>
+<g opacity=".55"><line class="ck-steel-s" x1="40" y1="9" x2="44" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="43.2" y1="9" x2="47.2" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="46.4" y1="9" x2="50.4" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="49.6" y1="9" x2="53.6" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="52.8" y1="9" x2="56.8" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="56" y1="9" x2="60" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="59.2" y1="9" x2="63.2" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="62.4" y1="9" x2="66.4" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="65.6" y1="9" x2="69.6" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="68.8" y1="9" x2="72.8" y2="19" stroke-width="1"/><line class="ck-steel-s" x1="72" y1="9" x2="76" y2="19" stroke-width="1"/></g>
+<rect class="ck-ink2" x="76" y="9" width="72" height="10" rx="1.5"/>
+<rect class="ck-yel" x="108" y="9" width="5" height="10"/>
+<path class="ck-steel" d="M120 6.5 L160 6.5 Q164 6.5 164 10 L164 11.5 L124 11.5 Z"/>
+<rect class="ck-steel" x="148" y="9.6" width="16" height="8.8" rx="2"/>
+<rect class="ck-ink2" x="164" y="10.4" width="8" height="7.2" rx="2.4"/>
+</svg>
+    </div>
+  </template>
+</div></section>
+
+<!-- ============================================================ 06 colour -->
+<section class="sec" id="colour"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>06</b>of 13</div><div><h2 class="sec-title">Colour</h2><p class="sec-lede">Every colour has one job, taken from the checker’s pencils. Contrast is measured on this page against the sheet each colour sits on: 4.5:1 for text, 3:1 for marks.</p></div></div>
+  <div class="sec-body">
+    <div class="code3" aria-label="The checker's code">
+      <div><svg viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="7" width="24" height="12" class="m-yel"/></svg><p><b>Yellow: verified.</b> Read and holds, or answered. Bars, swipes, filled tags.</p></div>
+      <div><svg viewBox="0 0 26 26" aria-hidden="true"><ellipse cx="13" cy="13" rx="11" ry="8" fill="none" stroke="var(--red)" stroke-width="2"/></svg><p><b>Red: must change.</b> Rings, underlines, open tags, leaders. Never a fill, never a sentence.</p></div>
+      <div><svg viewBox="0 0 26 26" aria-hidden="true"><rect x="2" y="8" width="22" height="2.6" fill="var(--blue)"/><rect x="2" y="14" width="15" height="2.6" fill="var(--blue)"/></svg><p><b>Blue: conversation.</b> Your replies’ answers, Ask the room, chat.</p></div>
+    </div>
+    <div class="pals" id="pals"></div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 07 type -->
+<section class="sec" id="type"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>07</b>of 13</div><div><h2 class="sec-title">Type</h2><p class="sec-lede">An engineer’s lettering exists so that no character can be read as another. Both families here were drawn for exactly that.</p></div></div>
+  <div class="sec-body">
+    <div class="spec">
+      <div class="why"><b>Atkinson Hyperlegible Next</b>Your words. Drawn by the Braille Institute so that l, I and 1, or 0 and O, never pass for each other. Open shapes keep it warm enough for a journal.</div>
+      <div><p class="s-lead">Sub-50 10k by March</p><p class="s-body" id="type-body"></p><p class="glyphs" aria-label="Letters that are easy to confuse, all distinct">Il1 O0 rn m 5S 8B</p></div>
+    </div>
+    <div class="spec">
+      <div class="why"><b>B612</b>Inkling’s checks and every label. Made for Airbus cockpit displays: read at a glance, under stress, at small sizes.</div>
+      <div><p class="s-lab" id="type-check"></p></div>
+    </div>
+    <div class="spec">
+      <div class="why"><b>Atkinson Hyperlegible Mono</b>Numbers, tags, the title block. Every digit the same width, so times line up, from the same drawing as your words.</div>
+      <div><p class="s-mono">4:55 × 10 = 49:10<br>5:30 × 10 = 55:00<br>6 NOV · REV Δ1 · OPEN 0</p></div>
+    </div>
+    <div class="scale" aria-label="Type scale">
+      <div class="scale-r"><span class="mono">28 px</span><span class="smp" style="font:700 var(--fs-title)/1.2 var(--font-body)">Sheet titles</span><span class="job">Section heads on pages like this one</span></div>
+      <div class="scale-r"><span class="mono">22 px</span><span class="smp" style="font:700 var(--fs-lead)/1.2 var(--font-body)">Note titles</span><span class="job">The first line of a note</span></div>
+      <div class="scale-r"><span class="mono">17 px</span><span class="smp" style="font:400 var(--fs-body)/1.4 var(--font-body)">Your words</span><span class="job">Body text, 1.6 line height</span></div>
+      <div class="scale-r"><span class="mono">14 px</span><span class="smp" style="font:400 var(--fs-ui)/1.4 var(--font-label)">Checks and controls</span><span class="job">Check notes, buttons, the sidebar</span></div>
+      <div class="scale-r"><span class="mono">12 px</span><span class="smp" style="font:400 var(--fs-label)/1.4 var(--font-mono);letter-spacing:.06em;text-transform:uppercase">Labels · tags</span><span class="job">Title-block labels, status line, captions</span></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 08 motion and sound -->
+<section class="sec" id="motion"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>08</b>of 13</div><div><h2 class="sec-title">Motion and sound</h2><p class="sec-lede">Motion is the checker’s hand: it marks, it never decorates, and it never runs on the words you are typing. Checks arrive in silence; only finishing makes a sound.</p></div></div>
+  <div class="sec-body">
+    <div class="mots" id="mots"></div>
+    <div class="sounds">
+      <div class="snd"><p><b>Swipe</b> · a verified check. Filtered noise rising from 1.1 to 2.6 kHz over 220 ms, like a highlighter crossing paper.</p><button class="btn" data-snd="swipe">Play</button></div>
+      <div class="snd"><p><b>Stamp</b> · the page is signed. A 140 Hz thump falling to 55 Hz, with a short tick on top.</p><button class="btn" data-snd="stamp">Play</button></div>
+      <div class="snd"><p><b>No sound</b> · when a new check lands. A check should never interrupt you twice: once to see it, once to hear it.</p><span class="lab">Silent</span></div>
+    </div>
+    <p class="hint" id="snd-hint">Sound is off by default in the app and on this page. Pressing Play turns it on.</p>
+  </div>
+</div></section>
+
+<!-- ============================================================ 09 words -->
+<section class="sec" id="words"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>09</b>of 13</div><div><h2 class="sec-title">Words</h2><p class="sec-lede">Plain words on every control. The drafting words (Chk’d, Δ, left as is) only report what already happened, so you learn them without needing them.</p></div></div>
+  <div class="sec-body">
+    <div class="words">
+      <div class="wr"><span class="lab">Controls</span><p><span class="ctl">Reply</span><span class="ctl">Resolve</span><span class="ctl">Dismiss</span><span class="ctl">Undo</span><span class="ctl">Change 5:30 to 4:55</span><span class="ctl">Sketch it</span><span class="ctl">Ask the room</span><span class="ctl">Hide checks</span><span class="ctl">Chat</span></p></div>
+      <div class="wr"><span class="lab">Status line</span><p><span class="stat">Checking ¶2 · 1 open · Re-checking Δ1 · All clear · Checked by Inkling · 6 Nov · Left as is</span></p></div>
+      <div class="wr"><span class="lab">A check settles</span><p id="w-settle" style="font-family:var(--font-label);color:var(--blue)"></p></div>
+      <div class="wr"><span class="lab">Tooltips</span><p>On the Chk’d cell: <q>Initialled when every check is answered. Chk’d is short for checked, as on a drawing.</q> On a cloud: <q>You changed this after it was checked. Inkling is re-checking just this part.</q></p></div>
+      <div class="wr"><span class="lab">Empty note</span><p>Start writing. When you pause at the end of a paragraph, Inkling checks it.</p></div>
+      <div class="wr"><span class="lab">Nothing to check</span><p>Read all 4 paragraphs. Nothing to check.</p></div>
+      <div class="wr"><span class="lab">Offline</span><p>Inkling can’t check right now: the checker didn’t start, because Bun isn’t installed. Your note is saved, and checks resume when it starts. <span class="ctl">Try again</span></p></div>
+      <div class="wr"><span class="lab">Limit reached</span><p id="w-limit"></p></div>
+      <div class="wr"><span class="lab">Signed out</span><p>Inkling uses your Claude login. Run <span class="mono">claude</span> in Terminal and sign in, then come back.</p></div>
+      <div class="wr"><span class="lab">First run</span><p id="w-first"></p></div>
+      <div class="wr"><span class="lab">Error</span><p>That check didn’t come back. Nothing in your note changed. <span class="ctl">Check again</span></p></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 10 aha -->
+<section class="sec" id="aha"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>10</b>of 13</div><div><h2 class="sec-title">Aha moments</h2><p class="sec-lede">What a stranger should feel in the first session, in the order they meet it.</p></div></div>
+  <div class="sec-body">
+    <div class="cards4" id="ahas"></div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 11 refuses and risk -->
+<section class="sec" id="refuses"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>11</b>of 13</div><div><h2 class="sec-title">What it refuses, and its risk</h2><p class="sec-lede">A direction is mostly the things it will not do.</p></div></div>
+  <div class="sec-body two">
+    <div class="list">
+      <p class="list-h lab">Refuses</p>
+      <div class="li"><span class="mono">01</span><p><b>Grid under your words.</b> The grid fades out at the edge of the text column. Texture under text costs every reader a little, every line.</p></div>
+      <div class="li"><span class="mono">02</span><p><b>Red as a fill, or red sentences.</b> Red rings and tags only. A paragraph of red text reads as an alarm, and Inkling is asking, not alarming.</p></div>
+      <div class="li"><span class="mono">03</span><p><b>All-caps reading text.</b> Drafting letters in capitals; notes are not drawings. Capitals stay in 12 px labels.</p></div>
+      <div class="li"><span class="mono">04</span><p><b>Fake precision.</b> No made-up measurements, gauges or numbers dressed as data. Every number on the sheet is yours or Inkling’s arithmetic.</p></div>
+      <div class="li"><span class="mono">05</span><p><b>Initials it hasn’t earned.</b> The Chk’d cell fills only when nothing is open, and empties the moment you change checked words.</p></div>
+    </div>
+    <div class="list">
+      <p class="list-h lab">Risk</p>
+      <div class="li"><span class="mono">!</span><p><b>It can feel technical for journaling.</b> A diary entry with a title block can feel like paperwork.</p></div>
+      <div class="li"><span class="mono">→</span><p><b>Atkinson’s open shapes</b> carry the words, not a technical face; B612 appears only in Inkling’s notes and labels.</p></div>
+      <div class="li"><span class="mono">→</span><p><b>Every mark is drawn by hand:</b> rings wobble and overshoot, ticks taper, initials are written. Nothing is a vector checkbox.</p></div>
+      <div class="li"><span class="mono">→</span><p><b>The title block can fold</b> to one line (note, Chk’d, open) for notes that aren’t plans. The sign-off still happens.</p></div>
+      <div class="li"><span class="mono">→</span><p><b>Plain, friendly words</b> on every control, and the drafting words only in status lines.</p></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 12 missed -->
+<section class="sec" id="missed"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>12</b>of 13</div><div><h2 class="sec-title">Things you might have missed</h2><p class="sec-lede">Specific to Chk’d. The cross-cutting ones (app icon variants for macOS 26, Dock badge, VoiceOver) are on the overview.</p></div></div>
+  <div class="sec-body">
+    <div class="list">
+      <div class="li"><span class="mono">01</span><p><b>Red on a green pad is the classic colour-blind trap.</b> For deuteranopes the red rings and the green sheet sit close in hue. They still work, because the rings are dark against a light sheet and carry a number; that is why no check is ever colour alone.</p></div>
+      <div class="li"><span class="mono">02</span><p><b>What edits do to initials.</b> Change checked words and the Chk’d cell clears, a Δ goes in Rev, and only the clouded part is re-checked. Initials never sit on words they didn’t see.</p></div>
+      <div class="li"><span class="mono">03</span><p><b>The note list is a status board.</b> ✓, a number, or Δ beside every note, and “Open checks” as a filter in ⌘K, so “what’s unfinished?” is one keystroke.</p></div>
+      <div class="li"><span class="mono">04</span><p><b>Long notes sign by section.</b> A note with headings gets a Chk’d mark per heading, so one open check at the bottom doesn’t hold the whole page hostage.</p></div>
+      <div class="li"><span class="mono">05</span><p><b>Whose initials.</b> IK for Inkling; a custom mind takes its own two letters, so a note checked by “Skeptic” reads SK.</p></div>
+      <div class="li"><span class="mono">06</span><p><b>Export keeps the block if you ask.</b> Word and PDF can carry the title block as a header (By, Date, Chk’d), which is what a design doc for a team wants. Off by default; the marks never print.</p></div>
+      <div class="li"><span class="mono">07</span><p><b>Blueprint is a real dark mode,</b> not inverted green. The yellow stays the same, because verified should not change meaning at night.</p></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============================================================ 13 build -->
+<section class="sec" id="build"><div class="wrap">
+  <div class="sec-head"><div class="sec-num">Sheet<b>13</b>of 13</div><div><h2 class="sec-title">Building it in GPUI</h2><p class="sec-lede">What changes, where, and roughly how big. S is under a day, M a few days, L a week.</p></div></div>
+  <div class="sec-body">
+    <div class="build">
+      <div class="br h"><span>Piece</span><span>File</span><span>How</span><span>Size</span></div>
+      <div class="br"><span>Palette, both themes</span><code>src/theme.rs</code><p>Replace the copied palette with desk, sheet, grid, ink, label, rule, yellow, red, blue; blueprint for dark.</p><span class="cost">S</span></div>
+      <div class="br"><span>Fonts</span><code>assets/fonts, load_fonts</code><p>Bundle Atkinson Hyperlegible Next (400, 600, 700, italic), Atkinson Hyperlegible Mono (400, 700), B612 (400, 700). All OFL.</p><span class="cost">S</span></div>
+      <div class="br"><span>Title block header</span><code>src/note_page.rs</code><p>A div grid with 1 px rules; Open is a button that jumps. Mind and mode move here from the header menus.</p><span class="cost">S</span></div>
+      <div class="br"><span>Gutter bars</span><code>src/editor.rs</code><p>Quads beside each block from <code>line_of</code>; state from read hashes and the read in flight. Striped while reading.</p><span class="cost">S</span></div>
+      <div class="br"><span>Rings and underlines</span><code>src/editor.rs</code><p>Anchor painting: a wobbled ellipse path for anchors of three words or fewer, an underline for longer ones.</p><span class="cost">M</span></div>
+      <div class="br"><span>Leaders</span><code>src/margin.rs</code><p><code>tether()</code> becomes a dot at the line end, one straight segment and a shoulder.</p><span class="cost">S</span></div>
+      <div class="br"><span>Check notes</span><code>src/note_page.rs</code><p>Ruled cards, B612 text, the numbered tag; folded line when verified or left as is.</p><span class="cost">S</span></div>
+      <div class="br"><span>Re-check on edit, cloud</span><code>editor.rs, note_page.rs</code><p>Track edits inside anchors; after a pause, re-run the read task with the thread in context; draw the cloud and Δ.</p><span class="cost">M</span></div>
+      <div class="br"><span>Highlighter swipe</span><code>src/editor.rs</code><p>Yellow quads under the text run, animated with <code>request_animation_frame</code>. No blend mode needed: text paints after.</p><span class="cost">S</span></div>
+      <div class="br"><span>Sign-off</span><code>store.rs, note_page.rs</code><p><code>checked_at</code>, <code>checked_by</code> on the note; initials path in the cell; cleared on any edit inside a checked anchor.</p><span class="cost">S</span></div>
+      <div class="br"><span>Note list status</span><code>src/app.rs</code><p>✓, open count or Δ per row from the saved threads.</p><span class="cost">S</span></div>
+      <div class="br"><span>Sketches on the grid</span><code>drawing.rs, prompts.ts</code><p>Grid ground, ink and red only, dimension lines; the drawing rules ask for dimension-line style.</p><span class="cost">M</span></div>
+      <div class="br"><span>App icon</span><code>scripts/bundle.sh</code><p>icon.svg → iconset → .icns with <code>iconutil</code>; light and dark now, clear and tinted with Icon Composer.</p><span class="cost">S</span></div>
+    </div>
+    <p class="total">All together about M: the pieces are small, and most are paint changes on structures the app already has. The re-check on edit is the only new behaviour, and it is shared by all three directions.</p>
+  </div>
+</div></section>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <p>Chk’d is direction 2 of 3. The UX core is the same in all three; only the world changes.</p>
+  <nav aria-label="Other directions"><a href="index.html">Overview</a><a href="proof.html">Proof</a><a href="threads.html">Loose Threads</a></nav>
+</div></footer>
+
+<!-- the app window, used by the live app and by every state panel -->
+<template id="win-tpl">
+  <div class="win doc" data-doc="app">
+    <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+    <aside class="side" aria-label="Notes">
+      <div class="side-search"><span>Find or start a note</span><kbd>⌘K</kbd></div>
+      <p class="side-h lab">Running</p>
+      <div class="nrow cur"><span data-cell="sidenote"></span><span class="nst" data-cell="sidestatus"></span></div>
+      <div class="nrow"><span>Shoes: what wore out where</span><span class="nst" data-st="ok"></span></div>
+      <p class="side-h lab">Home</p>
+      <div class="nrow"><span>Why the bread didn’t rise</span><span class="nst" data-st="re"></span></div>
+      <div class="nrow"><span>Kitchen shelf measurements</span><span class="nst" data-st="ok"></span></div>
+      <p class="side-h lab">Notes</p>
+      <div class="nrow"><span>Reading list for winter</span><span class="nst"></span></div>
+      <div class="nrow"><span>Questions for the landlord</span><span class="nst" data-st="1"></span></div>
+      <p class="side-legend">✓ checked · ① open · Δ re-checking</p>
+    </aside>
+    <div class="main">
+      <div class="head">
+        <div class="tb">
+          <div class="tb-c tb-note"><span class="tb-l">Note</span><span class="tb-v" data-cell="note"></span></div>
+          <div class="tb-c"><span class="tb-l">By</span><span class="tb-v">You</span></div>
+          <div class="tb-c"><span class="tb-l">Date</span><span class="tb-v" data-cell="date"></span></div>
+          <div class="tb-c tb-chk" title="Initialled when every check is answered. Chk’d is short for checked, as on a drawing."><span class="tb-l">Chk’d</span><span class="tb-v" data-cell="chkd"></span></div>
+          <div class="tb-c"><span class="tb-l">Date</span><span class="tb-v" data-cell="chkdate"></span></div>
+          <div class="tb-c"><span class="tb-l">Mind</span><span class="tb-v">Inkling</span></div>
+          <div class="tb-c span2"><span class="tb-l">Mode</span><span class="tb-v">Checks as you write</span></div>
+          <div class="tb-c"><span class="tb-l">Open</span><button class="tb-open" data-cell="open" title="Jump to the next open check (⌥⌘↓)">–</button></div>
+          <div class="tb-c"><span class="tb-l">Rev</span><span class="tb-v" data-cell="rev">–</span></div>
+        </div>
+        <div class="tools">
+          <button class="btn" data-act="clean"><span data-cell="cleanlabel">Hide checks</span><span class="k">⌘⇧.</span></button>
+          <button class="btn" data-act="chat"><span>Chat</span><span class="k">⌘J</span></button>
+        </div>
+      </div>
+      <div class="body">
+        <svg class="layer under" aria-hidden="true"></svg>
+        <div class="text"></div>
+        <div class="margin"></div>
+        <svg class="layer over" aria-hidden="true"></svg>
+      </div>
+      <div class="status">
+        <svg class="pencil" viewBox="0 0 176 28" aria-hidden="true"><path class="m-ink" d="M4 14 L14 12.9 L14 15.1 Z" opacity=".7"/><path fill="#9AA5AA" d="M14 12.4 L34 8.8 L34 19.2 L14 15.6 Z"/><rect class="m-ink" x="34" y="8.4" width="42" height="11.2" rx="1.5"/><rect class="m-ink" x="76" y="9" width="72" height="10" rx="1.5" opacity=".75"/><rect class="m-yel" x="108" y="9" width="5" height="10"/><rect fill="#9AA5AA" x="148" y="9.6" width="16" height="8.8" rx="2"/></svg>
+        <span class="status-msg" data-cell="status" role="status" aria-live="polite"></span>
+        <span class="grow"><button class="btn btn-quiet" data-act="room">Ask the room</button></span>
+      </div>
+      <div class="chat" aria-label="Chat about this note">
+        <div class="chat-h"><b>Chat</b><span class="lab">about this note</span><button class="btn btn-quiet" data-act="chat-close">Close</button></div>
+        <div class="chat-b"></div>
+        <div class="chat-f"><input type="text" placeholder="Ask about this note…" aria-label="Message" readonly></div>
+      </div>
+      <div class="toast" role="status"><span data-cell="toastmsg">Dismissed</span><button class="btn" data-act="undo">Undo <span class="k">⌘Z</span></button><i></i></div>
+    </div>
+  </div>
+</template>
+
+<script>
+(function () {
+"use strict";
+const N = Board.note;
+const NS = "http://www.w3.org/2000/svg";
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+function S(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs || {}) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function H(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const today = (() => { const d = new Date(); return d.getDate() + " " + d.toLocaleString("en-GB", { month: "short" }).toUpperCase(); })();
+const todayPlain = (() => { const d = new Date(); return d.getDate() + " " + d.toLocaleString("en-GB", { month: "short" }); })();
+
+/* ------------------------------------------------------------------ hand-drawn geometry
+   The same shapes as scratchpad/check/elements.py: a ribbon is a filled outline round a
+   centre line, so strokes swell and taper like a pencil instead of SVG's even stroke. */
+function rng(seed) { let a = (seed >>> 0) || 1; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function cubic(p0, p1, p2, p3, n) { const o = []; for (let i = 0; i <= n; i++) { const t = i / n, a = (1 - t) ** 3, b = 3 * (1 - t) ** 2 * t, c = 3 * (1 - t) * t * t, d = t ** 3; o.push([a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]]); } return o; }
+function resample(pts, step) { const out = [pts[0]]; let acc = 0; for (let i = 1; i < pts.length; i++) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; const seg = Math.hypot(x1 - x0, y1 - y0); if (!seg) continue; let t = step - acc; while (t <= seg) { out.push([x0 + (x1 - x0) * t / seg, y0 + (y1 - y0) * t / seg]); t += step; } acc = seg - (t - step); } out.push(pts[pts.length - 1]); return out; }
+const P = (v) => (Math.round(v * 10) / 10);
+const polyD = (pts) => "M" + pts.map((p) => P(p[0]) + " " + P(p[1])).join(" L");
+function ribbon(pts, width, taper, wobble, seed) {
+  taper = taper || [0.25, 0.25]; const r = rng(seed || 1); const n = pts.length; const L = [], R = [];
+  for (let i = 0; i < n; i++) {
+    const [x, y] = pts[i], a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, n - 1)];
+    const dx = b[0] - a[0], dy = b[1] - a[1], ln = Math.hypot(dx, dy) || 1, nx = -dy / ln, ny = dx / ln, t = i / (n - 1 || 1);
+    let w = typeof width === "function" ? width(t) : width;
+    if (t < taper[0]) w *= 0.35 + 0.65 * Math.sin(t / taper[0] * Math.PI / 2);
+    if (t > 1 - taper[1]) w *= 0.35 + 0.65 * Math.sin((1 - t) / taper[1] * Math.PI / 2);
+    const j = (r() - 0.5) * (wobble || 0);
+    L.push([x + nx * (w / 2 + j), y + ny * (w / 2 + j)]); R.push([x - nx * (w / 2 - j), y - ny * (w / 2 - j)]);
+  }
+  return polyD(L.concat(R.reverse())) + " Z";
+}
+function ringGeom(x, y, w, h, seed) {
+  const r = rng(seed || 3), cx = x + w / 2, cy = y + h / 2, rx = w / 2 + 7, ry = h / 2 + 4, a0 = (196 + (r() * 16 - 8)) * Math.PI / 180;
+  const pts = []; for (let i = 0; i <= 72; i++) { const t = i / 72, a = a0 + t * 388 * Math.PI / 180, dr = 1 + 0.07 * t; pts.push([cx + rx * dr * Math.cos(a), cy + ry * dr * Math.sin(a) - 1.6 * t]); }
+  const rs = resample(pts, 0.5);
+  return { d: ribbon(rs, (t) => 2.1 * (0.85 + 0.3 * Math.sin(Math.PI * t)), [0.12, 0.22], 0.12, seed || 3), line: polyD(rs), box: [cx - rx * 1.07, cy - ry * 1.07 - 2, cx + rx * 1.07, cy + ry * 1.07] };
+}
+function underGeom(x1, x2, y, seed) {
+  const r = rng(seed || 7), dx = x2 - x1;
+  const pts = cubic([x1, y + (r() - 0.5)], [x1 + dx / 3, y + 1.3], [x1 + 2 * dx / 3, y - 0.7], [x2, y + 0.6 + r() * 0.6], Math.max(12, Math.round(dx / 6)));
+  const rs = resample(pts, 0.6);
+  return { d: ribbon(rs, 1.9, [0.03, 0.08], 0.1, seed || 7), line: polyD(rs) };
+}
+function swipeGeom(x, y, w, h, seed) {
+  const r = rng(seed || 5);
+  const top = [[x - 3, y + 2.2], [x + w * 0.5, y + 0.8], [x + w + 3, y]];
+  const bot = [[x + w + 4, y + h - 0.6], [x + w * 0.5, y + h + 0.4], [x - 2, y + h + 1.4]];
+  const right = [0.3, 0.55, 0.8].map((k) => [x + w + 3 + (r() * 3 - 1.5), y + h * k]);
+  const left = [0.75, 0.5, 0.25].map((k) => [x - 2 + (r() * 3 - 1.5), y + h * k]);
+  return polyD(top.concat(right, bot, left)) + " Z";
+}
+function cloudGeom(x, y, w, h, rad, pad) {
+  rad = rad || 6; pad = pad || 7;
+  const x0 = x - pad, y0 = y - pad, x1 = x + w + pad, y1 = y + h + pad, W = x1 - x0, Hh = y1 - y0, per = 2 * (W + Hh);
+  const n = Math.max(8, Math.round(per / (rad * 1.7))), pts = [];
+  for (let i = 0; i < n; i++) { const d = per * i / n; if (d < W) pts.push([x0 + d, y0]); else if (d < W + Hh) pts.push([x1, y0 + d - W]); else if (d < 2 * W + Hh) pts.push([x1 - (d - W - Hh), y1]); else pts.push([x0, y1 - (d - 2 * W - Hh)]); }
+  let d = "M" + P(pts[0][0]) + " " + P(pts[0][1]);
+  for (let i = 1; i <= n; i++) { const p = pts[i % n]; d += " A" + rad + " " + rad + " 0 0 1 " + P(p[0]) + " " + P(p[1]); }
+  return { d, n, top: [x1, y0] };
+}
+function ikStrokes(x, y, s) {
+  s = s || 1;
+  const poly = (...segs) => segs.reduce((acc, seg) => acc.concat(acc.length ? seg.slice(1) : seg), []);
+  const st = [
+    cubic([x - 1.6 * s, y + 1.0 * s], [x + 0.8 * s, y + 0.6 * s], [x + 3.4 * s, y + 0.8 * s], [x + 6.2 * s, y + 0.4 * s], 10),
+    cubic([x + 2.3 * s, y + 0.8 * s], [x + 2.6 * s, y + 8 * s], [x + 2.0 * s, y + 16 * s], [x + 2.2 * s, y + 23 * s], 20),
+    cubic([x - 1.4 * s, y + 23.4 * s], [x + 1 * s, y + 23.0 * s], [x + 3.6 * s, y + 23.4 * s], [x + 6.4 * s, y + 23.0 * s], 10),
+    cubic([x + 10 * s, y + 0.5 * s], [x + 10.5 * s, y + 8 * s], [x + 9.6 * s, y + 16 * s], [x + 10 * s, y + 23.5 * s], 24),
+    poly(cubic([x + 21 * s, y + 0.5 * s], [x + 17 * s, y + 6 * s], [x + 13.5 * s, y + 9.5 * s], [x + 10.6 * s, y + 12.4 * s], 18),
+      cubic([x + 10.6 * s, y + 12.4 * s], [x + 14 * s, y + 15 * s], [x + 18 * s, y + 19.5 * s], [x + 22.5 * s, y + 24 * s], 18)),
+  ];
+  return st.map((pts, k) => { const rs = resample(pts, 0.4 * s); return { d: ribbon(rs, (t) => (k === 0 || k === 2 ? 1.6 : 1.9) * s * (1.05 - 0.25 * t), [0.1, 0.3], 0.06 * s, 2 + k), line: polyD(rs) }; });
+}
+
+/* masks reveal a filled ribbon along its centre line, so a shape that is not a
+   stroke can still be drawn on like one */
+let maskId = 0;
+function drawOn(el, ms, delay) {
+  if (!delay || Board.still || !el.getTotalLength) return Board.draw(el, ms, delay);
+  const len = el.getTotalLength();
+  el.style.strokeDasharray = len + " " + len; el.style.strokeDashoffset = len;
+  return Board.draw(el, ms, delay).then(() => { el.style.strokeDashoffset = ""; });
+}
+function maskedPath(layer, geom, cls, opts) {
+  opts = opts || {};
+  let defs = layer.querySelector("defs"); if (!defs) defs = S("defs", {}, layer);
+  const id = "mk" + (++maskId);
+  const m = S("mask", { id, maskUnits: "userSpaceOnUse", x: -50, y: -50, width: 4000, height: 4000 }, defs);
+  const mp = S("path", { d: geom.line, fill: "none", stroke: "#fff", "stroke-width": opts.mw || 9, "stroke-linecap": "round", "stroke-linejoin": "round" }, m);
+  const p = S("path", { d: geom.d, class: cls, mask: "url(#" + id + ")" }, opts.parent || layer);
+  if (opts.opacity != null) p.setAttribute("opacity", opts.opacity);
+  return { path: p, mask: mp, draw: (ms, delay) => drawOn(mp, ms, delay) };
+}
+function tagSVG(layer, cx, cy, num, done) {
+  const g = S("g", { class: "m-pop" }, layer);
+  if (done) {
+    S("circle", { cx, cy, r: 9, class: "m-yel" }, g);
+    S("circle", { cx, cy, r: 9, class: "m-onyel-s", "stroke-width": 1.3 }, g);
+    S("path", { d: `M${cx - 3.6} ${cy + 0.2} L${cx - 1} ${cy + 3} L${cx + 4} ${cy - 3.4}`, class: "m-onyel-s", "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+  } else {
+    S("circle", { cx, cy, r: 9, class: "m-sheet" }, g);
+    S("circle", { cx, cy, r: 9, class: "m-red-s", "stroke-width": 1.6 }, g);
+    const t = S("text", { x: cx, y: cy + 4.2, class: "m-red m-t", "text-anchor": "middle" }, g); t.textContent = num;
+  }
+  return g;
+}
+function deltaSVG(layer, x, y, s, num) {
+  const h = s * Math.sqrt(3) / 2, g = S("g", { class: "m-pop" }, layer);
+  const d = `M${x} ${y - h * 2 / 3} L${x + s / 2} ${y + h / 3} L${x - s / 2} ${y + h / 3} Z`;
+  S("path", { d, class: "m-sheet" }, g); S("path", { d, class: "m-ink-s", "stroke-width": 1.4, "stroke-linejoin": "round" }, g);
+  const t = S("text", { x, y: y + h / 3 - 3, class: "m-ink m-t", "text-anchor": "middle" }, g); t.textContent = num;
+  return g;
+}
+function pop(el, ms) { if (!el || Board.still) return; el.animate([{ transform: "scale(.4)", opacity: 0 }, { transform: "scale(1.12)", opacity: 1, offset: 0.7 }, { transform: "scale(1)" }], { duration: ms || 180, easing: "ease-out" }); }
+function tagHTML(num, done) {
+  const svg = done
+    ? `<svg class="tagi" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" class="m-yel"/><circle cx="10" cy="10" r="8.5" class="m-onyel-s" stroke-width="1.3"/><path d="M6.4 10.2 L9 13 L14 6.6" class="m-onyel-s" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : `<svg class="tagi" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" class="m-sheet"/><circle cx="10" cy="10" r="8.5" class="m-red-s" stroke-width="1.6"/><text x="10" y="14.2" text-anchor="middle" class="m-red m-t">${num}</text></svg>`;
+  return svg;
+}
+function statusHTML(kind, n) {
+  if (kind === "ok") return `<svg viewBox="0 0 18 18" aria-label="checked"><rect x="1.5" y="1.5" width="15" height="15" rx="1.5" class="m-yel"/><path d="M5 9.2 L7.8 12 L13.2 5.6" class="m-onyel-s" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if (kind === "re") return `<svg viewBox="0 0 18 18" aria-label="re-checking"><path d="M9 2 L16.5 15.5 L1.5 15.5 Z" class="m-sheet"/><path d="M9 2 L16.5 15.5 L1.5 15.5 Z" class="m-ink-s" stroke-width="1.3" stroke-linejoin="round"/><text x="9" y="14" text-anchor="middle" class="m-ink m-t" style="font-size:9px">1</text></svg>`;
+  if (kind === "open") return `<svg viewBox="0 0 18 18" aria-label="${n} open"><circle cx="9" cy="9" r="7.6" class="m-sheet"/><circle cx="9" cy="9" r="7.6" class="m-red-s" stroke-width="1.5"/><text x="9" y="12.6" text-anchor="middle" class="m-red m-t" style="font-size:10px">${n}</text></svg>`;
+  return "";
+}
+
+/* ------------------------------------------------------------------ the note as markup
+   Every word comes from Board.note; anchors are found in the text, not hard-coded. */
+function wrapOnce(html, needle, open, close) {
+  const i = html.indexOf(esc(needle)); if (i < 0) return html;
+  return html.slice(0, i) + open + esc(needle) + close + html.slice(i + esc(needle).length);
+}
+function paraHTML(i) {
+  let h = esc(N.paras[i]);
+  if (i === N.threads[0].para) {
+    h = wrapOnce(h, N.room.quote, '<span data-room>', "</span>");
+    const q = N.threads[0].quote;
+    const inner = esc(q).replace(esc(N.threads[0].short), '<span data-value="1">' + esc(N.threads[0].short) + "</span>");
+    h = h.replace(esc(q), '<span data-anchor="1">' + inner + "</span>");
+  }
+  if (i === N.threads[1].para) h = wrapOnce(h, N.threads[1].quote, '<span data-anchor="2">', "</span>");
+  return h;
+}
+
+/* ------------------------------------------------------------------ the checker
+   One component draws the hero sheet and the app window. State lives in plain
+   fields; paint() redraws every mark from it, so resizing never loses a mark and
+   transitions only add an animation on top of a correct static frame. */
+class Doc {
+  constructor(root, opt) {
+    this.root = root; this.opt = opt; this.gen = 0;
+    this.body = $(".body", root); this.text = $(".text", root); this.margin = $(".margin", root);
+    this.under = $(".layer.under", root); this.over = $(".layer.over", root);
+    this.cells = {}; $$("[data-cell]", root).forEach((c) => (this.cells[c.dataset.cell] = c));
+    this.pid = "stripe" + (++maskId);
+    if (this.cells.open) this.cells.open.addEventListener("click", () => this.jump(1));
+    this.reset("note");
+    const ro = new ResizeObserver(() => this.paint()); ro.observe(this.body);
+  }
+  /* -------- model */
+  reset(mode) {
+    this.gen++;
+    this.mode = mode || "note";
+    this.signed = false; this.rev = 0; this.active = null; this.clean = false; this.banner = null; this.drawStep = 0; this.rooming = false;
+    const paras = this.opt.paras;
+    this.read = paras.map(() => "unread");
+    this.threads = this.opt.threads.map((id) => {
+      const t = N.threads[id - 1];
+      return { id, t, state: "hidden", msgs: [{ who: "ik", text: t.text }], cloud: false, value: t.fixFrom || null, why: null, sketch: false };
+    });
+    this.root.classList.remove("clean");
+    this.buildText(); this.buildCards(); this.setCells(); this.paint();
+    this.status(this.mode === "empty" ? "Nothing to check yet" : "");
+  }
+  buildText() {
+    const t = this.text;
+    if (this.mode === "empty") {
+      t.innerHTML = `<h3 class="note-title">Untitled</h3><p class="para ph">Start writing. When you pause at the end of a paragraph, Inkling checks it.</p>`;
+      this.paraEls = []; return;
+    }
+    if (this.mode === "first") {
+      t.innerHTML = `<h3 class="note-title">Your first note</h3><p class="para ph" style="font-size:var(--fs-ui)">${esc(N.firstRun.prompt)}</p><p class="para" data-p="0">${esc(N.firstRun.example).replace("faster", '<span data-anchor="9"><span data-value="9">faster</span></span>')}</p>`;
+      this.paraEls = $$(".para[data-p]", t); return;
+    }
+    const banner = this.banner ? `<div class="banner" role="status">${this.banner}</div>` : "";
+    t.innerHTML = banner + (this.opt.title ? `<h3 class="note-title">${esc(N.title)}</h3>` : "") +
+      this.opt.paras.map((i) => `<p class="para" data-p="${i}">${paraHTML(i)}</p>`).join("");
+    this.paraEls = $$(".para[data-p]", t);
+  }
+  buildCards() {
+    this.margin.innerHTML = "";
+    const list = this.mode === "first" ? [{ id: 9, t: { kind: "question", text: N.firstRun.question }, state: "open", msgs: [{ who: "ik", text: N.firstRun.question }] }] : (this.mode === "empty" ? [] : this.threads);
+    if (this.mode === "first" || this.mode === "empty") this.threads = list;
+    list.forEach((th, k) => {
+      const c = H("article", "card");
+      c.tabIndex = 0; c.dataset.tid = th.id;
+      c.setAttribute("aria-label", `Check ${k + 1} of ${list.length}, ${th.t.kind}`);
+      c.innerHTML = `<header class="card-h">${tagHTML(k + 1)}<span class="card-k">${th.t.kind === "correction" ? "Correction" : "Question"}</span><span class="card-st"></span></header>
+        <div class="msgs"></div><div class="drawing"></div>
+        <div class="reply"><textarea aria-label="Your reply" placeholder="Reply to Inkling…"></textarea><div class="row">${th.t.reply ? `<button class="chipb" data-act="use">Use: ${esc(th.t.reply)}</button>` : ""}<button class="btn btn-primary" data-act="send">Send</button></div></div>
+        <div class="acts">${th.t.fixTo ? `<button class="btn btn-primary" data-act="fix">Change ${esc(th.t.fixFrom)} to ${esc(th.t.fixTo)}</button>` : ""}<button class="btn" data-act="reply">Reply</button><button class="btn" data-act="resolve">Resolve</button><button class="btn" data-act="dismiss">Dismiss</button>${th.t.fixTo && this.opt.sketch ? `<button class="btn" data-act="sketch">Sketch it</button>` : ""}</div>
+        <div class="fold"></div>`;
+      th.num = k + 1; th.card = c; this.margin.appendChild(c);
+      c.addEventListener("click", (e) => { const a = e.target.closest("[data-act]"); if (a) { e.stopPropagation(); this.act(th, a.dataset.act, a); return; } if (th.state === "open" || th.state === "recheck") this.activate(th); });
+      c.addEventListener("keydown", (e) => this.cardKey(th, e));
+      this.renderMsgs(th);
+    });
+  }
+  renderMsgs(th) {
+    const box = $(".msgs", th.card);
+    box.innerHTML = th.msgs.map((m) => m.who === "ik" ? `<p class="msg msg-ik">${esc(m.text)}</p>` : m.who === "you" ? `<p class="msg msg-you"><span class="who">You</span>${esc(m.text)}</p>` : m.who === "think" ? `<div class="msg thinking" aria-label="Inkling is thinking"><i></i><i></i><i></i></div>` : `<p class="msg msg-ans"><span class="who">Inkling</span><span class="tx">${esc(m.text)}</span></p>`).join("");
+  }
+  open() { return this.threads.filter((t) => t.state === "open" || t.state === "recheck").length; }
+  setCells() {
+    const c = this.cells, open = this.open();
+    if (c.note) c.note.textContent = this.mode === "empty" ? "Untitled" : this.mode === "first" ? "Your first note" : N.title;
+    if (c.sidenote) c.sidenote.textContent = N.title;
+    if (c.date) c.date.textContent = today;
+    if (c.open) { const any = this.threads.some((t) => t.state !== "hidden"); c.open.textContent = any || this.mode === "note" && this.read.every((r) => r === "read") ? String(open) : "–"; c.open.classList.toggle("has-open", open > 0); }
+    if (c.rev) c.rev.textContent = this.rev ? "Δ" + this.rev : "–";
+    if (c.chkd) c.chkd.innerHTML = this.signed ? this.ikSVG() : "";
+    if (c.chkdate) c.chkdate.textContent = this.signed ? today : "";
+    if (c.sidestatus) c.sidestatus.innerHTML = this.signed ? statusHTML("ok") : open ? statusHTML("open", open) : this.threads.some((t) => t.state === "recheck") ? statusHTML("re") : "";
+    $$(".nst[data-st]", this.root).forEach((s) => { if (!s.firstChild) s.innerHTML = s.dataset.st === "1" ? statusHTML("open", 1) : statusHTML(s.dataset.st); });
+    if (c.cleanlabel) c.cleanlabel.textContent = this.clean ? "Show checks" : "Hide checks";
+  }
+  ikSVG() {
+    const st = ikStrokes(3, 0.5, 0.95);
+    return `<svg class="ik" viewBox="0 0 28 24" aria-label="IK">${st.map((s) => `<path class="m-ink" d="${s.d}"/>`).join("")}</svg>`;
+  }
+  status(msg, ok) { const el = this.cells.status || this.opt.statusEl; if (el) { el.textContent = msg; el.classList.toggle("ok", !!ok); } }
+
+  /* -------- geometry */
+  scale() { const r = this.body.getBoundingClientRect(); return (r.width / this.body.offsetWidth) || 1; }
+  rects(node) { const hr = this.body.getBoundingClientRect(), s = this.scale(); return [...node.getClientRects()].map((r) => ({ x: (r.left - hr.left) / s, y: (r.top - hr.top) / s, w: r.width / s, h: r.height / s })); }
+  box(node) { const r = this.rects(node); if (!r.length) return null; const x = Math.min(...r.map((q) => q.x)), y = Math.min(...r.map((q) => q.y)); return { x, y, w: Math.max(...r.map((q) => q.x + q.w)) - x, h: Math.max(...r.map((q) => q.y + q.h)) - y }; }
+  colX() { const tb = this.box(this.text); return tb ? [tb.x, tb.x + tb.w] : [0, 0]; }
+
+  /* -------- paint: every mark from the current state */
+  paint() {
+    if (!this.body.offsetWidth) return;
+    const W = this.body.offsetWidth, Hh = this.body.offsetHeight;
+    for (const L of [this.under, this.over]) { L.innerHTML = ""; L.setAttribute("viewBox", `0 0 ${W} ${Hh}`); }
+    const defs = S("defs", {}, this.under);
+    const pat = S("pattern", { id: this.pid, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    S("rect", { width: 3, height: 6, class: "m-yel" }, pat);
+    this.m = {};
+    const gw = parseFloat(getComputedStyle(this.body).getPropertyValue("--gw")) || 40;
+    const gx = gw - 15; this.gx = gx;
+    const [tx0, tx1] = this.colX(); this.tx1 = tx1;
+    const narrow = this.margin.offsetLeft < tx1 - 2 || this.margin.offsetWidth < 60;
+    // gutter: read marks
+    this.paraEls.forEach((el, k) => {
+      const b = this.box(el); if (!b) return;
+      const st = this.read[k] || "unread";
+      if (st === "unread") { if (this.showUnread) S("rect", { x: gx - 2.5, y: b.y + 3, width: 5, height: b.h - 6, rx: 1, class: "m-bar-unread" }, this.under); return; }
+      const bar = S("rect", { x: gx - 3, y: b.y + 2, width: 6, height: Math.max(4, b.h - 4), rx: 1, class: st === "reading" ? "" : "m-yel" }, this.under);
+      if (st === "reading") bar.setAttribute("fill", `url(#${this.pid})`);
+      this.m["bar" + k] = bar;
+    });
+    // checks
+    const cards = [];
+    this.threads.forEach((th) => {
+      if (th.state === "hidden") { th.card.hidden = true; return; }
+      th.card.hidden = false;
+      const anchor = $(`[data-anchor="${th.id}"]`, this.text), val = $(`[data-value="${th.id}"]`, this.text);
+      if (!anchor) return;
+      const lines = this.rects(anchor);
+      const first = val ? this.rects(val)[0] : lines[0];
+      if (!first) return;
+      const pk = this.paraEls.findIndex((p) => p.contains(anchor));
+      const live = th.state === "open" || th.state === "recheck";
+      const done = th.state === "verified", left = th.state === "left";
+      th.lineY = first.y + first.h / 2;
+      // gutter segment and tag
+      if (live) {
+        const seg = S("rect", { x: gx - 3, y: first.y + 1, width: 6, height: first.h - 2, rx: 1, class: th.state === "recheck" ? "" : "m-red" }, this.under);
+        if (th.state === "recheck") seg.setAttribute("fill", `url(#${this.pid})`);
+        this.m["seg" + th.id] = seg;
+      }
+      const tx = gx - 18 < 9 ? 9 : gx - 18;
+      if (th.state === "recheck") this.m["tag" + th.id] = deltaSVG(this.over, tx, th.lineY + 1, 19, String(this.rev || 1));
+      else if (!left) this.m["tag" + th.id] = tagSVG(this.over, tx, th.lineY, th.num, done);
+      // the mark on the words
+      if (val) {
+        const v = this.rects(val)[0];
+        if (done) this.m["swipe" + th.id] = S("path", { d: swipeGeom(v.x - 1, v.y + 2, v.w + 2, v.h - 4, th.id), class: "m-hl m-swipe", "data-tid": th.id }, this.under);
+        const g = ringGeom(v.x, v.y + 1, v.w, v.h - 2, 3 + th.id);
+        this.m["ring" + th.id] = maskedPath(this.over, g, "m-red", { opacity: left ? 0.42 : done ? 0.5 : 1 });
+        if (left) S("path", { d: ribbon(resample(cubic([v.x - 4, v.y + v.h + 2], [v.x + v.w * 0.3, v.y + v.h * 0.7], [v.x + v.w * 0.7, v.y + v.h * 0.3], [v.x + v.w + 6, v.y - 2], 24), 0.4), 1.4, [0.1, 0.2], 0.05, 4), class: "m-red", opacity: 0.75 }, this.over);
+        if (th.cloud) {
+          const cg = cloudGeom(v.x - 1, v.y + 3, v.w + 2, v.h - 6, 5, 7);
+          const cp = S("path", { d: cg.d, class: "m-ink-s", "stroke-width": 1.25, "stroke-linejoin": "round", opacity: done ? 0.3 : 0.85 }, this.over);
+          this.m["cloud" + th.id] = { path: cp, n: cg.n };
+        }
+      } else {
+        lines.forEach((r, i) => {
+          if (done) S("path", { d: swipeGeom(r.x, r.y + 3, r.w, r.h - 6, th.id + i), class: "m-hl m-swipe", "data-tid": th.id }, this.under);
+          const g = underGeom(r.x, r.x + r.w, r.y + r.h - 2.5, 11 + i);
+          this.m["under" + th.id + "_" + i] = maskedPath(this.over, g, "m-red", { opacity: left ? 0.42 : done ? 0.6 : 1 });
+        });
+        if (left) { const r = lines[0]; S("path", { d: ribbon(resample(cubic([r.x - 4, r.y + r.h + 1], [r.x + 20, r.y + r.h * 0.6], [r.x + 40, r.y + r.h * 0.3], [r.x + 66, r.y], 20), 0.4), 1.3, [0.1, 0.2], 0.05, 6), class: "m-red", opacity: 0.7 }, this.over); }
+      }
+      cards.push(th);
+    });
+    // cards: aligned to their line, pushed down to avoid overlap
+    if (!narrow) {
+      let floor = 6;
+      cards.sort((a, b) => a.lineY - b.lineY).forEach((th) => {
+        const want = th.lineY - 30;
+        const top = Math.max(want, floor);
+        const prev = th.placedTop;
+        th.card.style.top = top + "px";
+        if (prev != null && Math.abs(prev - top) > 1 && !Board.still) th.card.animate([{ transform: `translateY(${prev - top}px)` }, { transform: "none" }], { duration: 200, easing: "cubic-bezier(.2,.7,.2,1)" });
+        th.placedTop = top;
+        th.top = top; floor = top + th.card.offsetHeight + 12;
+      });
+      if (this.opt.grow) {
+        const need = Math.ceil(floor + 14);
+        if (Math.abs((parseFloat(this.body.style.minHeight) || 0) - need) > 1) this.body.style.minHeight = need + "px";
+      }
+    } else { cards.forEach((th) => (th.card.style.top = "")); if (this.opt.grow) this.body.style.minHeight = ""; }
+    // leaders: a dot at the end of the line, one straight segment, a shoulder
+    if (!narrow) cards.forEach((th) => {
+      if (th.state !== "open" && th.state !== "recheck") return;
+      const mL = this.margin.offsetLeft, cx = parseFloat(getComputedStyle(th.card).left) || 26;
+      const sx = mL + cx - 2, sy = th.top + 16, ax = tx1 + 7, ay = th.lineY;
+      const g = S("g", {}, this.under);
+      const dot = S("circle", { cx: ax, cy: ay, r: 2.6, class: "m-red" }, g);
+      const path = S("path", { d: `M${ax} ${ay} L${sx - 12} ${sy} L${sx} ${sy}`, class: "m-red-s", "stroke-width": 1.3, "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+      this.m["leader" + th.id] = { g, dot, path };
+    });
+    // the room panel follows its phrase
+    if (this.roomEl) this.placeRoom();
+  }
+
+  /* -------- reading and marking */
+  async readPara(k, ms) {
+    const gen = this.gen;
+    this.read[k] = "reading"; this.status(`Checking ¶${this.opt.paras[k] + 1}`); this.paint();
+    const bar = this.m["bar" + k];
+    if (bar) { bar.style.transformBox = "fill-box"; bar.style.transformOrigin = "50% 0"; }
+    if (bar && !Board.still) bar.animate([{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { duration: ms, easing: "linear", fill: "none" }).finished.catch(() => {});
+    await Board.wait(ms); if (gen !== this.gen) return false;
+    this.read[k] = "read";
+    const found = this.threads.filter((th) => th.t.para === this.opt.paras[k] && th.state === "hidden");
+    found.forEach((th) => (th.state = "open"));
+    this.setCells(); this.paint();
+    for (const th of found) await this.markIn(th);
+    return true;
+  }
+  async markIn(th) {
+    const ring = this.m["ring" + th.id];
+    if (ring) ring.draw(260);
+    Object.keys(this.m).filter((k) => k.startsWith("under" + th.id + "_")).forEach((k, i) => this.m[k].draw(320, i * 120));
+    pop(this.m["tag" + th.id]);
+    const L = this.m["leader" + th.id]; if (L) { drawOn(L.path, 180, 200); L.dot.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, delay: 200, fill: "backwards" }); }
+    th.card.classList.add("enter"); setTimeout(() => th.card.classList.remove("enter"), 400);
+    await Board.wait(300);
+  }
+  async readAll(ms) {
+    const gen = ++this.gen;
+    for (let k = 0; k < this.read.length; k++) { if (gen !== this.gen) return; if (this.read[k] !== "read") { const ok = await this.readPara(k, ms); if (!ok) return; await Board.wait(160); } }
+    if (gen !== this.gen) return;
+    const open = this.open();
+    this.status(open ? `${open} open` : "All clear", !open);
+  }
+
+  /* -------- activity */
+  activate(th, quiet) {
+    if (this.active === th) return;
+    this.threads.forEach((x) => x.card && x.card.classList.remove("is-active"));
+    this.active = th;
+    if (th) { th.card.classList.add("is-active"); if (!quiet) th.card.focus({ preventScroll: true }); }
+    this.paint();
+  }
+  jump(dir) {
+    const open = this.threads.filter((t) => t.state === "open" || t.state === "recheck").sort((a, b) => a.lineY - b.lineY);
+    if (!open.length) { this.status("Nothing open"); return; }
+    let i = open.indexOf(this.active); i = i < 0 ? (dir > 0 ? 0 : open.length - 1) : (i + dir + open.length) % open.length;
+    this.activate(open[i]);
+  }
+  cardKey(th, e) {
+    if (e.key === "Enter" && !this.active) { this.activate(th); e.preventDefault(); return; }
+    if (e.target.tagName === "TEXTAREA") { if (e.key === "Enter" && e.metaKey) { this.act(th, "send"); e.preventDefault(); } return; }
+    if (e.key === "Escape") { this.activate(null, true); th.card.focus(); }
+    else if ((e.key === "r" || e.key === "R") && !e.metaKey) { this.act(th, "reply"); e.preventDefault(); }
+    else if (e.key === "Enter" && e.metaKey) { this.act(th, "resolve"); e.preventDefault(); }
+    else if (e.key === "Backspace" && e.metaKey) { this.act(th, "dismiss"); e.preventDefault(); }
+  }
+  act(th, a, btn) {
+    if (a === "fix") return this.fix(th);
+    if (a === "resolve") return this.verify(th, null);
+    if (a === "dismiss") return this.dismiss(th);
+    if (a === "reply") { this.activate(th, true); th.card.classList.add("replying"); this.paint(); const ta = $("textarea", th.card); ta.focus(); return; }
+    if (a === "use") { const ta = $("textarea", th.card); ta.value = th.t.reply; ta.focus(); return; }
+    if (a === "send") return this.send(th);
+    if (a === "sketch") return this.sketch(th);
+  }
+  async fix(th) {
+    if (!th.t.fixTo || th.state !== "open") return;
+    const gen = ++this.gen;
+    this.activate(th, true);
+    const val = $(`[data-value="${th.id}"]`, this.text);
+    $$("[data-act=fix]", th.card).forEach((b) => (b.disabled = true));
+    val.classList.add("typing");
+    for (let i = val.textContent.length; i > 0; i--) { val.textContent = val.textContent.slice(0, -1); this.paint(); await Board.wait(55); if (gen !== this.gen) return; }
+    for (const ch of th.t.fixTo) { val.textContent += ch; this.paint(); await Board.wait(80); if (gen !== this.gen) return; }
+    val.classList.remove("typing");
+    th.value = th.t.fixTo;
+    await Board.wait(380); if (gen !== this.gen) return;
+    // a revision: cloud the edit, number it, re-check only that
+    this.rev++; th.cloud = true; th.state = "recheck"; this.signed = false;
+    this.setCells(); this.paint();
+    const cl = this.m["cloud" + th.id];
+    if (cl) Board.draw(cl.path, Math.min(700, cl.n * 30));
+    pop(this.m["tag" + th.id], 200);
+    this.status(`Re-checking Δ${this.rev}`);
+    th.msgs.push({ who: "think" }); this.renderMsgs(th); this.paint();
+    await Board.wait(1100); if (gen !== this.gen) return;
+    th.msgs.pop(); th.why = th.t.settle; th.msgs.push({ who: "ans", text: th.t.settle }); this.renderMsgs(th);
+    await Board.wait(500); if (gen !== this.gen) return;
+    await this.verify(th, th.t.settle, gen);
+  }
+  async verify(th, why, gen0) {
+    if (th.state !== "open" && th.state !== "recheck") return;
+    const gen = gen0 || ++this.gen;
+    th.state = "verified"; th.why = why || th.why; if (this.active === th) this.active = null;
+    th.card.classList.remove("is-active", "replying");
+    this.setCells(); this.paint();
+    $$(`.m-swipe[data-tid="${th.id}"]`, this.under).forEach((p, i) => { if (!Board.still) p.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1.04)", offset: 0.82 }, { transform: "scaleX(1)" }], { duration: 220, delay: i * 60, easing: "cubic-bezier(.2,.7,.2,1)", fill: "backwards" }); });
+    Board.sound("swipe");
+    pop(this.m["tag" + th.id], 200);
+    this.fold(th);
+    const open = this.open();
+    this.status(open ? `${open} open` : "All clear", !open);
+    if (!open && this.threads.every((t) => t.state === "verified" || t.state === "left")) {
+      await Board.wait(600); if (gen !== this.gen) return;
+      this.sign(true);
+    }
+  }
+  fold(th) {
+    const f = $(".fold", th.card);
+    if (th.state === "verified") f.innerHTML = `${tagHTML(th.num, true)}<p><span class="lab">Verified</span><br>${th.why ? `<span class="why">${esc(th.why)}</span>` : `<span class="left">Resolved by you.</span>`}</p>`;
+    else f.innerHTML = `${tagHTML(th.num)}<p><span class="lab">Left as is</span></p>`;
+    th.card.classList.add("folded"); th.card.classList.toggle("left", th.state === "left");
+    th.card.tabIndex = -1;
+    requestAnimationFrame(() => this.paint());
+  }
+  unfold(th) { th.card.classList.remove("folded", "left", "drawing-on"); th.card.tabIndex = 0; }
+  sign(animate) {
+    this.signed = true; this.setCells();
+    const cell = this.cells.chkd; const box = cell && cell.closest(".tb-chk");
+    if (animate && cell) {
+      const svg = $("svg", cell);
+      if (svg && !Board.still) {
+        const paths = $$("path", svg);
+        paths.forEach((p, i) => { p.style.opacity = 0; setTimeout(() => { p.style.opacity = 1; p.animate([{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }], { duration: 200, easing: "ease-out" }); }, i * 200); });
+      }
+      if (this.cells.chkdate) this.cells.chkdate.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, delay: 560, fill: "backwards" });
+      setTimeout(() => { Board.sound("stamp"); if (box) { box.classList.remove("stamped"); void box.offsetWidth; box.classList.add("stamped"); } }, 600);
+    }
+    this.status(`Checked by Inkling · ${todayPlain}`, true);
+    if (this.opt.onSigned) this.opt.onSigned();
+  }
+  dismiss(th) {
+    if (th.state !== "open" && th.state !== "recheck") return;
+    this.gen++;
+    th.prev = th.state; th.state = "left"; if (this.active === th) this.active = null;
+    th.card.classList.remove("is-active", "replying");
+    this.fold(th); this.setCells(); this.paint();
+    const open = this.open(); this.status(open ? `Left as is · ${open} open` : "Left as is", false);
+    this.toast(th);
+    if (!open && this.threads.every((t) => t.state === "verified" || t.state === "left")) setTimeout(() => this.sign(true), 700);
+  }
+  undo(th) {
+    if (!th || th.state !== "left") return;
+    th.state = th.prev || "open"; this.signed = false; this.unfold(th);
+    this.setCells(); this.paint(); this.hideToast();
+    this.status(`${this.open()} open`);
+  }
+  toast(th, stay) {
+    const t = $(".toast", this.root); if (!t) return;
+    this.toastFor = th; t.classList.add("show");
+    const bar = $("i", t); if (bar && !Board.still && !stay) bar.animate([{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 8000, easing: "linear" });
+    clearTimeout(this.toastT); if (!stay) this.toastT = setTimeout(() => this.hideToast(), 8000);
+  }
+  hideToast() { const t = $(".toast", this.root); if (t) t.classList.remove("show"); }
+  async send(th) {
+    const ta = $("textarea", th.card); const text = (ta.value || "").trim(); if (!text) { ta.focus(); return; }
+    const gen = ++this.gen;
+    th.card.classList.remove("replying"); ta.value = "";
+    th.msgs.push({ who: "you", text }); th.msgs.push({ who: "think" }); this.renderMsgs(th); this.paint();
+    await Board.wait(900); if (gen !== this.gen) return;
+    th.msgs.pop();
+    const ans = th.t.answer || "Thanks. That answers it.";
+    th.msgs.push({ who: "ans", text: "" }); this.renderMsgs(th);
+    const tx = $(".msg-ans:last-child .tx", th.card);
+    for (let i = 1; i <= ans.length; i += 3) { tx.textContent = ans.slice(0, i); if (i % 15 === 1) this.paint(); await Board.wait(14); if (gen !== this.gen) return; }
+    tx.textContent = ans; th.msgs[th.msgs.length - 1].text = ans; this.paint();
+    await Board.wait(700); if (gen !== this.gen) return;
+    await this.verify(th, ans.split(". ")[0] + ".", gen);
+  }
+
+  /* -------- the app's extras: hide, chat, room, sketch */
+  setClean(on) { this.clean = on; this.root.classList.toggle("clean", on); this.setCells(); this.status(on ? "Checks hidden · your words only" : `${this.open()} open`); }
+  chat(open) {
+    const c = $(".chat", this.root); if (!c) return;
+    c.classList.toggle("open", open);
+    if (open && !c.dataset.ready) {
+      c.dataset.ready = 1;
+      const b = $(".chat-b", c);
+      b.innerHTML = `<p class="lab">Suggestions</p><div class="chat-sugg"><button class="chipb" data-q="What’s the weakest part of this plan?">What’s the weakest part of this plan?</button><button class="chipb" data-q="Make it a week-by-week table">Make it a week-by-week table</button></div>`;
+      b.addEventListener("click", async (e) => {
+        const q = e.target.closest("[data-q]"); if (!q) return;
+        $(".chat-sugg", b).remove(); $(".lab", b).remove();
+        b.insertAdjacentHTML("beforeend", `<p class="you">${esc(q.dataset.q)}</p><p class="ik"></p>`);
+        const ik = $(".ik:last-child", b);
+        const ans = "The long run. Adding a kilometre every week with no easier weeks is where people get hurt, usually around week six. Put an easier week in every third or fourth.";
+        for (let i = 1; i <= ans.length; i += 3) { ik.textContent = ans.slice(0, i); await Board.wait(14); }
+        ik.textContent = ans;
+      });
+    }
+  }
+  chatInstant() { this.chat(true); const b = $(".chat-b", this.root); b.innerHTML = `<p class="you">What’s the weakest part of this plan?</p><p class="ik">The long run. Adding a kilometre every week with no easier weeks is where people get hurt, usually around week six. Put an easier week in every third or fourth.</p>`; }
+  room(open) {
+    if (this.roomEl) { this.roomEl.remove(); this.roomEl = null; $$(".sel-on", this.text).forEach((s) => s.classList.remove("sel-on")); }
+    if (!open) return;
+    const ph = $("[data-room]", this.text); if (!ph) return;
+    ph.classList.add("sel-on");
+    const r = H("div", "room");
+    r.setAttribute("role", "dialog"); r.setAttribute("aria-label", "Ask the room");
+    const ini = { Inkling: "IK", Skeptic: "SK", Tutor: "TU" };
+    r.innerHTML = `<div class="room-h"><p>Asked 3 minds about <b>“${esc(N.room.quote)}”</b></p><button class="btn btn-quiet" data-act="room-close">Close</button></div>
+      <div class="room-g">${N.room.answers.map((a) => `<div class="room-c"><span class="ibox"><span>${esc(a.mind)}</span><span>${ini[a.mind] || a.mind.slice(0, 2).toUpperCase()}</span></span><p>${esc(a.text)}</p></div>`).join("")}</div>`;
+    this.body.appendChild(r); this.roomEl = r;
+    $("[data-act=room-close]", r).addEventListener("click", () => this.room(false));
+    this.placeRoom();
+  }
+  placeRoom() {
+    const ph = $("[data-room]", this.text); if (!ph || !this.roomEl) return;
+    const b = this.rects(ph).pop(); const [x0] = this.colX();
+    this.roomEl.style.left = x0 + "px"; this.roomEl.style.top = (b.y + b.h + 10) + "px";
+    this.roomEl.style.width = Math.min(this.body.offsetWidth - x0 - 24, 660) + "px";
+  }
+  sketch(th) {
+    th.card.classList.add("drawing-on");
+    const box = $(".drawing", th.card);
+    box.innerHTML = drawingSVG() + `<div class="dctl"><span class="cap" aria-live="polite"></span><button class="btn" data-d="prev" aria-label="Previous step">‹</button><button class="btn" data-d="next" aria-label="Next step">›</button><button class="btn" data-d="replay">Replay</button></div>`;
+    const pb = playback(box, () => this.paint());
+    $$("[data-d]", box).forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); pb[b.dataset.d](); }));
+    this.paint();
+    return pb;
+  }
+}
+
+/* ------------------------------------------------------------------ the sketch: pace and finish time, drafted */
+function drawingSVG() {
+  const D = N.drawing, W = 270, H0 = 150, x0 = 18, x1 = 252, ax = 62;
+  const xs = D.paces.map((_, i) => x0 + i * (x1 - x0) / (D.paces.length - 1));
+  let grid = ""; for (let x = 0; x <= W; x += 9.6) grid += `<line x1="${P(x)}" y1="0" x2="${P(x)}" y2="${H0}"/>`; for (let y = 0; y <= H0; y += 9.6) grid += `<line x1="0" y1="${P(y)}" x2="${W}" y2="${P(y)}"/>`;
+  const lab = (i, y, t) => `<text class="d-t" x="${P(xs[i])}" y="${y}" text-anchor="middle">${t}</text>`;
+  const arrow = (x, y, d) => `<path class="d-arrow" d="M${P(x)} ${y} L${P(x + 7 * d)} ${y - 2.6} L${P(x + 7 * d)} ${y + 2.6} Z"/>`;
+  const s1 = `<path class="d-ink" d="M${x0} ${ax} L${x1} ${ax}"/>` + xs.map((x) => `<path class="d-ink" d="M${P(x)} ${ax - 5} L${P(x)} ${ax + 5}"/>`).join("") + [0, 2, 4, 6].map((i) => lab(i, ax - 11, D.paces[i])).join("");
+  const s2 = xs.map((x) => `<path class="d-ext" d="M${P(x)} ${ax + 8} L${P(x)} ${ax + 52}"/>`).join("") + [0, 2, 4, 6].map((i) => lab(i, ax + 68, D.finishes[i])).join("");
+  const zone = `<rect class="d-hl" x="${P(xs[0] - 4)}" y="${ax - 26}" width="${P(xs[2] - xs[0] + 8)}" height="112"/>`;
+  const dimY = ax + 30;
+  const s3 = `<path class="d-ink" d="M${P(xs[0])} ${dimY} L${P(xs[2])} ${dimY}"/>${arrow(xs[0], dimY, 1)}${arrow(xs[2], dimY, -1)}<text class="d-t" x="${P((xs[0] + xs[2]) / 2)}" y="${dimY - 6}" text-anchor="middle">&lt; 50:00</text><ellipse class="d-red" cx="${P(xs[4])}" cy="${ax + 64}" rx="24" ry="11"/>`;
+  return `<svg viewBox="0 0 ${W} ${H0}" role="img" aria-label="Sketch: pace per kilometre against finish time; under 50 minutes needs 5:00 a km or faster"><g class="d-grid">${grid}</g><g data-step="2" class="st3">${zone}</g><g data-step="0">${s1}</g><g data-step="1">${s2}</g><g data-step="2">${s3}</g></svg>`;
+}
+function playback(box, onstep) {
+  const steps = (k) => $$(`[data-step="${k}"]`, box), cap = $(".cap", box), n = 3;
+  let k = -1, timer = null;
+  function show(i, animate) {
+    k = i;
+    for (let j = 0; j < n; j++) steps(j).forEach((g) => { g.style.opacity = j <= i ? 1 : 0; });
+    cap.textContent = `${i + 1}/3 · ${N.drawing.steps[i]}`;
+    if (animate) steps(i).forEach((g) => { $$("path, line, ellipse", g).forEach((p, m) => { if (p.classList.contains("d-arrow")) return; drawOn(p, 520, m * 25); }); $$("text, rect", g).forEach((t) => t.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 250, fill: "backwards" })); });
+    onstep && onstep();
+  }
+  function play() { clearTimeout(timer); show(0, true); timer = setTimeout(() => { show(1, true); timer = setTimeout(() => show(2, true), 1350); }, 1350); }
+  play();
+  return { prev: () => { clearTimeout(timer); show(Math.max(0, k - 1), false); }, next: () => { clearTimeout(timer); show(Math.min(n - 1, k + 1), true); }, replay: play, last: () => { clearTimeout(timer); show(2, false); } };
+}
+
+/* ------------------------------------------------------------------ hero */
+const heroDoc = new Doc($("#hero-doc"), { paras: [N.threads[0].para], threads: [1], title: false, statusEl: $("#hero-status"), grow: true, onSigned: () => { $("#hero-hint").textContent = "Signed. Reset plays it again."; } });
+heroDoc.showUnread = true;
+$("#hero-reset").addEventListener("click", () => heroRun());
+heroDoc.root.addEventListener("click", (e) => { if (e.target.closest(".text [data-anchor]")) { const th = heroDoc.threads[0]; if (th.state === "open") { heroDoc.activate(th); const b = $("[data-act=fix]", th.card); if (b) b.focus(); } } });
+async function heroRun() {
+  $("#hero-hint").innerHTML = "Press <b>Change 5:30 to 4:55</b> in the note, or click the ringed number.";
+  heroDoc.reset("note"); heroDoc.showUnread = true; heroDoc.paint();
+  await Board.wait(500);
+  await heroDoc.readAll(1100);
+  const th = heroDoc.threads[0]; if (th.state === "open") heroDoc.activate(th, true);
+}
+
+/* ------------------------------------------------------------------ app window */
+function makeWin(host) {
+  host.appendChild($("#win-tpl").content.cloneNode(true));
+  const root = host.lastElementChild;
+  const d = new Doc(root, { paras: [0, 1, 2, 3], threads: [1, 2], title: true, sketch: true });
+  root.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-act]"); if (!a || a.closest(".card") || a.closest(".room")) return;
+    if (a.dataset.act === "clean") d.setClean(!d.clean);
+    if (a.dataset.act === "chat") d.chat(!$(".chat", root).classList.contains("open"));
+    if (a.dataset.act === "chat-close") d.chat(false);
+    if (a.dataset.act === "room") d.room(!d.roomEl);
+    if (a.dataset.act === "undo") d.undo(d.toastFor);
+  });
+  return d;
+}
+const app = makeWin($("#app-host"));
+
+/* every state, set without animation, so screenshots and panels show it exactly */
+const STATES = {
+  reading: (d) => { d.read = [ "read", "reading", "unread", "unread" ]; d.showUnread = true; d.status("Checking ¶2"); },
+  waiting: (d) => { d.read = ["read", "read", "read", "unread"]; d.threads[0].state = "open"; d.threads[1].state = "open"; d.showUnread = true; const last = d.paraEls[d.paraEls.length - 1]; if (last) last.insertAdjacentHTML("beforeend", '<span class="typing" aria-hidden="true"></span>'); d.status("2 open · waiting while you type"); },
+  open: (d) => { allRead(d); d.activate(d.threads[1], true); },
+  correction: (d) => { allRead(d); d.activate(d.threads[0], true); },
+  fixing: (d) => { allRead(d); const v = $('[data-value="1"]', d.text); v.textContent = "4:5"; v.classList.add("typing"); d.activate(d.threads[0], true); d.status("Editing a checked number"); },
+  cloud: (d) => { allRead(d); const th = d.threads[0]; $('[data-value="1"]', d.text).textContent = th.t.fixTo; d.rev = 1; th.cloud = true; th.state = "recheck"; th.msgs.push({ who: "think" }); d.renderMsgs(th); d.activate(th, true); d.status("Re-checking Δ1"); },
+  resolved: (d) => { allRead(d); const th = d.threads[0]; $('[data-value="1"]', d.text).textContent = th.t.fixTo; d.rev = 1; th.cloud = true; th.state = "verified"; th.why = th.t.settle; d.fold(th); d.status("1 open"); },
+  signed: (d) => { allRead(d); d.threads.forEach((th) => { if (th.t.fixTo) { $('[data-value="1"]', d.text).textContent = th.t.fixTo; th.cloud = true; d.rev = 1; th.why = th.t.settle; } else { th.msgs.push({ who: "you", text: th.t.reply }, { who: "ans", text: th.t.answer }); d.renderMsgs(th); th.why = th.t.answer.split(". ")[0] + "."; } th.state = "verified"; d.fold(th); }); d.sign(false); },
+  dismissed: (d) => { allRead(d); const th = d.threads[1]; th.prev = "open"; th.state = "left"; d.fold(th); d.toast(th, d.panel); d.status("Left as is · 1 open"); },
+  drawing: (d) => { allRead(d); const th = d.threads[0]; d.activate(th, true); const pb = d.sketch(th); pb.last(); },
+  room: (d) => { allRead(d); d.room(true); },
+  chat: (d) => { allRead(d); d.chatInstant(); },
+  empty: (d) => { d.reset("empty"); },
+  offline: (d) => { d.banner = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.5V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="14" r="1.1" fill="currentColor"/></svg><div><b>Inkling can’t check right now.</b> The checker didn’t start, because Bun isn’t installed. Your note is saved, and checks resume when it starts.<br><button class="btn">Try again</button></div>`; d.buildText(); d.buildCards(); d.read = ["read", "read", "unread", "unread"]; d.threads[0].state = "open"; d.showUnread = true; d.status("Offline · 2 paragraphs not checked"); },
+  limit: (d) => { d.banner = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.5V10L13 12" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><div><b>Inkling has used this window’s checks.</b> It can check again at ${esc(N.limitResets)}. Your note is saved, and the new paragraphs get checked then.</div>`; d.buildText(); d.buildCards(); d.read = ["read", "read", "read", "unread"]; d.threads[0].state = "open"; d.threads[1].state = "open"; d.showUnread = true; d.status(`Limit reached · back at ${N.limitResets}`); },
+  "first-run": (d) => { d.reset("first"); d.read = ["read"]; d.threads[0].state = "open"; d.activate(d.threads[0], true); d.status("Your first check · about 10 s"); },
+};
+function allRead(d) { d.read = d.read.map(() => "read"); d.threads.forEach((th) => { if (th.state === "hidden") th.state = "open"; }); d.status(`${d.open()} open`); }
+function setState(d, name) {
+  d.reset("note"); d.chat(false); d.room(false); d.hideToast();
+  const fn = STATES[name]; if (!fn) return false;
+  fn(d); d.setCells(); d.paint(); requestAnimationFrame(() => d.paint());
+  return true;
+}
+
+/* try bar */
+$$("[data-try]").forEach((b) => b.addEventListener("click", async () => {
+  const t = b.dataset.try;
+  if (t === "reset") { setState(app, "open"); app.activate(null, true); return; }
+  if (app.read.some((r) => r !== "read")) { allRead(app); app.setCells(); app.paint(); }
+  if (t === "fix") { const th = app.threads[0]; if (th.state === "open") { app.activate(th, true); app.fix(th); } }
+  if (t === "reply") { const th = app.threads[1]; if (th.state === "open") { app.act(th, "reply"); $("textarea", th.card).value = th.t.reply; } }
+  if (t === "room") app.room(!app.roomEl);
+  if (t === "sketch") { const th = app.threads[0]; if (th.state !== "verified" && th.state !== "left") { app.activate(th, true); app.sketch(th); } }
+  if (t === "chat") app.chat(!$(".chat", app.root).classList.contains("open"));
+  if (t === "clean") { app.setClean(!app.clean); b.textContent = app.clean ? "Show checks" : "Hide checks"; }
+}));
+
+/* keyboard: ⌥⌘↓ / ⌥⌘↑ jump, ⌘⇧. hide checks, ⌘Z undo, ⌘J chat */
+document.addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|TEXTAREA)$/.test((e.target.tagName || ""));
+  if (e.altKey && e.metaKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); app.jump(e.key === "ArrowDown" ? 1 : -1); }
+  else if (e.metaKey && e.shiftKey && (e.key === "." || e.code === "Period")) { e.preventDefault(); app.setClean(!app.clean); }
+  else if (e.metaKey && !e.shiftKey && e.key.toLowerCase() === "z" && !typing && app.toastFor && app.toastFor.state === "left") { e.preventDefault(); app.undo(app.toastFor); }
+  else if (e.metaKey && e.key.toLowerCase() === "j") { e.preventDefault(); app.chat(!$(".chat", app.root).classList.contains("open")); }
+});
+
+/* ------------------------------------------------------------------ every state, cropped from the same window */
+const PANELS = [
+  ["reading", "Reading", "The bar draws down the gutter while Inkling reads. No bar: not read yet. Yellow: read, and it holds.", [240, 130, 620]],
+  ["waiting", "Waiting while you type", "A check that lands mid-sentence stays closed: its number and two lines, until you pause.", [640, 200, 560]],
+  ["correction", "A correction", "The ring is on the number, the tag is in the gutter, the leader joins the note to the line.", [460, 236, 740]],
+  ["open", "A question", "Long phrases get an underline instead of a ring, so it works across line breaks.", [620, 300, 580]],
+  ["fixing", "You change the number", "Typing on a checked phrase. The ring waits; nothing is decided while you type.", [460, 236, 740]],
+  ["cloud", "Re-checking", "The edit gets a revision cloud and Δ1, and only that part is re-read.", [460, 236, 740]],
+  ["resolved", "Verified", "A yellow swipe over the words, the tag fills, the note folds to its reason.", [460, 236, 740]],
+  ["signed", "Signed", "Nothing open: the Chk’d cell is initialled and dated, the note list shows a tick.", [0, 0, 1200]],
+  ["dismissed", "Left as is", "Dismissed checks stay visible, faint and struck through, with Undo for 8 seconds.", [480, 330, 720]],
+  ["drawing", "A sketch", "Drafted on the grid with dimension lines, three steps, replayable.", [800, 404, 400]],
+  ["room", "Ask the room", "Three minds, side by side, each signing with its initials. Answers are blue: conversation.", [270, 290, 700]],
+  ["chat", "Chat", "About the whole note, over the margin. Inkling’s side is blue.", [744, 0, 456]],
+  ["empty", "Empty note", "Nothing to check, and it says how checking starts.", [232, 0, 720]],
+  ["offline", "Offline", "Says what broke and that the note is safe. Unread paragraphs show dashed bars.", [232, 110, 968]],
+  ["limit", "Limit reached", "Says when checking comes back, in your time, and what happens then.", [232, 110, 968]],
+  ["first-run", "First run", "One sentence of yours, and the first check is about it, in about ten seconds.", [232, 0, 968]],
+];
+const grid = $("#states-grid");
+const panelDocs = [];
+PANELS.forEach(([key, title, line, crop]) => {
+  const f = H("figure", "st");
+  f.innerHTML = `<div class="st-view" data-qa-skip><div class="st-cam" inert></div></div><figcaption><span class="lab"><span>${title}</span><span>?state=${key}</span></span><span>${esc(line)}</span><button class="go" data-goto="${key}">Show in the app</button></figcaption>`;
+  grid.appendChild(f);
+  const cam = $(".st-cam", f);
+  const d = makeWin(cam);
+  d.panel = true;
+  panelDocs.push({ d, key, crop, view: $(".st-view", f), cam });
+});
+function framePanels() {
+  panelDocs.forEach(({ crop, view, cam }) => {
+    const [x, y, w] = crop; const vw = view.clientWidth;
+    const s = vw / w;
+    cam.style.transform = `scale(${s}) translate(${-x}px, ${-y}px)`;
+    view.classList.toggle("cut", x > 300);
+  });
+}
+grid.addEventListener("click", (e) => {
+  const g = e.target.closest("[data-goto]"); if (!g) return;
+  setState(app, g.dataset.goto);
+  $("#app").scrollIntoView({ behavior: Board.still ? "auto" : "smooth", block: "start" });
+});
+
+/* ------------------------------------------------------------------ elements sheet */
+const ELS = $("#els");
+$$("#el-src [data-el]".replace("#el-src ", ""), $("#el-src").content).forEach((src) => {
+  const svg = $("svg", src);
+  const vb = svg.getAttribute("viewBox").split(/\s+/).map(Number);
+  const one = svg.cloneNode(true); one.setAttribute("width", vb[2]); one.setAttribute("height", vb[3]);
+  const big = svg.cloneNode(true); const k = Math.min(3, Math.max(1.5, 220 / vb[2]));
+  big.setAttribute("width", Math.round(vb[2] * k)); big.setAttribute("height", Math.round(vb[3] * k));
+  const t = H("figure", "elt");
+  t.style.margin = "0";
+  t.innerHTML = `<div class="elt-v" aria-hidden="true"><div class="big"></div><div class="one"></div></div><figcaption class="elt-t"><span class="lab"><span>${String(ELS.children.length + 1).padStart(2, "0")}</span><span>${src.dataset.el}.svg</span></span><b>${src.dataset.name}</b><p>${src.dataset.job}</p><p class="where">${src.dataset.where}</p></figcaption>`;
+  $(".one", t).appendChild(one); $(".one", t).insertAdjacentHTML("beforeend", `<span class="x">1×</span>`);
+  $(".big", t).appendChild(big);
+  if (vb[2] > 250) { $(".one", t).innerHTML = `<span class="x">1× is ${vb[2]} × ${vb[3]} px</span>`; big.setAttribute("width", "100%"); big.removeAttribute("height"); }
+  ELS.appendChild(t);
+});
+
+/* ------------------------------------------------------------------ icons */
+const ICON = (dark, size) => `<figure><img src="assets/check/icon${dark ? "-dark" : ""}.svg" width="${size}" height="${size}" alt="${size} px"><figcaption>${size}</figcaption></figure>`;
+$("#icons-light").innerHTML = [256, 128, 64, 32, 16].map((s) => ICON(false, s)).join("");
+$("#icons-dark").innerHTML = [128, 64, 32, 16].map((s) => ICON(true, s)).join("");
+$("#icons-light figure figcaption").textContent = "1024 (shown 256)";
+
+/* ------------------------------------------------------------------ colour, measured */
+const TOK = [
+  ["--sheet", "Sheet", "every surface you read on", null],
+  ["--desk", "Desk", "the table round the pad", null],
+  ["--grid", "Grid", "printed on the back; margins only", "texture"],
+  ["--ink", "Ink", "your words", "text"],
+  ["--ink-2", "Ink 2", "secondary text", "text"],
+  ["--label", "Label", "title-block labels, captions", "text"],
+  ["--rule", "Rule", "hairlines", null],
+  ["--yellow", "Yellow", "verified: bars, swipes, filled tags", "fill"],
+  ["--red", "Red", "must change: rings, tags, leaders", "mark"],
+  ["--blue", "Blue", "conversation: answers, chat", "text"],
+];
+function palette(cls, title, sub) {
+  const box = H("div", "pal " + cls);
+  box.innerHTML = `<div class="pal-h"><b>${title}</b><span class="lab">${sub}</span></div>`;
+  document.body.appendChild(box); // measure inside the right theme
+  const cs = getComputedStyle(box), sheet = cs.getPropertyValue("--sheet").trim(), ink = cs.getPropertyValue("--ink").trim();
+  TOK.forEach(([v, name, job, kind]) => {
+    const val = cs.getPropertyValue(v).trim();
+    let cr = "";
+    if (kind === "text" || kind === "mark") { const r = Board.contrast(val, sheet); const need = kind === "text" ? 4.5 : 3; cr = `${r.toFixed(1)}:1 on sheet ${r >= need ? "✓" : "✗"}`; }
+    else if (kind === "fill") { const r = Board.contrast(cs.getPropertyValue("--on-yellow").trim(), val); cr = `dark ink on it ${r.toFixed(1)}:1 ✓`; }
+    else if (kind === "texture") { const r = Board.contrast(val, sheet); cr = `${r.toFixed(1)}:1 · faint on purpose`; }
+    const row = H("div", "tok");
+    row.innerHTML = `<span class="sw" style="background:${val}"></span><div><b>${name}</b><p><span class="mono">${Board.hex(val)}</span> · ${job}</p></div><span class="cr">${cr}</span>`;
+    box.appendChild(row);
+  });
+  box.remove(); return box;
+}
+const pals = $("#pals");
+pals.appendChild(palette("pal-light", "Pad", "light"));
+pals.appendChild(palette("pal-dark", "Blueprint", "dark"));
+
+/* ------------------------------------------------------------------ type samples, words */
+$("#type-body").textContent = N.paras[1];
+$("#type-check").textContent = N.threads[0].text;
+$("#w-settle").textContent = `Δ1 re-checked · ${N.threads[0].settle}`;
+$("#w-limit").textContent = `Inkling has used this window’s checks. It can check again at ${N.limitResets}; your note is saved, and the new paragraphs get checked then.`;
+$("#w-first").textContent = `${N.firstRun.prompt} Then, about ten seconds later, the first check is about your own sentence.`;
+
+/* ------------------------------------------------------------------ motion demos */
+const MOTS = [
+  ["Highlighter swipe", "220 ms · ease-out, 4% overshoot", "Verified. Left to right, the way a hand goes.", (svg) => { const p = S("path", { d: swipeGeom(30, 44, 120, 22, 5), class: "m-hl m-swipe" }, svg); const t = S("text", { x: 90, y: 60, "text-anchor": "middle", style: "font:400 17px var(--font-body)", class: "m-ink" }, svg); t.textContent = "4:55 a km"; return () => p.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1.04)", offset: .82 }, { transform: "scaleX(1)" }], { duration: 220, easing: "cubic-bezier(.2,.7,.2,1)" }); }],
+  ["Ring", "260 ms · ease-out", "A check lands: one loose ellipse, drawn in one motion.", (svg) => { const t = S("text", { x: 90, y: 62, "text-anchor": "middle", style: "font:400 17px var(--font-body)", class: "m-ink" }, svg); t.textContent = "5:30"; const g = ringGeom(70, 46, 40, 22, 3); const m = maskedPath(svg, g, "m-red"); return () => m.draw(260); }],
+  ["Leader", "180 ms · after the ring", "Dot on the line, one straight segment, a shoulder.", (svg) => { S("circle", { cx: 40, cy: 80, r: 2.6, class: "m-red" }, svg); const p = S("path", { d: "M40 80 L118 40 L142 40", class: "m-red-s", "stroke-width": 1.3, "stroke-linecap": "round" }, svg); return () => Board.draw(p, 180); }],
+  ["Revision cloud", "30 ms a scallop", "You edited checked words: the cloud closes round them.", (svg) => { const t = S("text", { x: 90, y: 64, "text-anchor": "middle", style: "font:400 17px var(--font-body)", class: "m-ink" }, svg); t.textContent = "4:55"; const c = cloudGeom(70, 48, 40, 22, 5.5, 9); const p = S("path", { d: c.d, class: "m-ink-s", "stroke-width": 1.25 }, svg); const dl = deltaSVG(svg, c.top[0] + 4, c.top[1] - 2, 20, "1"); return () => { Board.draw(p, c.n * 30); pop(dl, 200); }; }],
+  ["Reading bar", "as long as the read takes", "Striped yellow, drawn downward beside the paragraph.", (svg) => { const defs = S("defs", {}, svg); const pt = S("pattern", { id: "mstripe", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs); S("rect", { width: 3, height: 6, class: "m-yel" }, pt); const r = S("rect", { x: 87, y: 14, width: 6, height: 92, rx: 1, fill: "url(#mstripe)", style: "transform-box:fill-box;transform-origin:50% 0" }, svg); return () => r.animate([{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { duration: 1100, easing: "linear" }); }],
+  ["Initials", "600 ms, then the stamp", "Three strokes, written left to right; the cell presses in as they finish.", (svg) => { const st = ikStrokes(74, 44, 1.3); const ms = st.map((s) => maskedPath(svg, s, "m-ink", { mw: 6 })); return () => ms.forEach((m, i) => m.draw(200, i * 200)); }],
+];
+const motBox = $("#mots");
+MOTS.forEach(([name, timing, what, build]) => {
+  const card = H("div", "mot");
+  card.innerHTML = `<div class="mot-v"><svg viewBox="0 0 180 120" width="180" height="120" aria-hidden="true"></svg></div><div class="mot-t"><b>${name}</b><span class="mono">${timing}</span><p>${what}</p><button class="btn">Play</button></div>`;
+  motBox.appendChild(card);
+  const play = build($("svg", card));
+  $("button", card).addEventListener("click", play);
+});
+$$("[data-snd]").forEach((b) => b.addEventListener("click", () => {
+  if (!Board.soundOn) { const sb = $('[data-board="sound"]'); if (sb) sb.click(); }
+  setTimeout(() => Board.sound(b.dataset.snd), 60);
+}));
+
+/* ------------------------------------------------------------------ aha moments */
+const AHA = [
+  ["The page gets initialled", "When every check is answered, IK and the date go in the Chk’d cell, with a stamp. Thinking has a finish line.", `<svg viewBox="0 0 160 72"><rect x="1" y="1" width="158" height="70" class="m-sheet" stroke="var(--ink)" stroke-width="1.5"/><line x1="80" y1="1" x2="80" y2="71" stroke="var(--ink)"/><text x="8" y="16" class="m-label" style="font:400 12px var(--font-mono)">CHK'D</text><text x="88" y="16" class="m-label" style="font:400 12px var(--font-mono)">DATE</text>${ikStrokes(20, 30, 1).map((s) => `<path class="m-ink" d="${s.d}"/>`).join("")}<text x="88" y="52" class="m-ink" style="font:400 14px var(--font-mono)">${today}</text></svg>`],
+  ["Fix the words, the check settles", "Change 5:30 to 4:55 and a cloud closes round the edit; Inkling re-checks just that, and it turns yellow on its own.", `<svg viewBox="0 0 120 64"><path d="${swipeGeom(38, 24, 44, 20, 5)}" class="m-hl"/><text x="60" y="40" text-anchor="middle" class="m-ink" style="font:400 17px var(--font-body)">4:55</text><path d="${cloudGeom(38, 24, 44, 18, 5.5, 9).d}" class="m-ink-s" stroke-width="1.25" opacity=".6"/></svg>`],
+  ["Proof it read everything", "A yellow bar beside every paragraph it read. Silence stops being a mystery: it read, and it holds.", `<svg viewBox="0 0 120 80"><rect x="20" y="6" width="6" height="22" rx="1" class="m-yel"/><rect x="20" y="32" width="6" height="22" rx="1" class="m-yel"/><rect x="20" y="58" width="6" height="16" rx="1" class="m-yel"/><g fill="var(--ink-2)" opacity=".45"><rect x="36" y="9" width="70" height="4"/><rect x="36" y="18" width="60" height="4"/><rect x="36" y="35" width="74" height="4"/><rect x="36" y="44" width="52" height="4"/><rect x="36" y="61" width="66" height="4"/></g></svg>`],
+  ["A board of what’s done", "The note list shows ✓, a number, or Δ beside every note. Unfinished thinking is visible at a glance.", `<svg viewBox="0 0 150 72"><g style="font:400 12px var(--font-body)" class="m-ink"><text x="6" y="17">Sub-50 10k</text><text x="6" y="41">Bread didn’t rise</text><text x="6" y="65">Landlord</text></g><g transform="translate(122 5)">${statusHTML("ok").replace("<svg", '<svg width="18" height="18"')}</g><g transform="translate(122 29)">${statusHTML("re").replace("<svg", '<svg width="18" height="18"')}</g><g transform="translate(122 53)">${statusHTML("open", 1).replace("<svg", '<svg width="18" height="18"')}</g></svg>`],
+];
+$("#ahas").innerHTML = AHA.map(([t, p, svg], i) => `<div class="aha"><span class="n">0${i + 1}</span><div class="pic" aria-hidden="true">${svg}</div><b>${t}</b><p>${p}</p></div>`).join("");
+
+/* ------------------------------------------------------------------ start */
+function layoutAll() { framePanels(); heroDoc.paint(); app.paint(); panelDocs.forEach((p) => p.d.paint()); }
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => {
+  panelDocs.forEach(({ d, key }) => setState(d, key));
+  framePanels();
+  const want = Board.state;
+  const heroStates = { reading: 1, open: 1, correction: 1, fixing: 1, cloud: 1, resolved: 1, signed: 1 };
+  if (want && STATES[want]) {
+    setState(app, want);
+    if (heroStates[want]) {
+      heroDoc.reset("note"); heroDoc.showUnread = true; const th = heroDoc.threads[0];
+      if (want === "reading") { heroDoc.read = ["reading"]; heroDoc.status("Checking ¶2"); }
+      else {
+        heroDoc.read = ["read"]; th.state = "open";
+        if (want === "fixing") { const v = $('[data-value="1"]', heroDoc.text); v.textContent = "4:5"; v.classList.add("typing"); }
+        if (want === "cloud") { $('[data-value="1"]', heroDoc.text).textContent = th.t.fixTo; heroDoc.rev = 1; th.cloud = true; th.state = "recheck"; th.msgs.push({ who: "think" }); heroDoc.renderMsgs(th); heroDoc.status("Re-checking Δ1"); }
+        if (want === "resolved" || want === "signed") { $('[data-value="1"]', heroDoc.text).textContent = th.t.fixTo; heroDoc.rev = 1; th.cloud = true; th.state = "verified"; th.why = th.t.settle; th.msgs.push({ who: "ans", text: th.t.settle }); heroDoc.renderMsgs(th); heroDoc.fold(th); heroDoc.sign(false); }
+        if (th.state === "open" || th.state === "recheck") heroDoc.activate(th, true);
+        if (want === "open" || want === "correction") heroDoc.status("1 open");
+      }
+      heroDoc.setCells(); heroDoc.paint();
+    } else {
+      heroDoc.read = ["read"]; heroDoc.threads[0].state = "open"; heroDoc.activate(heroDoc.threads[0], true); heroDoc.setCells(); heroDoc.status("1 open"); heroDoc.paint();
+      requestAnimationFrame(() => $("#app").scrollIntoView({ block: "start" }));
+    }
+  } else {
+    heroRun();
+    setState(app, "reading");
+    app.read = ["unread", "unread", "unread", "unread"]; app.status(""); app.paint();
+    let started = false;
+    const io = new IntersectionObserver((en) => { if (!started && en.some((x) => x.isIntersecting)) { started = true; app.readAll(900); io.disconnect(); } }, { threshold: 0.35 });
+    io.observe($("#app-fit"));
+  }
+  requestAnimationFrame(layoutAll);
+  const drive = Board.params.get("drive");
+  if (drive === "hero") setTimeout(() => { const b = $("[data-act=fix]", heroDoc.root); if (b) b.click(); }, 2600);
+  if (drive === "app") setTimeout(async () => {
+    setState(app, "open"); app.activate(null, true);
+    $("[data-try=fix]").click(); await Board.wait(4200);
+    $("[data-try=reply]").click(); await Board.wait(300);
+    const th = app.threads[1]; $("[data-act=send]", th.card).click();
+  }, 400);
+  addEventListener("resize", () => requestAnimationFrame(framePanels));
+  Board.onTheme(() => requestAnimationFrame(layoutAll));
+});
+})();
+</script>
+</body>
+</html>

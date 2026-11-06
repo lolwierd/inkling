@@ -1,0 +1,16 @@
+note: Pace
+set: pace=slow
+log: typed
+type: This finished paragraph waits for the slow pace.
+wait: 3800
+dump: at-4s
+wait: 1500
+dump: at-5.5s
+set: pace=regular
+log: typed-regular
+type: This one uses the regular pace again now.
+wait: 1700
+dump: at-2s
+wait: 1000
+dump: at-3s
+quit

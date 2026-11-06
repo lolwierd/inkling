@@ -1,0 +1,7 @@
+note: Clearer
+chat: What have we figured out so far? [[delay:1500]]
+wait: 300
+clear
+wait: 3000
+dump: after
+quit

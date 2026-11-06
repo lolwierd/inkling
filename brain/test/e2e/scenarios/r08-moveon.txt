@@ -1,0 +1,5 @@
+note: Mover
+keys: The first paragraph is complete enough to read\nThe second one is still being typed
+wait: 3500
+dump: after
+quit

@@ -1,0 +1,45 @@
+note: Robust
+mode: ask
+activate: 99
+reply: nobody is listening
+dismiss: 99
+copy: 99
+mark: 99
+makenote: 99
+resolve: 99
+switch: No such note
+type: Café crème 🍰 brûlée is déjà vu for the naïve coöperator [[rawquote:not in this paragraph]].
+wait: 300
+select: 🍰 brûlée
+riddle
+wait: 600
+select: Café crème 🍰 brûlée is déjà vu for the naïve coöperator [[rawquote:not in this paragraph]]
+riddle
+wait: 600
+dump: multibyte
+type: Null answers here [[null]] for every task.
+wait: 300
+select: Null answers here [[null]]
+riddle
+wait: 500
+select: answers here [[null]]
+visualize
+wait: 800
+select: here [[null]] for
+ask: why? [[null]]
+wait: 600
+chat: and the chat? [[null]]
+wait: 600
+dump: nulls
+activate: 1
+reply: reply null [[null]]
+wait: 600
+dump: reply-null
+mode: thinks
+keys: \nThis paragraph fails to be read the first time [[error:overloaded]].
+wait: 2700
+dump: read-failed
+enter
+wait: 2700
+dump: after-enter
+quit

@@ -1,0 +1,8 @@
+# A new notebook: the first sentence is always asked about
+wait: 1500
+dump: fresh
+keys: We should drop the old cache next week because nobody reads from it anymore.
+caret: end
+wait: 4500
+dump: asked
+quit

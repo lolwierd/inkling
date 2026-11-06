@@ -1,0 +1,8 @@
+note: Caller
+mode: ask
+keys: Inkling, what about
+wait: 3000
+keys: \sthe cache under load?
+wait: 3000
+dump: after
+quit

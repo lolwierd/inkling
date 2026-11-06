@@ -1,0 +1,10 @@
+note: Shifter
+type: We know the cache is cold at boot time today.
+wait: 3000
+type: We think the cache stays warm after a deploy [[quote:the cache]][[delay:2500]].
+wait: 2600
+caret: start
+enter
+wait: 3000
+dump: after
+quit

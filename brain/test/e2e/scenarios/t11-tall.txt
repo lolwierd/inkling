@@ -1,0 +1,15 @@
+note: Tall
+mode: ask
+type: A first idea to sketch tall [[draw>tallsvg]]. A second idea below it.
+wait: 300
+select: A first idea to sketch tall [[draw>tallsvg]]
+visualize
+wait: 1500
+escape
+select: A second idea below it
+riddle
+wait: 1500
+escape
+wait: 800
+dump: tall
+quit

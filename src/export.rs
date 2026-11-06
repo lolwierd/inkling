@@ -1,8 +1,12 @@
 //! Export a note as Markdown, HTML or Word. Threads (the questions in the margin) can sit under
 //! the paragraph they are about. Word goes through macOS `textutil`, which turns
 //! HTML into .docx without any extra dependency.
+//!
+//! Checklists are `- [ ]` items in Markdown, checkboxes in HTML and ☐ ☑ in Word; a
+//! callout is Obsidian's `> [!note]`, a box in its thread in HTML, and a quote headed by
+//! its kind in Word; code is fenced with its language, or `<pre><code>`.
 
-use crate::store::{BlockKind, Mark, MarkSpan, Note, Role, Thread, ThreadStatus, markdown_blocks};
+use crate::store::{BlockKind, Callout, Mark, MarkSpan, Note, Role, Thread, ThreadStatus, markdown_blocks};
 
 /// A mark as an export writes it, in the order marks nest (outermost first), so a stack
 /// of open marks closes and reopens cleanly wherever the set changes.
@@ -252,75 +256,161 @@ fn thread_html(t: &Thread) -> String {
 }
 
 pub fn to_html(note: &Note, with_threads: bool) -> String {
+    html(note, with_threads, false)
+}
+
+/// The HTML that becomes the Word file. `textutil` draws neither form controls nor
+/// most of the page's style, so a checklist item is a line starting ☐ or ☑ and a callout
+/// is a quote headed by its kind, in its thread.
+pub fn to_word_html(note: &Note, with_threads: bool) -> String {
+    html(note, with_threads, true)
+}
+
+/// A callout's thread in the linen palette, as `#rrggbb`.
+fn callout_hex(kind: Callout) -> &'static str {
+    match kind {
+        Callout::Note => "#2e3f7a",
+        Callout::Warning => "#8f6214",
+        Callout::Tip => "#4f7350",
+    }
+}
+
+fn html(note: &Note, with_threads: bool, word: bool) -> String {
     let under = threads_under_blocks(note);
     let threads = |i: usize| -> String {
         if with_threads { under[i].iter().map(|t| thread_html(t)).collect() } else { String::new() }
     };
     let starts = block_starts(note);
     let mut body = threads(0);
-    let mut list: Option<&str> = None;
+    // the list being written: its tag and how it opens
+    let mut list: Option<(&str, &str)> = None;
     // Items so far in the current run of numbered blocks, as in the Markdown.
     let mut number = 0;
-    let close = |list: &mut Option<&str>, body: &mut String| {
-        if let Some(tag) = list.take() {
+    let close = |list: &mut Option<(&str, &str)>, body: &mut String| {
+        if let Some((tag, _)) = list.take() {
             body.push_str(&format!("</{tag}>\n"));
         }
     };
-    for (i, b) in note.blocks.iter().enumerate().skip(1) {
+    let mut i = 1;
+    while i < note.blocks.len() {
+        let b = &note.blocks[i];
+        // a callout or a block of code: its lines in a row are one box
+        if let BlockKind::Callout(_) | BlockKind::Code(_) = b.kind {
+            let mut end = i + 1;
+            while end < note.blocks.len() && b.kind.joins(note.blocks[end].kind) {
+                end += 1;
+            }
+            let shown: Vec<usize> = (i..end).filter(|&j| !note.blocks[j].text.trim().is_empty()).collect();
+            if let (Some(&first), Some(&last)) = (shown.first(), shown.last()) {
+                close(&mut list, &mut body);
+                number = 0;
+                match b.kind {
+                    BlockKind::Callout(kind) if word => {
+                        body.push_str(&format!("<blockquote><p><b><span style=\"color:{}\">{}</span></b></p>\n", callout_hex(kind), kind.label()));
+                        for &j in &shown {
+                            body.push_str(&format!("<p>{}</p>\n", html_inline(&note.blocks[j].text, starts[j], &note.marks)));
+                        }
+                        body.push_str("</blockquote>\n");
+                    }
+                    BlockKind::Callout(kind) => {
+                        body.push_str(&format!("<div class=\"callout {}\"><p class=\"kind\">{}</p>\n", kind.name(), kind.label()));
+                        for &j in &shown {
+                            body.push_str(&format!("<p>{}</p>\n", html_inline(&note.blocks[j].text, starts[j], &note.marks)));
+                        }
+                        body.push_str("</div>\n");
+                    }
+                    BlockKind::Code(lang) => {
+                        let code: Vec<String> = note.blocks[first..=last].iter().map(|c| esc(&c.text)).collect();
+                        let class = if lang.is_empty() { String::new() } else { format!(" class=\"language-{}\"", lang.as_str()) };
+                        body.push_str(&format!("<pre><code{class}>{}</code></pre>\n", code.join("\n")));
+                    }
+                    _ => {}
+                }
+                for j in i..end {
+                    body.push_str(&threads(j));
+                }
+            }
+            i = end;
+            continue;
+        }
+        let at = i;
+        i += 1;
         if b.text.trim().is_empty() {
             continue;
         }
         if b.kind != BlockKind::Numbered {
             number = 0;
         }
-        let t = html_inline(&b.text, starts[i], &note.marks);
-        match b.kind {
-            BlockKind::Bullet | BlockKind::Numbered => {
-                let tag = if b.kind == BlockKind::Bullet { "ul" } else { "ol" };
-                if list != Some(tag) {
+        let t = html_inline(&b.text, starts[at], &note.marks);
+        let item = match b.kind {
+            BlockKind::Bullet => Some(("ul", "<ul>")),
+            BlockKind::Numbered => Some(("ol", "<ol>")),
+            BlockKind::Check(_) if !word => Some(("ul", "<ul class=\"checklist\">")),
+            _ => None,
+        };
+        match (item, b.kind) {
+            (Some((tag, open)), kind) => {
+                if list.map(|l| l.1) != Some(open) {
                     close(&mut list, &mut body);
                     match number {
-                        0 => body.push_str(&format!("<{tag}>\n")),
-                        n => body.push_str(&format!("<ol start=\"{}\">\n", n + 1)),
+                        n if n > 0 && kind == BlockKind::Numbered => body.push_str(&format!("<ol start=\"{}\">\n", n + 1)),
+                        _ => body.push_str(&format!("{open}\n")),
                     }
-                    list = Some(tag);
+                    list = Some((tag, open));
                 }
-                if b.kind == BlockKind::Numbered {
-                    number += 1;
+                match kind {
+                    BlockKind::Numbered => {
+                        number += 1;
+                        body.push_str(&format!("<li>{t}</li>\n"));
+                    }
+                    BlockKind::Check(done) => {
+                        let (class, checked) = if done { (" class=\"done\"", " checked") } else { ("", "") };
+                        body.push_str(&format!("<li{class}><input type=\"checkbox\" disabled{checked}> {t}</li>\n"));
+                    }
+                    _ => body.push_str(&format!("<li>{t}</li>\n")),
                 }
-                body.push_str(&format!("<li>{t}</li>\n"));
                 // Threads under an item close the list and the next item reopens it
                 // at its number: a list may only hold items, and Word (textutil)
                 // numbers whatever sits inside one.
-                let under_item = threads(i);
+                let under_item = threads(at);
                 if !under_item.is_empty() {
                     close(&mut list, &mut body);
                     body.push_str(&under_item);
                 }
             }
-            kind => {
+            (None, kind) => {
                 close(&mut list, &mut body);
                 match kind {
                     BlockKind::H1 => body.push_str(&format!("<h2>{t}</h2>\n")),
                     BlockKind::H2 => body.push_str(&format!("<h3>{t}</h3>\n")),
                     BlockKind::H3 => body.push_str(&format!("<h4>{t}</h4>\n")),
                     BlockKind::Quote => body.push_str(&format!("<blockquote>{t}</blockquote>\n")),
+                    BlockKind::Check(done) => body.push_str(&format!("<p>{} {t}</p>\n", if done { '\u{2611}' } else { '\u{2610}' })),
                     _ => body.push_str(&format!("<p>{t}</p>\n")),
                 }
-                body.push_str(&threads(i));
+                body.push_str(&threads(at));
             }
         }
     }
     close(&mut list, &mut body);
     // Loose Threads on paper: the writer's words in Fraunces, Inkling's in Figtree, each
     // thread hung off a madder running stitch (the fonts fall back where not installed).
+    // Checklists, callouts and code are sewn as in the note: your ink, their kind's
+    // thread, a flat ground for code.
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title><style>\
 body{{font-family:\"Fraunces Text\",Fraunces,\"Iowan Old Style\",Georgia,serif;font-size:17px;line-height:1.62;\
 max-width:640px;margin:48px auto;padding:0 20px;color:#26232b;background:#fbf8f2}}\
 h1,h2,h3,h4{{font-family:\"Fraunces Display\",Fraunces,\"Iowan Old Style\",Georgia,serif;font-weight:600;line-height:1.25}}\
-blockquote{{margin:0 0 1em;padding-left:16px;border-left:2px solid #e3dacb;color:#57505c;font-style:italic}}\
-code{{font-family:Menlo,monospace;font-size:.88em;background:#f1eadc;padding:0 3px;border-radius:3px}}\
+blockquote{{margin:0 0 1em;padding-left:16px;border-left:2px dashed #8c8276;color:#57505c;font-style:italic}}\
+code{{font-family:\"Spline Sans Mono\",Menlo,monospace;font-size:.86em;background:rgba(38,35,43,.06);padding:1px 4px;border-radius:4px}}\
+pre{{background:#f1eadc;border-radius:8px;padding:10px 14px;margin:0 0 1em;white-space:pre-wrap;overflow-wrap:anywhere}}\
+pre code{{font-size:13.5px;line-height:22px;background:none;padding:0}}\
+.checklist{{list-style:none;padding-left:0}} .checklist input{{margin:0 8px 0 0;accent-color:#26232b}}\
+.checklist .done{{color:#57505c;text-decoration:line-through;text-decoration-color:#8c8276}}\
+.callout{{margin:0 0 1em;padding:8px 16px 10px;border-radius:8px;border:1.5px dashed var(--k);background:var(--bg)}}\
+.callout p{{margin:0}} .callout .kind{{font-family:Figtree,-apple-system,\"Helvetica Neue\",Helvetica,sans-serif;font-size:12px;font-weight:600;color:var(--k)}}\
+.callout.note{{--k:#2e3f7a;--bg:rgba(46,63,122,.06)}} .callout.warning{{--k:#8f6214;--bg:rgba(143,98,20,.06)}} .callout.tip{{--k:#4f7350;--bg:rgba(79,115,80,.06)}}\
 .thread{{margin:6px 0 18px 18px;padding:2px 0 2px 12px;border-left:2px dashed #a63f32;\
 font-family:Figtree,-apple-system,\"Helvetica Neue\",Helvetica,sans-serif;font-size:14px;line-height:1.5}}\
 .thread p{{margin:4px 0}} .thread .on{{font-size:12px;color:#6f6862}} .thread .who{{color:#a63f32;font-weight:600}}\
@@ -354,7 +444,7 @@ pub fn write(note: &Note, with_threads: bool, format: Format, path: &std::path::
         Format::Word => {
             // A fresh name per export, so two exports of one note cannot share a file.
             let tmp = std::env::temp_dir().join(format!("inkling-{}.html", crate::store::new_id()));
-            std::fs::write(&tmp, to_html(note, with_threads))?;
+            std::fs::write(&tmp, to_word_html(note, with_threads))?;
             let output = std::process::Command::new("/usr/bin/textutil")
                 .args(["-convert", "docx", "-output"])
                 .arg(path)

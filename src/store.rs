@@ -69,6 +69,18 @@ impl BlockKind {
     }
 }
 
+/// A block kind in a word or two, for the log and the script's dump: `paragraph`,
+/// `check` or `check:done`, `callout:tip`, `code:rust` (`code` with no language).
+pub fn kind_name(kind: BlockKind) -> String {
+    match kind {
+        BlockKind::Check(done) => if done { "check:done" } else { "check" }.into(),
+        BlockKind::Callout(c) => format!("callout:{}", c.name()),
+        BlockKind::Code(lang) if lang.is_empty() => "code".into(),
+        BlockKind::Code(lang) => format!("code:{}", lang.as_str()),
+        other => serde_json::to_value(other).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default(),
+    }
+}
+
 /// The three kinds of callout. Each is sewn in its own thread: indigo for a note, ochre
 /// for a warning, sage for a tip. Never madder, which is Inkling's.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default, Hash)]

@@ -8,7 +8,11 @@ Update this list when a feature lands or goes; the key is the default binding.
 
 | Capability | How |
 |---|---|
-| A plain page: title, paragraphs, three heading sizes, bullet and numbered lists, quotes | select words, pick a block kind in the selection menu |
+| A plain page: title, paragraphs, three heading sizes, bullet and numbered lists, quotes | select words, pick a block kind in the selection menu; or type `# `, `- `, `1. `, `> ` at a line start; a quote's bar is a back-stitched seam |
+| Checklists | `[ ] ` (or `[] `) at a line start, or ☐ in the selection menu; click the box or ⌘L to check it off: a cross-stitch in your ink sews in, then the line is tacked through; unchecking unpicks it; Return adds the next item, Return on an empty one leaves the list |
+| Callouts: Note, Warning, Tip | `> [!note] ` (or `warning`, `tip`) at a line start, or Note, Warning, Tip in the selection menu: a patch sewn in the kind's thread (indigo, ochre, sage); lines of one kind in a row share a patch |
+| Code blocks | ```` ``` ```` and a language, then Return (or Code in the selection menu): line numbers, colours for keywords, strings, numbers, comments and types, long lines wrap; Return stays inside, Return twice at the end leaves; Copy on hover copies the code without its numbers |
+| Inline code | ⌘E or `</>` in the selection menu: the code face at 0.86 of your words, on a small chip |
 | Speak instead of typing | hold ⌥ alone; let go to stop; the words appear as you talk |
 | Ink from the pointer | a drop of ink where the pointer rests (setting) |
 | Your look | Linen (light) or Lamplight (dark) or follow the system; text size; lettering: Inkling's own or like your notes; your thread colour: Madder, Indigo, Sage, Rose, Plum, Walnut, Ochre |
@@ -18,7 +22,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 
 | Capability | How |
 |---|---|
-| Reads each paragraph at your pause | pace Regular or Slow; a tacking stitch in the gutter marks what it read |
+| Reads each paragraph at your pause | pace Regular or Slow; a tacking stitch in the gutter marks what it read; checklist items and callouts read like paragraphs, a code block is read whole once you leave it, and a question can sit under a single line of code |
 | Speaks only when it is worth it | a question (?) or a correction (×) on a thread; sometimes with a sketch |
 | Waits while you type | a question that arrives mid-sentence stays folded until you pause |
 | Fix the words, the thread settles | edit the words an open thread is about: it reads them again and ties off when the problem is gone |
@@ -71,8 +75,8 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Notes and folders | the sidebar (⌘\\): new note, new folder, folders fold; a dot on notes with open threads |
 | Find or start a note | ⌘K |
 | Copy a note | ⌘⇧C |
-| Export | ⌘⇧E: Markdown, HTML or Word, with the threads or without |
-| Import from Obsidian | File > Import from Obsidian…: a vault's notes come in with their folders, as Obsidian shows them; their words are left unread, so only what you write afterwards is read |
+| Export | ⌘⇧E: Markdown, HTML or Word, with the threads or without; checklists, callouts and code come along (`- [ ]`, `> [!note]`, fenced code in Markdown) |
+| Import from Obsidian | File > Import from Obsidian…: a vault's notes come in with their folders, as Obsidian shows them (tasks as checklists, callouts as callouts, code fences as code); their words are left unread, so only what you write afterwards is read |
 | Welcome guide | Help > Welcome Guide |
 
 ## Model and keys

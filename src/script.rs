@@ -70,6 +70,8 @@
 //! width: 900                # resize the window to this width
 //! size: 900x620             # resize the window to this width and height
 //! dump: label               # log the page's state as one JSON line
+//! export: md                # log what Export would write (md, html or word: the HTML
+//!                           # that becomes the Word file); nothing is saved
 //! log: anything             # write a marker into the log
 //! shot: label               # a screenshot, for the runner: the app only logs the step
 //!                           # and holds still for SHOT_HOLD_MS while `scripts/dev`
@@ -133,6 +135,8 @@ pub enum Step {
     Set(String, String),
     Width(f32),
     Dump(String),
+    /// What Export would write in this format (`md`, `html`, `word`), logged.
+    Export(String),
     Log(String),
     /// Minds for the next ask (Ask the room): `room: Skeptic, Tutor`.
     Room(Vec<String>),
@@ -233,6 +237,11 @@ pub fn parse(src: &str) -> Vec<Step> {
                     }
                 },
                 "dump" => Step::Dump(arg),
+                "export" => Step::Export(match arg.to_lowercase().as_str() {
+                    "html" => "html".into(),
+                    "word" | "docx" => "word".into(),
+                    _ => "md".into(),
+                }),
                 "log" => Step::Log(arg),
                 "room" => Step::Room(arg.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect()),
                 "undo-dismiss" => Step::UndoDismiss,

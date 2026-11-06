@@ -1,0 +1,181 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000b1",
+ "title": "Race week",
+ "folder": null,
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Race week"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The check is finish(). It takes a Pace and returns a Duration, so 4:55 a km comes back as secs(2950), which is 49:10."
+  },
+  {
+   "kind": {
+    "check": true
+   },
+   "text": "Pick up the bib on Friday"
+  },
+  {
+   "kind": {
+    "check": false
+   },
+   "text": "Easy 5 km on Thursday, nothing faster"
+  },
+  {
+   "kind": {
+    "check": false
+   },
+   "text": "Lay out the kit the night before"
+  },
+  {
+   "kind": {
+    "check": true
+   },
+   "text": "Check the start time (8:30)"
+  },
+  {
+   "kind": {
+    "callout": "note"
+   },
+   "text": "The course has one hill, at 6 km."
+  },
+  {
+   "kind": {
+    "callout": "warning"
+   },
+   "text": "Nothing new on race day: not the shoes, not the gel."
+  },
+  {
+   "kind": {
+    "callout": "tip"
+   },
+   "text": "Start 10 seconds a km slower than goal pace for the first kilometre."
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "/// Finish time for 10 km at an even pace."
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "fn finish(pace: Pace) -> Duration {"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "    let per_km = pace.min as u64 * 60 + pace.sec as u64;"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "    Duration::from_secs(10 * per_km)"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "}"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": ""
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "#[test]"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "fn sub_50_needs_4_55() {"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "    assert_eq!(finish(Pace::new(5, 30)), mins(55));"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "    assert_eq!(finish(Pace::new(4, 55)), secs(2950)); // 49:10, with 50 s to spare"
+  },
+  {
+   "kind": {
+    "code": "rust"
+   },
+   "text": "}"
+  },
+  {
+   "kind": "quote",
+   "text": "Run the mile you’re in."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [
+  {
+   "start": 23,
+   "end": 31,
+   "mark": "code"
+  },
+  {
+   "start": 44,
+   "end": 48,
+   "mark": "code"
+  },
+  {
+   "start": 63,
+   "end": 71,
+   "mark": "code"
+  },
+  {
+   "start": 100,
+   "end": 110,
+   "mark": "code"
+  }
+ ],
+ "brief": null,
+ "mode": "thinks_with_you",
+ "mind_id": "inkling",
+ "threads": [
+  {
+   "id": "c1",
+   "start": 692,
+   "end": 708,
+   "quote": "Pace::new(4, 55)",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-06T12:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "4:55 a km comes to 49:10, 50 seconds under. Do you want a test at 5:00 exactly, the edge of your goal?",
+     "at": "2026-11-06T12:00:00Z"
+    }
+   ]
+  }
+ ],
+ "chat": [],
+ "read_hashes": [],
+ "left_alone": [],
+ "created_at": "2026-11-06T12:00:00Z",
+ "updated_at": "2026-11-06T12:00:00Z"
+}

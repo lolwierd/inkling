@@ -1,10 +1,12 @@
 //! File > Import from Obsidian…: the Markdown notes of a vault become Inkling notes.
 //!
 //! The aim is what the vault shows in Obsidian's reading view, in Inkling's blocks.
-//! Headings, lists, quotes and paragraphs keep their shape. What Obsidian does not show
-//! as words goes: front matter, comments, link brackets, emphasis marks, block ids, and
-//! embeds and images, which show files rather than words. A code fence has no block of
-//! its own yet, so its lines stay paragraphs, exactly as written; so does math.
+//! Headings, lists, quotes and paragraphs keep their shape; tasks (`- [ ]`, `- [x]`)
+//! become checklist items, callouts (`> [!note]`) become callouts, Obsidian's other
+//! callout types folded into note, warning and tip, and a code fence becomes a code
+//! block in its language, its lines exactly as written. What Obsidian does not show as
+//! words goes: front matter, comments, link brackets, emphasis marks, block ids, and
+//! embeds and images, which show files rather than words. Math stays as written.
 //!
 //! The vault is only read. Every imported paragraph is left alone (`Note::left_alone`):
 //! reading a whole vault would be hundreds of model calls, so only the words written
@@ -19,7 +21,7 @@ use anyhow::{Context as _, Result};
 use chrono::{DateTime, Utc};
 use gpui_kit::{App, Task};
 
-use crate::store::{Block, BlockKind, Folder, Mode, Note, Store, hash_text, new_id};
+use crate::store::{Block, BlockKind, Callout, Folder, Lang, Mode, Note, Store, hash_text, new_id};
 
 /// Imports still reading their vault.
 static IMPORTING: AtomicUsize = AtomicUsize::new(0);
@@ -366,6 +368,20 @@ fn opens_fence(line: &str) -> Option<(char, usize)> {
     (len >= 3 && !(mark == '`' && t[len..].contains('`'))).then_some((mark, len))
 }
 
+/// The language a fence names (```` ```rust ````), empty when it names none.
+fn fence_lang(line: &str) -> Lang {
+    let t = line.trim();
+    Lang::new(t.trim_start_matches(['`', '~']))
+}
+
+/// A line of code without the indentation its fence had (inside a list item, say), as
+/// Obsidian shows it.
+fn unindented<'a>(code: &'a str, fence: &str) -> &'a str {
+    let indent = fence.len() - fence.trim_start().len();
+    let strip = code.len() - code.trim_start_matches(' ').len();
+    &code[strip.min(indent)..]
+}
+
 fn closes_fence(line: &str, (mark, len): (char, usize)) -> bool {
     let t = line.trim();
     t.len() >= len && t.chars().all(|c| c == mark)
@@ -387,6 +403,10 @@ impl Raw {
 
     fn code(line: &str) -> Self {
         Self { kind: BlockKind::Paragraph, lines: vec![line.to_string()], code: true }
+    }
+
+    fn code_in(lang: Lang, line: &str) -> Self {
+        Self { kind: BlockKind::Code(lang), lines: vec![line.to_string()], code: true }
     }
 
     /// The block as it reads, or nothing when no words are left (a paragraph that was
@@ -426,14 +446,31 @@ fn parse(lines: &[&str], in_quote: bool, line_breaks: bool) -> Vec<Raw> {
             out.extend(open.take());
         } else if let Some(fence) = opens_fence(line) {
             out.extend(open.take());
-            out.push(Raw::code(line));
-            // to the closing fence, or the end of the note
+            if in_quote {
+                // a quote holds only quote lines: its code stays as written, fences and all
+                out.push(Raw::code(line));
+                while let Some(&code) = lines.get(i) {
+                    i += 1;
+                    out.push(Raw::code(code));
+                    if closes_fence(code, fence) {
+                        break;
+                    }
+                }
+                continue;
+            }
+            // a code block in the fence's language, to the closing fence or the end of
+            // the note; two blocks in a row keep an empty line between them, or they
+            // would read as one
+            let lang = fence_lang(line);
+            if out.last().is_some_and(|r: &Raw| r.kind == BlockKind::Code(lang)) {
+                out.push(Raw::code(""));
+            }
             while let Some(&code) = lines.get(i) {
                 i += 1;
-                out.push(Raw::code(code));
                 if closes_fence(code, fence) {
                     break;
                 }
+                out.push(Raw::code_in(lang, unindented(code, line)));
             }
         } else if t.strip_prefix("$$").is_some_and(|rest| !rest.contains("$$")) && lines[i..].iter().any(|l| l.contains("$$")) {
             // a block of math, LaTeX to the closing `$$`: kept as written, like code
@@ -475,9 +512,11 @@ fn parse(lines: &[&str], in_quote: bool, line_breaks: bool) -> Vec<Raw> {
             }
         } else if let Some((kind, text)) = list_item(t) {
             out.extend(open.take());
-            // an empty item has no words; the next line starts afresh
+            // a task is a checklist item; an empty item has no words, and the next line
+            // starts afresh
+            let (kind, text) = if in_quote { (kind, t) } else { task(text).map_or((kind, text), |(done, rest)| (BlockKind::Check(done), rest)) };
             if !text.is_empty() {
-                open = Some(Raw::new(kind, if in_quote { t } else { text }));
+                open = Some(Raw::new(kind, text));
             }
         } else if let Some(p) = open.as_mut().filter(|p| p.kind != BlockKind::Paragraph || !line_breaks) {
             // a wrapped line: more of the same paragraph or list item
@@ -491,15 +530,29 @@ fn parse(lines: &[&str], in_quote: bool, line_breaks: bool) -> Vec<Raw> {
     out
 }
 
-/// A quote's lines, `>` taken off, as quote blocks; a callout's title comes first.
+/// A quote's lines, `>` taken off, as quote blocks. A callout's lines are callout
+/// lines of its kind instead, its title first when it says more than the kind's name.
 fn quote(inner: &[&str], line_breaks: bool) -> Vec<Raw> {
-    let title = inner.first().and_then(|line| callout_title(line));
-    let body = if title.is_some() { &inner[1..] } else { inner };
-    title
-        .map(|t| Raw::new(BlockKind::Quote, &t))
+    let head = inner.first().and_then(|line| callout_head(line));
+    let body = if head.is_some() { &inner[1..] } else { inner };
+    let kind = match &head {
+        Some((kind, _)) => BlockKind::Callout(*kind),
+        None => BlockKind::Quote,
+    };
+    head.and_then(|(_, title)| title)
+        .map(|t| Raw::new(kind, &t))
         .into_iter()
-        .chain(parse(body, true, line_breaks).into_iter().map(|r| Raw { kind: BlockKind::Quote, ..r }))
+        .chain(parse(body, true, line_breaks).into_iter().map(|r| Raw { kind, ..r }))
         .collect()
+}
+
+/// `[ ] rest` or `[x] rest` at the start of a list item's words: a task, and whether it
+/// is done. Obsidian shows any mark but a space as done.
+fn task(text: &str) -> Option<(bool, &str)> {
+    let rest = text.strip_prefix('[')?;
+    let mark = rest.chars().next()?;
+    let after = rest[mark.len_utf8()..].strip_prefix(']')?;
+    (after.is_empty() || after.starts_with([' ', '\t'])).then(|| (mark != ' ', after.trim()))
 }
 
 /// The rest of a `>` line, one level of quote taken off.
@@ -508,14 +561,18 @@ fn quote_text(line: &str) -> Option<&str> {
     Some(rest.strip_prefix(' ').unwrap_or(rest))
 }
 
-/// `[!note] Title`, a callout's first line: the title Obsidian shows, which is the
-/// callout's type ("Note") when it has none. A `+` or `-` after the type only folds it.
-fn callout_title(line: &str) -> Option<String> {
-    let (kind, rest) = line.trim().strip_prefix("[!")?.split_once(']')?;
-    let title = rest.trim_start_matches(['+', '-']).trim();
-    let mut chars = kind.chars();
+/// `[!note] Title`, a callout's first line: its kind, with Obsidian's other types
+/// folded into note, warning and tip (one it does not know is a note), and the title
+/// Obsidian shows, when that says more than the kind's own name: the type ("Todo") when
+/// there is no title. A `+` or `-` after the type only folds it.
+fn callout_head(line: &str) -> Option<(Callout, Option<String>)> {
+    let (name, rest) = line.trim().strip_prefix("[!")?.split_once(']')?;
+    let mut chars = name.chars();
     let first = chars.next()?;
-    Some(if title.is_empty() { first.to_uppercase().chain(chars).collect() } else { title.to_string() })
+    let kind = Callout::from_obsidian(name).unwrap_or(Callout::Note);
+    let title = rest.trim_start_matches(['+', '-']).trim();
+    let shown: String = if title.is_empty() { first.to_uppercase().chain(chars).collect() } else { title.to_string() };
+    Some((kind, (!shown.eq_ignore_ascii_case(kind.label())).then_some(shown)))
 }
 
 /// `# Heading` to `###### Heading`, without closing `#`s. Inkling's headings go three
@@ -955,20 +1012,25 @@ mod tests {
                 b(Paragraph, "plain"),
             ]
         );
-        // nested lists flatten, tasks keep their boxes, empty items go
+        // nested lists flatten, tasks become checklist items, empty items go
         assert_eq!(
-            body("- a\n    - b\n\t- c\n1. d\n   1. e\n- [ ] todo\n- [x] done\n-\n- \nAfter."),
+            body("- a\n    - b\n\t- c\n1. d\n   1. e\n- [ ] todo\n- [x] done\n* [X] **also** done\n2. [ ] numbered task\n- [/] half, shown done\n- [ ]\n-\n- \nAfter."),
             vec![
                 b(Bullet, "a"),
                 b(Bullet, "b"),
                 b(Bullet, "c"),
                 b(Numbered, "d"),
                 b(Numbered, "e"),
-                b(Bullet, "[ ] todo"),
-                b(Bullet, "[x] done"),
+                b(Check(false), "todo"),
+                b(Check(true), "done"),
+                b(Check(true), "also done"),
+                b(Check(false), "numbered task"),
+                b(Check(true), "half, shown done"),
                 b(Paragraph, "After."),
             ]
         );
+        // only a box and a space make a task
+        assert_eq!(body("- [link](x) and [x]y"), vec![b(Bullet, "link and [x]y")]);
         // things that only look like list items
         assert_eq!(line("-5 degrees and +1 for 3.14, 2026-11-06"), "-5 degrees and +1 for 3.14, 2026-11-06");
         assert_eq!(line("**Bold** at the start"), "Bold at the start");
@@ -992,12 +1054,19 @@ mod tests {
         // a line without `>` goes on with the quote's paragraph, as in Obsidian
         assert_eq!(body("> starts here\nand goes on\n\nAfter."), vec![b(Quote, "starts here and goes on"), b(Paragraph, "After.")]);
         assert_eq!(body("> > nested\n> - item\n> # Heading"), vec![b(Quote, "nested"), b(Quote, "- item"), b(Quote, "Heading")]);
-        assert_eq!(body("> [!tip] Why left alone\n> No model calls."), vec![b(Quote, "Why left alone"), b(Quote, "No model calls.")]);
-        assert_eq!(body("> [!warning]-\n> Careful."), vec![b(Quote, "Warning"), b(Quote, "Careful.")]);
-        assert_eq!(
-            body("> [!todo]+ This week\n> - write it\n> - test it"),
-            vec![b(Quote, "This week"), b(Quote, "- write it"), b(Quote, "- test it")]
-        );
+        // callouts: a title that says more than the kind stays as the first line
+        let (note, warning, tip) = (Callout(crate::store::Callout::Note), Callout(crate::store::Callout::Warning), Callout(crate::store::Callout::Tip));
+        assert_eq!(body("> [!tip] Why left alone\n> No model calls."), vec![b(tip, "Why left alone"), b(tip, "No model calls.")]);
+        assert_eq!(body("> [!warning]-\n> Careful."), vec![b(warning, "Careful.")]);
+        assert_eq!(body("> [!NOTE]\n> One.\n>\n> Two."), vec![b(note, "One."), b(note, "Two.")]);
+        // Obsidian's other types fold into the three, and keep the name they showed
+        assert_eq!(body("> [!todo]+ This week\n> - write it\n> - test it"), vec![b(note, "This week"), b(note, "- write it"), b(note, "- test it")]);
+        assert_eq!(body("> [!question]\n> Why?"), vec![b(note, "Question"), b(note, "Why?")]);
+        assert_eq!(body("> [!danger] Hot\n> Do not touch."), vec![b(warning, "Hot"), b(warning, "Do not touch.")]);
+        assert_eq!(body("> [!bug]\n> x"), vec![b(warning, "Bug"), b(warning, "x")]);
+        assert_eq!(body("> [!hint]\n> y"), vec![b(tip, "Hint"), b(tip, "y")]);
+        assert_eq!(body("> [!done]\n> z"), vec![b(tip, "Done"), b(tip, "z")]);
+        assert_eq!(body("> [!my-own] Mine\n> w"), vec![b(note, "Mine"), b(note, "w")]);
     }
 
     #[std::prelude::v1::test]
@@ -1031,34 +1100,36 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
-    fn code_fences_keep_their_lines_as_written() {
+    fn code_fences_become_code_blocks_with_their_lines_as_written() {
+        let rust = Code(Lang::new("rust"));
         let note = "Before.\n```rust\nfn main() {\n\n    let x = \"**not bold** [[not a link]] %% not a comment %%\";\n}\n```\nAfter.";
         assert_eq!(
             body(note),
             vec![
                 b(Paragraph, "Before."),
-                b(Paragraph, "```rust"),
-                b(Paragraph, "fn main() {"),
-                b(Paragraph, ""),
-                b(Paragraph, "    let x = \"**not bold** [[not a link]] %% not a comment %%\";"),
-                b(Paragraph, "}"),
-                b(Paragraph, "```"),
+                b(rust, "fn main() {"),
+                b(rust, ""),
+                b(rust, "    let x = \"**not bold** [[not a link]] %% not a comment %%\";"),
+                b(rust, "}"),
                 b(Paragraph, "After."),
             ]
         );
-        // tildes, a fence inside a list item, and one that never closes
+        // tildes, a fence inside a list item (its indentation goes), and one that never
+        // closes; two blocks in a row keep an empty line between them
+        let plain = Code(Lang::default());
         assert_eq!(
-            body("- item\n  ~~~\n  # code\n  ~~~\n```\nrest of the note\n# still code"),
+            body("- item\n  ~~~\n  # code\n    indented\n  ~~~\n```\nrest of the note\n# still code"),
             vec![
                 b(Bullet, "item"),
-                b(Paragraph, "  ~~~"),
-                b(Paragraph, "  # code"),
-                b(Paragraph, "  ~~~"),
-                b(Paragraph, "```"),
-                b(Paragraph, "rest of the note"),
-                b(Paragraph, "# still code"),
+                b(plain, "# code"),
+                b(plain, "  indented"),
+                b(Paragraph, ""),
+                b(plain, "rest of the note"),
+                b(plain, "# still code"),
             ]
         );
+        assert_eq!(body("```TypeScript {1,3}\nconst a = 1\n```"), vec![b(Code(Lang::new("typescript")), "const a = 1")]);
+        assert_eq!(body("```\n```\nAfter."), vec![b(Paragraph, "After.")], "an empty block has no lines");
         // a code fence in a quote stays a quote
         assert_eq!(body("> ```\n> x = 1\n> ```"), vec![b(Quote, "```"), b(Quote, "x = 1"), b(Quote, "```")]);
     }

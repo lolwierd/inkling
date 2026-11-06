@@ -977,31 +977,38 @@ impl NotePage {
     }
 
     fn consider(&mut self, lines: Vec<usize>, cx: &mut Context<Self>) {
+        // A block of code is read whole, from its first line, once the caret has left it;
+        // its lines are left alone when every one of them is.
         let (cursor_line, candidates) = {
             let ed = self.editor.read(cx);
             let count = ed.line_count();
+            let cursor_unit = ed.unit_of(ed.line_of(ed.cursor()));
             let mut seen = vec![];
-            let candidates: Vec<(usize, String)> = lines
+            let candidates: Vec<(usize, String, bool, bool)> = lines
                 .into_iter()
-                .filter(|l| *l > 0 && *l < count && !seen.contains(l) && {
-                    seen.push(*l);
+                .filter(|l| *l > 0 && *l < count)
+                .map(|l| ed.unit_of(l))
+                .filter(|u| !seen.contains(&u.start) && {
+                    seen.push(u.start);
                     true
                 })
-                .map(|l| (l, ed.line_text(l).trim().to_string()))
+                .map(|u| {
+                    let code = u.len() > 1 || ed.line_kind(u.start).is_code();
+                    let alone = code && (u.clone()).map(|l| ed.line_text(l)).filter(|t| !t.trim().is_empty()).all(|t| self.note.left_alone.contains(&hash_text(&t)));
+                    (u.start, ed.lines_text(u.clone()).trim().to_string(), code && u.start == cursor_unit.start, alone)
+                })
                 .collect();
-            (ed.line_of(ed.cursor()), candidates)
+            (cursor_unit.start, candidates)
         };
         let mut marked = false;
-        for (line, text) in candidates {
+        for (line, text, writing_code, alone) in candidates {
             let hash = hash_text(&text);
-            let verdict = judge(
-                &text,
-                line == cursor_line,
-                self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash),
-                self.calls_mind(&text),
-                self.note.mode == Mode::ThinksWithYou,
-                self.reading.is_some(),
-            );
+            let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash);
+            let verdict = if writing_code && !already {
+                Verdict::Later
+            } else {
+                judge(&text, line == cursor_line, already, self.calls_mind(&text), self.note.mode == Mode::ThinksWithYou, self.reading.is_some())
+            };
             match verdict {
                 Verdict::Skip => {}
                 Verdict::Later => {
@@ -2275,6 +2282,15 @@ impl NotePage {
                 }
             }
             Step::Log(text) => log::info!("script log: {text}"),
+            Step::Export(format) => {
+                self.sync_from_editor(cx);
+                let text = match format.as_str() {
+                    "html" => crate::export::to_html(&self.note, true),
+                    "word" => crate::export::to_word_html(&self.note, true),
+                    _ => crate::export::to_markdown(&self.note, true),
+                };
+                log::info!("script export {format}: {text:?}");
+            }
             _ => {}
         }
         cx.notify();
@@ -2326,6 +2342,7 @@ impl NotePage {
             "asking": self.asking.is_some(),
             "last_edited": self.last_edited,
             "cursor_line": ed.line_of(ed.cursor()),
+            "kinds": ed.lines().iter().map(|(k, _)| crate::store::kind_name(*k)).collect::<Vec<_>>(),
             "metrics": {"viewport": viewport, "available": available, "column": m.column, "margin": m.margin, "both": m.both, "page": m.page(), "fits": fits, "column_left": m.column_left(), "right_left": m.right_left()},
             "slots": slots.iter().map(|s| json!({"id": short(&s.id), "side": format!("{:?}", s.side), "anchor": s.anchor_top.as_f32(), "top": s.top.as_f32(), "h": s.height.as_f32()})).collect::<Vec<_>>(),
             "threads": self.note.threads.iter().map(|t| json!({
@@ -3327,8 +3344,8 @@ impl NotePage {
                 .active(|s| s.opacity(0.7))
         };
         let block = |id: &'static str, label: &'static str, k: BlockKind, cx: &mut Context<Self>| {
-            let glyph = matches!(k, BlockKind::Quote | BlockKind::Bullet);
-            key(id, kind == k).text_size(px(if glyph { ts::BODY } else { ts::META })).child(label).on_click(cx.listener(move |this, _, _, cx| {
+            let glyph = matches!(k, BlockKind::Quote | BlockKind::Bullet | BlockKind::Check(_));
+            key(id, kind.same_kind(k)).text_size(px(if glyph { ts::BODY } else { ts::META })).child(label).on_click(cx.listener(move |this, _, _, cx| {
                 this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));
                 this.show_toolbar = true;
                 cx.notify();
@@ -3413,8 +3430,10 @@ impl NotePage {
                     .child(block("tb-h3", "H3", BlockKind::H3, cx))
                     .child(block("tb-q", "\u{201c}", BlockKind::Quote, cx))
                     .child(block("tb-ul", "\u{2022}", BlockKind::Bullet, cx))
-                    .child(block("tb-ol", "1.", BlockKind::Numbered, cx)),
+                    .child(block("tb-ol", "1.", BlockKind::Numbered, cx))
+                    .child(block("tb-check", "\u{2610}", BlockKind::Check(false), cx)),
             )
+            .child(self.sewn_keys(kind, cx))
             .child(
                 div()
                     .px(px(5.))
@@ -3437,6 +3456,47 @@ impl NotePage {
                 .with_priority(1)
                 .into_any_element(),
         )
+    }
+
+    /// The selection menu's row of sewn blocks: a callout of each kind, named in its
+    /// thread, and a block of code.
+    fn sewn_keys(&self, kind: BlockKind, cx: &mut Context<Self>) -> AnyElement {
+        use crate::store::{Callout, Lang};
+        let p = Theme::get(cx).p;
+        let mut row = div().px(px(5.)).pt(px(2.)).flex().gap(px(2.));
+        let keys = Callout::ALL
+            .iter()
+            .map(|c| (*c, BlockKind::Callout(*c)))
+            .map(|(c, k)| (c.label(), k, crate::sewn::callout_thread(c, &p), crate::theme::SANS))
+            .chain(std::iter::once(("Code", BlockKind::Code(Lang::default()), p.graphite, crate::theme::MONO)));
+        for (label, k, color, family) in keys {
+            let on = kind.same_kind(k);
+            row = row.child(
+                div()
+                    .id(SharedString::from(format!("tb-{}", label.to_lowercase())))
+                    .h(px(22.))
+                    .px(px(7.))
+                    .flex()
+                    .items_center()
+                    .rounded(px(5.))
+                    .cursor_pointer()
+                    .font_family(family)
+                    .text_size(px(ts::SMALL))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(color)
+                    .border_1()
+                    .border_color(if on { color } else { gpui_kit::transparent_black() })
+                    .hover(move |s| s.bg(p.wash))
+                    .active(|s| s.opacity(0.7))
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));
+                        this.show_toolbar = true;
+                        cx.notify();
+                    })),
+            );
+        }
+        row.into_any_element()
     }
 
     fn ask_box(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -3905,7 +3965,11 @@ impl Render for NotePage {
                     gutter.push((line, GutterMark::Question { number: n + 1, color: open[n].2 }));
                     continue;
                 }
-                let text = ed.line_text(line);
+                let unit = ed.unit_of(line);
+                if unit.start != line {
+                    continue;
+                }
+                let text = ed.lines_text(unit);
                 let text = text.trim();
                 if !text.is_empty() && self.note.read_hashes.contains(&hash_text(text)) {
                     gutter.push((line, GutterMark::Read));

@@ -4,7 +4,7 @@
 use chrono::Utc;
 
 use crate::store::{
-    Block, BlockKind, Message, Mode, Note, Role, Side, Thread, ThoughtKind, ThreadStatus, new_id,
+    Block, BlockKind, Callout, Lang, Message, Mode, Note, Role, Side, Thread, ThoughtKind, ThreadStatus, new_id,
 };
 
 const MOON_SKETCH: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 236">
@@ -77,7 +77,8 @@ pub fn welcome_note(mode: Mode) -> Note {
 /// them, fix the words and watch one tie off), and it ends by asking for one sentence
 /// of your own, which Inkling reads with a question first (`first_run`).
 pub fn first_run_note(mode: Mode) -> Note {
-    use BlockKind::{Bullet, H2, Paragraph as P, Title};
+    use BlockKind::{Bullet, Check, Code, H2, Paragraph as P, Quote, Title};
+    let rust = Code(Lang::new("rust"));
     let mut note = Note::new("Start here", mode, None);
     let pace = "A 10 km race at 5:30 per kilometre takes 50 minutes.";
     let memory = "The best way to remember something is to write it down.";
@@ -96,11 +97,20 @@ pub fn first_run_note(mode: Mode) -> Note {
         (P, "Inkling reads each paragraph when you pause, and a small stitch in the gutter marks what it has read. Most of the time it says nothing. A question that comes while you are mid-sentence waits, folded, until you stop."),
         (P, "Tell Inkling, above the title, says what a note is for, and every read takes it into account. Beside it, Reads along can become Waits to be asked: then Inkling stays quiet until you call it, select words, or open the chat."),
         (H2, "Asking"),
-        (P, "Select some words and a small menu appears. Find a loose thread (\u{2318}\u{21b5}) picks the one thing in them most worth a question. Ask Inkling takes your own question. Sketch it answers with a drawing, stitched out step by step; click a sketch to see it large. The same menu turns a line into a heading, a list or a quote."),
+        (P, "Select some words and a small menu appears. Find a loose thread (\u{2318}\u{21b5}) picks the one thing in them most worth a question. Ask Inkling takes your own question. Sketch it answers with a drawing, stitched out step by step; click a sketch to see it large. The same menu turns a line into a heading, a list, a quote, a callout or code."),
         (P, enough),
         (P, "Ask the room to hear from up to three minds at once. Each answers on its own thread, in its own colour. Or start a sentence with a mind\u{2019}s name and a comma, and that mind answers you there."),
         (P, moon),
         (P, "\u{2318}J opens a chat about the whole note. It has read every thread as well, so it can tell you what you have settled and what is still open."),
+        (H2, "Checklists, callouts and code"),
+        (P, "Start a line with [ ] and a space for a checklist item; click its box, or press \u{2318}L, to check it off. Start one with > [!note], > [!warning] or > [!tip] and a space for a callout. Three backticks and a language, then Return, start a block of code; Return twice at its end leaves it. Inkling reads all of them like any paragraph, and can ask about a single line of code."),
+        (Check(true), "Pick up the race bib on Friday"),
+        (Check(false), "An easy 5 km on Thursday, nothing faster"),
+        (BlockKind::Callout(Callout::Tip), "Run the first kilometre 10 seconds slower than goal pace."),
+        (rust, "fn finish(secs_per_km: u32) -> u32 {"),
+        (rust, "    10 * secs_per_km // 10 km at an even pace"),
+        (rust, "}"),
+        (Quote, "Run the mile you\u{2019}re in."),
         (H2, "Minds"),
         (P, "The name above the title is the note\u{2019}s mind. Inkling comes with Staff engineer, Editor, Skeptic, Socratic tutor and Investor. In Settings, under Minds, you can make your own: say what it is for and how it thinks, give it a voice (plain, warm, blunt or Socratic), and choose how often it speaks. Each mind keeps its own thread colour, so you can see who asked what."),
         (P, "Settings, under About you, holds what Inkling knows about you. Turn on Inkling learns about you, and it keeps what matters from your replies."),
@@ -119,6 +129,7 @@ pub fn first_run_note(mode: Mode) -> Note {
         (Bullet, "\u{2318}\u{21e7}\u{232b} dismisses the open thread, and \u{2325}\u{2318}Z brings it back."),
         (Bullet, "\u{2318}\u{21e7}. hides every thread and leaves just your words."),
         (Bullet, "\u{2318}J opens a chat about the whole note."),
+        (Bullet, "\u{2318}L checks or unchecks a checklist item."),
         (Bullet, "\u{2318}K finds a note, or starts one."),
         (Bullet, "\u{2318}\\ shows your notes and folders."),
         (Bullet, "\u{2318}\u{21e7}C copies the note, and \u{2318}\u{21e7}E exports it."),

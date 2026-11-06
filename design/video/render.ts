@@ -1,25 +1,43 @@
 // Renders the film with headless Chrome, driven over the DevTools protocol (no packages).
 //
-//   bun run render.ts stills <scratch> 0.5,12,30.2         one PNG per time, into <scratch>/stills
-//   bun run render.ts frames <scratch> --workers=8          the whole film, split across 8 Chromes,
-//                                                           each writing an H.264 segment; joined
-//   bun run render.ts audio <scratch>                       music.wav and fx.wav (audio.html), into audio/
-//   bun run render.ts mux <scratch>                         segments + audio/mix.wav -> inkling-walkthrough.mp4
+//   bun run render.ts stills <scratch> 0.5,12,30.2 [--res=1080]   one PNG per time, into <scratch>/stills
+//   bun run render.ts audio <scratch>                               the score's stems, into audio/music.wav and fx.wav
+//   bun run render.ts frames <scratch> [--workers=8] [--only=3,4]   the picture, chapter by chapter (see below)
+//   bun run render.ts page <scratch>                                segments + audio/mix.wav -> page/film.mp4 (720p)
+//   bun run render.ts coverage <scratch>                            coverage.md from the cut
+//   bun run render.ts eval <scratch> '<expression>'                 a value from the page, for tuning
+//
+// The picture is rendered straight at 720p, the size the page plays, in segments that follow
+// the film's plan (film.js PLAN): one per chapter, cut into chunks of at most 12 s so eight
+// Chromes can share the work. segments/manifest.json remembers each chunk's chapter, frames
+// and signature (the chapter's moments and their lengths, and the look of the rebuild:
+// app.js, settings.js, film.html). `frames` renders only the chunks whose signature or
+// length changed, plus every chapter named in --only (use it when a chapter's content
+// changed but its moments did not); the rest are kept, even when they now start later.
+// `page` joins the chunks in the plan's order with ffmpeg (stream copy, no re-encode) and
+// encodes the page's film from them in two passes. So a second cut re-renders only what it
+// touched:   bun run render.ts frames <scratch> --only=3 && bun run render.ts page <scratch>
+// A transition that crosses a chapter boundary (the unfolding tag into chapters 2 and 6, the
+// stitch into 7) shows both sides: name both chapters in --only when either side changes.
 //
 // Every Chrome gets its own --user-data-dir under <scratch>, so nothing touches a real profile.
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 
 const HERE = import.meta.dir;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const FFMPEG = "/opt/homebrew/bin/ffmpeg";
 const [mode, scratch, ...rest] = process.argv.slice(2);
 if (!mode || !scratch) {
-  console.error("usage: bun run render.ts <stills|frames|audio|mux|worker> <scratch> ...");
+  console.error("usage: bun run render.ts <stills|audio|frames|page|coverage|eval|worker> <scratch> ...");
   process.exit(2);
 }
 mkdirSync(scratch, { recursive: true });
 const opt = (k: string, d?: string) => rest.find((a) => a.startsWith(`--${k}=`))?.split("=")[1] ?? d;
+const RES = +(opt("res", "720") as string); // 720 renders the page's size; 1080 the full frame
+const SCALE = RES / 1080;
+const W = Math.round(1920 * SCALE), H = Math.round(1080 * SCALE);
 
 // ----- a tiny DevTools client ------------------------------------------------------
 class Tab {
@@ -31,7 +49,7 @@ class Tab {
     const t = new Tab();
     rmSync(join(profile, "DevToolsActivePort"), { force: true });
     t.proc = Bun.spawn([CHROME, "--headless=new", `--user-data-dir=${profile}`, "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check",
-      "--hide-scrollbars", "--force-device-scale-factor=1", "--window-size=1920,1080", "--force-color-profile=srgb", "--allow-file-access-from-files",
+      "--hide-scrollbars", "--window-size=1920,1080", "--force-color-profile=srgb", "--allow-file-access-from-files",
       "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "--font-render-hinting=none", "about:blank"],
       { stdout: "ignore", stderr: "ignore" });
     let port = "";
@@ -47,7 +65,8 @@ class Tab {
     t.ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((r, j) => { t.ws.onopen = r; t.ws.onerror = j; });
     t.ws.onmessage = (e) => { const m = JSON.parse(String(e.data)); if (m.id && t.waits.has(m.id)) { t.waits.get(m.id)!(m); t.waits.delete(m.id); } };
-    await t.send("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
+    // the page is laid out at 1920 x 1080 and drawn at the output's size
+    await t.send("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: SCALE, mobile: false });
     await t.send("Page.enable");
     await t.send("Page.navigate", { url: page });
     return t;
@@ -81,6 +100,7 @@ class Tab {
 }
 
 const PAGE = `file://${join(HERE, "film.html")}`;
+const run = async (args: string[]) => { const p = Bun.spawn([FFMPEG, "-hide_banner", ...args], { stdout: "inherit", stderr: "inherit" }); if (await p.exited) throw new Error(`ffmpeg ${args.join(" ")} failed`); };
 
 async function stills(times: number[]) {
   const dir = join(scratch, "stills");
@@ -96,12 +116,13 @@ async function stills(times: number[]) {
   } finally { tab.close(); }
 }
 
-/** One worker: frames [f0, f1) into an H.264 segment. */
+/** One worker: frames [f0, f1) into an H.264 segment at the output's size. Every segment is
+ *  encoded alike (one keyframe at its start), so they join with a stream copy. */
 async function worker(f0: number, f1: number, out: string, profile: string) {
   const tab = await Tab.open(profile, PAGE);
   const ff = Bun.spawn([FFMPEG, "-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", "30", "-c:v", "png", "-i", "-",
-    "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high",
-    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-r", "30", out], { stdin: "pipe", stderr: "inherit" });
+    "-vf", `scale=${W}:${H}:flags=lanczos,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p`, "-c:v", "libx264", "-preset", "faster", "-crf", "14", "-profile:v", "high",
+    "-g", "9999", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-r", "30", out], { stdin: "pipe", stderr: "inherit" });
   try {
     await tab.ready();
     const fps = await tab.eval("FILM.FPS");
@@ -109,39 +130,81 @@ async function worker(f0: number, f1: number, out: string, profile: string) {
     for (let f = f0; f < f1; f++) {
       await tab.eval(`FILM.renderAt(${(f / fps).toFixed(6)})`);
       ff.stdin.write(await tab.png());
-      if ((f - f0) % 60 === 59) console.log(`[${out.split("/").pop()}] ${f + 1 - f0}/${f1 - f0} · ${((Date.now() - t0) / (f - f0 + 1)).toFixed(0)} ms/frame`);
+      if ((f - f0) % 90 === 89) console.log(`[${out.split("/").pop()}] ${f + 1 - f0}/${f1 - f0} · ${((Date.now() - t0) / (f - f0 + 1)).toFixed(0)} ms/frame`);
     }
     ff.stdin.end();
     await ff.exited;
   } finally { tab.close(); }
 }
 
+/** The film's chunks under its current plan: one or more per chapter, at most CHUNK frames. */
+const CHUNK = 360;
+async function chunks() {
+  const probe = await Tab.open(join(scratch, "chrome-probe"), PAGE);
+  let info: any;
+  try {
+    await probe.ready();
+    info = await probe.eval("({ fps: FILM.FPS, dur: FILM.DUR, plan: FILM.PLAN.map((ch) => ({ n: ch.n, t0: FILM.CHS[ch.n], moments: ch.moments.map((m) => [m.id, m.dur]) })) })");
+  } finally { probe.close(); }
+  const look = createHash("sha1");
+  for (const f of ["app.js", "settings.js", "film.html"]) look.update(readFileSync(join(HERE, f)));
+  const lookSig = look.digest("hex").slice(0, 10);
+  const out: { id: string; ch: number; f0: number; f1: number; sig: string }[] = [];
+  const fr = (t: number) => Math.round(t * info.fps);
+  info.plan.forEach((ch: any, i: number) => {
+    const F0 = fr(ch.t0), F1 = i + 1 < info.plan.length ? fr(info.plan[i + 1].t0) : fr(info.dur);
+    const sig = createHash("sha1").update(JSON.stringify(ch.moments) + lookSig + RES).digest("hex").slice(0, 12);
+    for (let k = 0, a = F0; a < F1; k++, a += CHUNK) out.push({ id: `ch${ch.n}-${k}`, ch: ch.n, f0: a, f1: Math.min(F1, a + CHUNK), sig });
+  });
+  return out;
+}
+
 async function frames() {
   const workers = +(opt("workers", "8") as string);
-  const from = +(opt("from", "0") as string), to = opt("to");
+  const only = new Set((opt("only", "") as string).split(",").filter(Boolean).map(Number));
   const segDir = join(scratch, "segments");
   mkdirSync(segDir, { recursive: true });
-  const probe = await Tab.open(join(scratch, "chrome-probe"), PAGE);
-  await probe.ready();
-  const fps = await probe.eval("FILM.FPS"), dur = await probe.eval("FILM.DUR");
-  probe.close();
-  const F0 = Math.round(from * fps), F1 = to ? Math.round(+to * fps) : Math.round(dur * fps);
-  const per = Math.ceil((F1 - F0) / workers);
+  const manPath = join(segDir, "manifest.json");
+  const old: Record<string, any> = existsSync(manPath) ? JSON.parse(readFileSync(manPath, "utf8")) : {};
+  const all = await chunks();
+  const todo = all.filter((c) => {
+    const o = old[c.id], file = join(segDir, `${c.id}.mp4`);
+    return only.has(c.ch) || !o || o.sig !== c.sig || o.f1 - o.f0 !== c.f1 - c.f0 || !existsSync(file) || statSync(file).size < 1000;
+  });
+  console.log(`frames: ${all.length} chunks, ${todo.length} to render (${todo.map((c) => c.id).join(" ") || "none"})`);
   const t0 = Date.now();
-  const jobs: Promise<unknown>[] = [];
-  const names: string[] = [];
-  for (let k = 0; k < workers; k++) {
-    const a = F0 + k * per, b = Math.min(F1, a + per);
-    if (a >= b) break;
-    const name = join(segDir, `seg${String(k).padStart(2, "0")}.mp4`);
-    names.push(name);
-    // each worker is its own process, so a slow frame in one never holds up the others
-    const p = Bun.spawn([process.execPath, "run", join(HERE, "render.ts"), "worker", scratch, `--f0=${a}`, `--f1=${b}`, `--out=${name}`, `--profile=${join(scratch, `chrome-w${k}`)}`], { stdout: "inherit", stderr: "inherit" });
-    jobs.push(p.exited.then((code) => { if (code) throw new Error(`worker ${k} exited ${code}`); }));
-  }
-  await Promise.all(jobs);
-  writeFileSync(join(segDir, "list.txt"), names.map((n) => `file '${n}'`).join("\n") + "\n");
-  console.log(`frames ${F0}..${F1} in ${((Date.now() - t0) / 1000).toFixed(1)} s with ${names.length} workers`);
+  // a pool of workers, each its own process, so a slow frame in one never holds up the others
+  let next = 0, failed = "";
+  const lane = async (k: number) => {
+    while (next < todo.length) {
+      const c = todo[next++];
+      const p = Bun.spawn([process.execPath, "run", join(HERE, "render.ts"), "worker", scratch, `--f0=${c.f0}`, `--f1=${c.f1}`, `--out=${join(segDir, `${c.id}.mp4`)}`, `--profile=${join(scratch, `chrome-w${k}`)}`, `--res=${RES}`], { stdout: "inherit", stderr: "inherit" });
+      if (await p.exited) failed += ` ${c.id}`;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(workers, todo.length) }, (_, k) => lane(k)));
+  if (failed) throw new Error(`chunks failed:${failed}`);
+  const man: Record<string, any> = {};
+  for (const c of all) man[c.id] = c;
+  writeFileSync(manPath, JSON.stringify(man, null, 1));
+  writeFileSync(join(segDir, "list.txt"), all.map((c) => `file '${join(segDir, `${c.id}.mp4`)}'`).join("\n") + "\n");
+  console.log(`frames: ${todo.length} chunks in ${((Date.now() - t0) / 1000).toFixed(1)} s with ${workers} workers`);
+}
+
+/** The page's film: the chunks joined (stream copy), with the mix, two-pass x264 at about
+ *  620 kbit/s and AAC at 96 kbit/s, under 20 MiB. */
+async function page() {
+  const segDir = join(scratch, "segments");
+  const joined = join(scratch, "joined.mp4");
+  await run(["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(segDir, "list.txt"), "-c", "copy", joined]);
+  const outFile = join(HERE, "page", "film.mp4"), log = join(scratch, "x264-2pass");
+  const v = ["-c:v", "libx264", "-preset", "slow", "-b:v", opt("kbps", "620") + "k", "-maxrate", "1400k", "-bufsize", "2800k", "-profile:v", "high", "-pix_fmt", "yuv420p",
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv", "-passlogfile", log];
+  await run(["-loglevel", "error", "-y", "-i", joined, ...v, "-pass", "1", "-an", "-f", "mp4", "/dev/null"]);
+  await run(["-loglevel", "error", "-y", "-i", joined, "-i", join(HERE, "audio", "mix.wav"), "-map", "0:v", "-map", "1:a", ...v, "-pass", "2",
+    "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-shortest", "-movflags", "+faststart", outFile]);
+  const size = statSync(outFile).size;
+  console.log(`→ ${outFile}: ${(size / 1048576).toFixed(2)} MiB${size >= 20 * 1048576 ? " (over 20 MiB: lower --kbps)" : ""}`);
 }
 
 async function audio() {
@@ -150,7 +213,7 @@ async function audio() {
   const tab = await Tab.open(join(scratch, "chrome-audio"), PAGE);
   try {
     await tab.ready();
-    const info = await tab.eval("SCORE.render(FILM.events)");
+    const info = await tab.eval("SCORE.render()");
     console.log("score:", JSON.stringify(info));
     for (const stem of ["music", "fx"]) {
       const total = await tab.eval(`SCORE.wav(${JSON.stringify(stem)})`);
@@ -163,38 +226,29 @@ async function audio() {
   } finally { tab.close(); }
 }
 
-async function mux() {
-  const segDir = join(scratch, "segments");
-  const out = join(HERE, "inkling-walkthrough.mp4");
-  const p = Bun.spawn([FFMPEG, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", join(segDir, "list.txt"), "-i", join(HERE, "audio", "mix.wav"),
-    "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-shortest", "-movflags", "+faststart", out], { stdout: "inherit", stderr: "inherit" });
-  if (await p.exited) throw new Error("mux failed");
-  console.log(`→ ${out}`);
-}
-
 if (mode === "stills") await stills((rest[0] || "0").split(",").map(Number));
 else if (mode === "frames") await frames();
 else if (mode === "worker") await worker(+opt("f0")!, +opt("f1")!, opt("out")!, opt("profile")!);
 else if (mode === "audio") await audio();
+else if (mode === "page") await page();
 else if (mode === "eval") {
-  // bun run render.ts eval <scratch> '<expression>': for measuring the page while tuning
   const tab = await Tab.open(join(scratch, "chrome-eval"), PAGE);
   try { await tab.ready(); console.log(JSON.stringify(await tab.eval(rest[0]), null, 1)); } finally { tab.close(); }
 }
 else if (mode === "coverage") {
-  // bun run render.ts coverage <scratch>: writes coverage.md from FILM.coverage, so every
-  // row of design/capabilities.md is listed with the moment the cut shows it
+  // writes coverage.md from FILM.coverage, so every row of design/capabilities.md is listed
+  // with the moment the cut shows it
   const tab = await Tab.open(join(scratch, "chrome-cov"), PAGE);
   try {
     await tab.ready();
-    const { rows, chapters, dur } = await tab.eval("({ rows: FILM.coverage, chapters: FILM.chapters.map((c) => ({ n: c.n, name: c.name, t: c.t })), dur: FILM.DUR })");
+    const { rows, chapters, dur, mark } = await tab.eval("({ rows: FILM.coverage, chapters: FILM.chapters.map((c) => ({ n: c.n, name: c.name, t: c.t })), dur: FILM.DUR, mark: FILM.CHS[8] })");
     const mmss = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
     const caps = readFileSync(join(HERE, "..", "capabilities.md"), "utf8");
     const listed = [...caps.matchAll(/^\| ([^|]+?) \| [^|]+ \|$/gm)].map((m) => m[1].trim()).filter((r) => r !== "Capability" && !/^-+$/.test(r));
     const missing = listed.filter((r) => !rows.some((x: any) => x.row.replace(/’/g, "'") === r.replace(/’/g, "'")));
-    let md = `# The walkthrough film: what it covers\n\nEvery row of \`design/capabilities.md\`, with the moment \`inkling-walkthrough.mp4\` shows it (m:ss). ` +
+    let md = `# The walkthrough film: what it covers\n\nEvery row of \`design/capabilities.md\`, with the moment the film (\`page/film.mp4\`) shows it (m:ss). ` +
       `Generated from \`film.js\` by \`bun run render.ts coverage <scratch>\`, so the times are the cut's own.\n\n` +
-      `Length ${mmss(dur)}. Chapters: ` + chapters.map((c: any) => `${c.n} ${c.name} (${mmss(Math.max(0, c.t))})`).join(", ") + ", then the mark.\n";
+      `Length ${mmss(dur)}. Chapters: ` + chapters.map((c: any) => `${c.n} ${c.name} (${mmss(Math.max(0, c.t))})`).join(", ") + `, then the mark (${mmss(mark)}).\n`;
     let section = "";
     for (const r of rows) {
       if (r.section !== section) { section = r.section; md += `\n## ${section}\n\n| Capability | At | On screen |\n|---|---|---|\n`; }
@@ -205,70 +259,5 @@ else if (mode === "coverage") {
     console.log(`coverage.md: ${rows.length} rows, ${listed.length} in capabilities.md, missing: ${missing.length ? missing.join("; ") : "none"}`);
   } finally { tab.close(); }
 }
-else if (mode === "measure") {
-  // bun run render.ts measure <scratch> [file.mp4]: what the finished film's sound measures:
-  // loudness and true peak, the balance across the spectrum, the held silences, and how
-  // closely the hits in the encoded audio land on the moments they belong to on screen
-  const file = rest.find((a) => a.endsWith(".mp4")) || join(HERE, "inkling-walkthrough.mp4");
-  const tab = await Tab.open(join(scratch, "chrome-meas"), PAGE);
-  let events: any[] = [];
-  try { await tab.ready(); events = await tab.eval("FILM.events"); } finally { tab.close(); }
-  const run = async (args: string[]) => { const p = Bun.spawn([FFMPEG, "-hide_banner", "-nostats", ...args], { stdout: "pipe", stderr: "pipe" }); const [o, e] = await Promise.all([new Response(p.stdout).arrayBuffer(), new Response(p.stderr).text()]); await p.exited; return { o, e }; };
-  const report: any = { file };
-  const eb = (await run(["-i", file, "-map", "0:a", "-af", "ebur128=peak=true", "-f", "null", "-"])).e;
-  const sum = eb.slice(eb.lastIndexOf("Summary:"));
-  report.integratedLUFS = +(/I:\s+(-?[\d.]+) LUFS/.exec(sum)?.[1] ?? NaN);
-  report.LRA = +(/LRA:\s+([\d.]+) LU/.exec(sum)?.[1] ?? NaN);
-  report.truePeakDBTP = +(/Peak:\s+(-?[\d.]+) dBFS/.exec(sum)?.[1] ?? NaN);
-  // the balance: RMS per band, relative to the whole
-  const bands: [string, number, number][] = [["sub <60 Hz", 20, 60], ["low 60-250", 60, 250], ["low-mid 250-1k", 250, 1000], ["mid 1-4k", 1000, 4000], ["high 4-10k", 4000, 10000], ["air >10k", 10000, 20000]];
-  const rms = async (af: string) => +(/RMS level dB: (-?[\d.]+|-inf)/.exec((await run(["-i", file, "-map", "0:a", "-af", `${af}astats=measure_overall=RMS_level:measure_perchannel=0`, "-f", "null", "-"])).e)?.[1] ?? NaN);
-  const all = await rms("");
-  report.balance = {};
-  for (const [name, lo, hi] of bands) report.balance[name] = +((await rms(`highpass=f=${lo}:poles=2,highpass=f=${lo}:poles=2,lowpass=f=${hi}:poles=2,lowpass=f=${hi}:poles=2,`)) - all).toFixed(1);
-  report.balance.wholeRMSdB = all;
-  // the decoded audio, for timing
-  const SR = 48000;
-  const pcm = new Float32Array((await run(["-i", file, "-map", "0:a", "-ac", "1", "-ar", String(SR), "-f", "f32le", "-"])).o);
-  // an onset curve: rectified high-passed energy rise, 2 ms hops
-  const hop = 96, n = Math.floor(pcm.length / hop), en = new Float32Array(n);
-  let x1 = 0, y1 = 0;
-  const a = Math.exp((-2 * Math.PI * 1500) / SR);
-  for (let i = 0, k = 0; k < n; k++) { let s = 0; for (let j = 0; j < hop; j++, i++) { const y = a * (y1 + pcm[i] - x1); x1 = pcm[i]; y1 = y; s += y * y; } en[k] = Math.sqrt(s / hop); }
-  const onsetNear = (t: number, win = 0.06) => {
-    const c = Math.round((t * SR) / hop), w = Math.round((win * SR) / hop);
-    let best = -1, bv = 0;
-    for (let k = Math.max(1, c - w); k < Math.min(n, c + w); k++) { const rise = en[k] - en[k - 1]; if (rise > bv) { bv = rise; best = k; } }
-    // the hit must stand out of what is around it
-    let floor = 0; for (let k = Math.max(0, c - 4 * w); k < Math.max(0, c - w); k++) floor = Math.max(floor, en[k]);
-    return best >= 0 && en[best] > floor * 1.2 ? (best * hop) / SR - t : null;
-  };
-  const kinds: Record<string, any[]> = {};
-  for (const e of events) {
-    const t = e.t ?? e.t0;
-    if (!["knot", "snip", "key", "pierce", "thump", "stitch", "bass", "drop", "pop", "tick"].includes(e.type) || (e.v != null && e.v < 0.5)) continue;
-    const off = onsetNear(t);
-    (kinds[e.type] ||= []).push(off);
-  }
-  report.alignment = {};
-  const allOff: number[] = [];
-  for (const [k, offs] of Object.entries(kinds)) {
-    const found = offs.filter((o) => o != null) as number[];
-    found.forEach((o) => allOff.push(o));
-    const abs = found.map(Math.abs).sort((p, q) => p - q);
-    report.alignment[k] = { cues: offs.length, found: found.length, medianAbsMs: abs.length ? Math.round(abs[abs.length >> 1] * 1000) : null, maxAbsMs: abs.length ? Math.round(abs[abs.length - 1] * 1000) : null, meanMs: found.length ? Math.round((found.reduce((p, q) => p + q, 0) / found.length) * 1000) : null };
-  }
-  const absAll = allOff.map(Math.abs).sort((p, q) => p - q);
-  report.alignmentAll = { cues: allOff.length, medianAbsMs: Math.round(absAll[absAll.length >> 1] * 1000), p90AbsMs: Math.round(absAll[Math.floor(absAll.length * 0.9)] * 1000), meanSignedMs: Math.round((allOff.reduce((p, q) => p + q, 0) / allOff.length) * 1000) };
-  // silences: the level inside each held breath and hard stop, against the second before it
-  const lvl = (t0: number, t1: number) => { let s = 0, c = 0; for (let i = Math.max(0, Math.floor(t0 * SR)); i < Math.min(pcm.length, Math.floor(t1 * SR)); i++) { s += pcm[i] * pcm[i]; c++; } return c ? 10 * Math.log10(s / c + 1e-12) : NaN; };
-  report.silences = events.filter((e) => e.type === "duck" || e.type === "snip").map((e) => {
-    const t0 = e.type === "snip" ? e.t + 0.12 : e.t0 + 0.2, t1 = e.type === "snip" ? e.t + 0.1 + e.stop : e.t1;
-    return { at: +(e.t ?? e.t0).toFixed(2), kind: e.type === "snip" ? "snip" : e.hard ? "hidden" : "breath", insideDb: +lvl(t0, t1).toFixed(1), beforeDb: +lvl(t0 - 1.2, t0 - 0.25).toFixed(1) };
-  });
-  writeFileSync(join(scratch, "measure.json"), JSON.stringify(report, null, 1));
-  console.log(JSON.stringify(report, null, 1));
-}
-else if (mode === "mux") await mux();
 else { console.error(`unknown mode ${mode}`); process.exit(2); }
 process.exit(0);

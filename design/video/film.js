@@ -700,10 +700,10 @@
       { t: [T.fly2[0] - 0.1, T.fly2[1] + 0.3], to: { x: 800, y: 210, z: 1.35 }, e: CLOTH },
       { t: [T.fly2[1] + 0.5, T.p4[1] + 0.6], to: { x: 650, y: 330, z: 1.4 }, e: CLOTH },
       // ch3: asking
-      { t: [c3 + 0.3, T.sel3[1]], to: { x: (a2.x + a2.r) / 2 + 120, y: a2.y + 10, z: 1.9 }, e: CLOTH },
+      { t: [c3 + 0.3, T.sel3[1]], to: { x: (a2.x + a2.r) / 2 + 230, y: a2.y + 40, z: 1.8 }, e: CLOTH },
       { t: [T.sew3[0], T.sew3[1]], to: { x: (a2.x + a2.r) / 2 + 60, y: a2.y + 18, z: 2.3 }, e: GLIDE },
       { t: [T.carry3 - 0.1, T.open3 + 0.3], to: { x: 1040, y: a2.y + 90, z: 1.85 }, e: CLOTH },
-      { t: [T.fold3, T.sel4[1]], to: { x: (a3.x + a3.r) / 2 + 40, y: a3.y + 30, z: 1.75 }, e: CLOTH },
+      { t: [T.fold3, T.sel4[1]], to: { x: 780, y: a3.y + 60, z: 1.62 }, e: CLOTH },
       { t: [T.send4, T.carry4 + 0.6], to: { x: 330, y: a3.y + 190, z: 1.55 }, e: CLOTH },
       { t: [T.fold4 - 0.2, T.sel5[1]], to: { x: (a4.x + a4.r) / 2 + 160, y: a4.y + 40, z: 1.7 }, e: CLOTH },
       { t: [T.send5, T.carry5 + 0.3], to: { x: 780, y: a4.y + 50, z: 1.6 }, e: CLOTH },
@@ -772,7 +772,7 @@
     f = F("Model", "claude", 0, 2.0); cut(M7.claude, f[0], { d: 1.2, to: f[1] });
     cut(M7.blocks, { x: 760, y: b7.y + brief + 40, z: 1.75 }, { d: 1.6, to: { x: 760, y: b7.y + brief + 40, z: 1.85 } });
     const fl = an("ice")[0] || { x: 500, r: 640, y: b4.y };
-    cut(M7.code, { x: (fl.x + fl.r) / 2 + 140, y: fl.y + brief + 40, z: 2.0 }, { d: 1.6, to: { x: (fl.x + fl.r) / 2 + 140, y: fl.y + brief + 40, z: 2.1 } });
+    cut(M7.code, { x: (fl.x + fl.r) / 2 + 300, y: fl.y + brief + 60, z: 1.9 }, { d: 1.6, to: { x: (fl.x + fl.r) / 2 + 300, y: fl.y + brief + 60, z: 1.98 } });
     const s1 = blk("s1"), s3 = blk("s3"), s4 = blk("s4"), s6 = blk("s6");
     cut(M7.check, { x: 560, y: (s1.y + s3.y + s3.h) / 2 - sc + brief, z: 2.05 }, { d: 2.3, to: { x: 570, y: (s1.y + s3.y + s3.h) / 2 - sc + brief, z: 2.15 } });
     cut(M7.sewn, { x: 660, y: (s4.y + s6.y + s6.h) / 2 - sc + brief, z: 1.62 }, { d: 2.3, to: { x: 660, y: (s4.y + s6.y + s6.h) / 2 - sc + brief, z: 1.7 } });

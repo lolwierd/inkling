@@ -793,7 +793,7 @@
     const F = (S.folders || []).map((f) => row(icon(f.open ? "folderOpen" : "folder", 12, "var(--faint)"), f.name, { fold: true, hov: f.hov }) +
       (f.open ? f.notes.map((n) => row(icon("file", 12, "var(--faint)"), n.title, { indent: 14, on: n.on, dot: n.dot, hov: n.hov })).join("") : "")).join("");
     const loose = (S.loose || []).map((n) => row(icon("file", 12, "var(--faint)"), n.title, { on: n.on, dot: n.dot, hov: n.hov })).join("");
-    return `<div class="dim" style="background:color-mix(in srgb,var(--cloth) 50%,transparent);opacity:${fx(e)}"></div>` +
+    return `<div class="sdim" style="background:color-mix(in srgb,var(--cloth) 50%,transparent);opacity:${fx(e)}"></div>` +
       `<div class="side" style="transform:translateX(${fx(-240 * (1 - e))}px)"><div class="hdr"><span class="wm">${WM_HTML(18)}</span>${icon("x", 13, "var(--graphite)")}</div>` +
       row(icon("search", 12, "var(--faint)"), "Find or start a note", { dim: true, keys: "⌘K" }) + row(icon("plus", 12, "var(--faint)"), "New note", { dim: true, hov: S.hovNew }) +
       `<div style="margin-top:10px">${F}${loose}${S.extra || ""}${row(icon("folderPlus", 12, "var(--faint)"), "New folder", { dim: true, hov: S.hovFolder })}</div>` +

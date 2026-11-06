@@ -81,7 +81,7 @@
     // hide threads, lamplight, close
     hideClick: 87.9, hide: [87.9, 88.15], showClick: 89.7, show: [89.7, 89.95],
     lamp: [90.2, 91.1], winOut: [92.6, 93.4], fadeOut: [96.9, 98.0],
-    icon: [93.4, 94.05], closeWm: [94.0, 94.45], closeKnot: 94.62, closeLine: [94.95, 95.6],
+    icon: [93.4, 94.05], closeWm: [94.0, 94.45], closeKnot: 94.5, closeLine: [94.95, 95.6],
   };
 
   // ======================================================================== theme
@@ -537,8 +537,11 @@
   // ======================================================================== threads
   // Each thread: its anchor, colour, mind, and when things happen to it. States are read
   // off the clock: closed (waiting for a pause), sewn, open, thinking, tied, faded.
+  // A thread keeps its number for life, in the order the note's threads were made: the
+  // brain numbers them the same way (the chat's "threads 3 to 5" are the room's three).
+  const THREAD_NO = { t1: 1, t2: 2, r0: 3, r1: 4, r2: 5, call: 6 };
   const NUM = (t) => {
-    // open threads, numbered in reading order
+    // the threads still open
     const open = [];
     if (t >= T.t1Arrive && t < T.t1Knot) open.push("t1");
     if (t >= T.t2Think[0] && t < T.t2Knot) open.push("t2");
@@ -583,7 +586,8 @@
     { t: [66.0, 67.6], to: { x: 800, s: 1.13, scroll: 0 } },
     { t: [67.6, 71.6], to: { x: 830, s: 1.22, scroll: 140 }, e: sine },
     { t: [71.8, 72.5], to: { x: 560, s: 1.42, scroll: 0 } },
-    { t: [74.75, 75.45], to: { x: 1010, s: 1.5, scroll: 0 } },
+    { t: [74.75, 75.45], to: { x: 990, s: 1.21, scroll: 0 } },
+    { t: [76.6, 77.5], to: { x: 1010, s: 1.5, scroll: 0 } },
     { t: [80.3, 81.0], to: { x: 760, s: 1.42, scroll: 210 } },
     { t: [86.9, 87.75], to: { x: 620, s: 1.18, scroll: 0 } },
   ];
@@ -718,6 +722,7 @@
     renderClose(t);
     renderCaption(t);
     renderPointer(t, c);
+    renderKeys(t);
     $("#fade").style.opacity = String(fx(easeIn(prog(t, T.fadeOut[0], T.fadeOut[1]))));
   }
 
@@ -890,19 +895,19 @@
     if (id === "p1") return reading(...R.p1) ? needle : t >= R.p1[1] ? held : "";
     if (id === "p2") {
       if (reading(...R.p2) || reading(...T.t1Reread)) return needle;
-      if (t >= T.t1Arrive && t < T.t1Knot) return knot(NUM(t).indexOf("t1") + 1, "madder", knotScale(t - T.t1Arrive));
-      if (t >= T.roomSend) return knot(NUM(t).indexOf("r0") + 1, "madder", knotScale(t - T.roomSend));
+      if (t >= T.t1Arrive && t < T.t1Knot) return knot(THREAD_NO.t1, "madder", knotScale(t - T.t1Arrive));
+      if (t >= T.roomSend) return knot(THREAD_NO.r0, "madder", knotScale(t - T.roomSend));
       return t >= R.p2[1] ? held : "";
     }
     if (id === "p3") {
       if (reading(...R.p3)) return needle;
-      if (t >= T.t2Think[0] && t < T.t2Knot) return knot(NUM(t).indexOf("t2") + 1, "madder", knotScale(t - T.t2Think[0]));
+      if (t >= T.t2Think[0] && t < T.t2Knot) return knot(THREAD_NO.t2, "madder", knotScale(t - T.t2Think[0]));
       return t >= R.p3[1] ? held : "";
     }
     if (id === "p4") return reading(...R.p4) ? needle : t >= R.p4[1] ? held : "";
     if (id === "p5") {
       if (reading(T.p5[1] + 0.1, T.callArrive)) return needle;
-      if (t >= T.callArrive) return knot(NUM(t).indexOf("call") + 1, "indigo", knotScale(t - T.callArrive));
+      if (t >= T.callArrive) return knot(THREAD_NO.call, "indigo", knotScale(t - T.callArrive));
     }
     return "";
   }
@@ -933,7 +938,7 @@
   function tagModel(id, t) {
     const head = (mind, kind, n) => `<div class="hd"><span class="who"><b>${esc(mind)}</b><span class="k">· ${esc(kind)}</span></span>${n ? `<span class="n">${n}</span>` : ""}</div>`;
     const think = (label) => `<div class="think">${label ? `<span>${esc(label)}</span>` : ""}<span class="dot" style="opacity:${fx(0.3 + 0.6 * (0.5 + 0.5 * Math.sin((t / 1.1) * Math.PI * 2)))}"></span></div>`;
-    const num = NUM(t).indexOf(id) + 1;
+    const num = THREAD_NO[id];
     const acts = (extra, hovers) => `<div class="acts">${extra || ""}<span class="${hovers && hovers.resolve ? "hov" : ""}">Resolve</span><span>Dismiss</span><span class="grow"></span><span>Make a note</span></div>`;
     const reply = (text, focus, caret) => `<div class="reply${focus ? " focus" : ""}"><span class="tx">${text ? esc(text) : '<span class="ph">Reply…</span>'}${focus ? caret : ""}</span>${SEND}</div>`;
     if (id === "t1") {
@@ -999,14 +1004,33 @@
     return null;
   }
 
+  /** A tag folding down (tied off, or a room answer set aside) shrinks over a moment
+   *  instead of jumping: the open tag's content, clipped to a height easing to the chip's. */
+  const FOLDS = () => ({ t1: [T.t1Fold, 0.35], t2: [T.t2Fold, 0.35], r0: [T.roomFold, 0.4], r1: [T.roomFold, 0.4], r2: [T.roomFold, 0.4] });
+  function tagModelAt(id, t) {
+    const f = FOLDS()[id];
+    if (f && t >= f[0] && t < f[0] + f[1]) {
+      const open = tagModel(id, f[0] - 1e-4), shut = tagModel(id, t);
+      if (open && shut) return { ...shut, html: open.html, reserve: null, fold: { k: easeIO(prog(t, f[0], f[0] + f[1])), html: shut.html } };
+    }
+    return tagModel(id, t);
+  }
+
   function renderThreads(t, c, open, markOp) {
     const mg = $("#mg"), cards = $("#cards");
     const ids = ["t1", "t2", "r0", "r1", "r2", "call"];
-    const models = ids.map((id) => ({ id, m: tagModel(id, t) })).filter((x) => x.m);
-    // build tags (and an invisible twin for the height a streaming tag will need)
+    const models = ids.map((id) => ({ id, m: tagModelAt(id, t) })).filter((x) => x.m);
+    // build tags, and an invisible twin for the height a streaming tag will need or the chip a folding tag becomes
+    const twin = (id, m, attr, html) => `<div class="tag" ${attr}="${id}" style="--tc:var(--${m.c});visibility:hidden"><span class="ring"></span><div class="in">${html}</div></div>`;
     mg.innerHTML = models.map(({ id, m }) =>
       `<div class="tag" data-t="${id}" style="--tc:var(--${m.c});opacity:${fx(m.op * markOp)}"><span class="ring"></span><div class="in">${m.html}</div></div>` +
-      (m.reserve ? `<div class="tag" data-r="${id}" style="--tc:var(--${m.c});visibility:hidden"><span class="ring"></span><div class="in">${m.reserve}</div></div>` : "")).join("");
+      (m.reserve ? twin(id, m, "data-r", m.reserve) : "") + (m.fold ? twin(id, m, "data-f", m.fold.html) : "")).join("");
+    for (const { id, m } of models) {
+      if (!m.fold) continue;
+      const a = $(`.tag[data-t="${id}"] .in`, mg), b = $(`.tag[data-f="${id}"] .in`, mg);
+      a.style.height = fx(lerp(a.offsetHeight, b.offsetHeight, m.fold.k)) + "px";
+      a.style.overflow = "hidden";
+    }
     // stack: each tag wants the top of its words' first line; none overlap (gap 14)
     const items = [];
     for (const { id, m } of models) {
@@ -1023,7 +1047,7 @@
       it.el.style.top = fx(top) + "px";
       floor = top + it.h;
     }
-    $$(".tag[data-r]", mg).forEach((x) => x.remove());
+    $$(".tag[data-r], .tag[data-f]", mg).forEach((x) => x.remove());
     st.tags = Object.fromEntries(items.map((it) => [it.id, it]));
 
     // ---- the overlay: stitches under the words, threads to the tags, knots, needles
@@ -1244,6 +1268,20 @@
     }
   }
 
+  // ---------------------------------------------------------------- keys pressed
+  // A shortcut shows as keycaps at the foot of the frame while it is pressed.
+  const KEYS = [{ t: T.chatKey, keys: ["⌘", "J"], label: "Chat" }];
+  function renderKeys(t) {
+    const el = $("#keys");
+    const k = KEYS.find((x) => t >= x.t - 0.3 && t < x.t + 0.9);
+    if (!k) { el.style.display = "none"; return; }
+    const op = easeOut(prog(t, k.t - 0.3, k.t - 0.1)) * (1 - easeIn(prog(t, k.t + 0.6, k.t + 0.9)));
+    const down = t >= k.t && t < k.t + 0.16;
+    el.style.display = "flex";
+    el.style.opacity = String(fx(op));
+    el.innerHTML = k.keys.map((x) => `<span class="key${down ? " down" : ""}">${esc(x)}</span>`).join("") + `<span class="kl">${esc(k.label)}</span>`;
+  }
+
   // ---------------------------------------------------------------- the pointer
   const ARROW = `<svg width="28" height="36" viewBox="0 0 28 36"><path d="M3 2 L3 26 L9 20.5 L13.2 30.2 L17.4 28.4 L13.3 19.1 L21.5 19.1 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
   const IBEAM = `<svg width="28" height="36" viewBox="0 0 28 36"><path d="M9 4.5c2 0 3.5.6 4.5 1.8 1-1.2 2.5-1.8 4.5-1.8M9 31.5c2 0 3.5-.6 4.5-1.8 1 1.2 2.5 1.8 4.5 1.8M13.5 6.3v23.4" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/><path d="M9 4.5c2 0 3.5.6 4.5 1.8 1-1.2 2.5-1.8 4.5-1.8M9 31.5c2 0 3.5-.6 4.5-1.8 1 1.2 2.5 1.8 4.5 1.8M13.5 6.3v23.4" fill="none" stroke="#111" stroke-width="1.5" stroke-linecap="round"/></svg>`;
@@ -1332,7 +1370,16 @@
   // What the audio renderer needs to put sound on the right frames.
   function collectEvents() {
     const ev = [];
-    const keysOf = (times, text, gain) => times.forEach((t, i) => ev.push({ t, kind: text[i] === " " ? "space" : "key", gain: gain || 1 }));
+    // The typing on screen is sped up; the sound of it is not. A key sounds at most every
+    // 80 ms (about the pace of a quick typist), so fast passages read as typing, not a buzz.
+    const keysOf = (times, text, gain) => {
+      let last = -1;
+      times.forEach((t, i) => {
+        if (t - last < 0.08) return;
+        last = t;
+        ev.push({ t, kind: text[i] === " " ? "space" : "key", gain: gain || 1 });
+      });
+    };
     keysOf(S.title, TXT.title); keysOf(S.p1, TXT.p1); keysOf(S.p2, TXT.p2); keysOf(S.p3, TXT.p3); keysOf(S.p4, TXT.p4);
     keysOf(S.e1, EDIT1.to); keysOf(S.e2, EDIT2.to); keysOf(S.reply, TXT.reply, 0.8); keysOf(S.roomQ, TXT.roomQ, 0.8);
     keysOf(S.brief, TXT.brief, 0.8); keysOf(S.chatQ, TXT.chatQ, 0.8); keysOf(S.p5, TXT.p5);
@@ -1340,7 +1387,16 @@
     ev.push({ t: T.chatKey, kind: "chord" });
     PRESS.forEach((t) => ev.push({ t, kind: "click" }));
     // stitches: one soft tick per stitch as it is sewn
-    const sew = (t0, t1, n, gain) => { for (let i = 0; i < n; i++) ev.push({ t: t0 + ((t1 - t0 - 0.13) * i) / Math.max(1, n - 1), kind: "stitch", gain: gain || 1, i }); };
+    // stitches: a soft tick as they are sewn, no closer than 45 ms apart
+    const sew = (t0, t1, n, gain) => {
+      let last = -1;
+      for (let i = 0; i < n; i++) {
+        const t = t0 + ((t1 - t0 - 0.13) * i) / Math.max(1, n - 1);
+        if (t - last < 0.045) continue;
+        last = t;
+        ev.push({ t, kind: "stitch", gain: gain || 1, i });
+      }
+    };
     WMS.glyphs.forEach((g, gi) => { const a = T.sew0 + gi * T.glyphGap; const n = Math.round(g.stitches.length / 6); for (let i = 0; i < n; i++) ev.push({ t: a + (T.glyphDur * i) / n, kind: "stitch", gain: 0.7, i }); });
     renderAt(T.t1Sew[1] + 0.2); sew(...T.t1Sew, st.stitchCounts.t1 || 40);
     renderAt(T.t2Sew[1] + 0.2); sew(...T.t2Sew, st.stitchCounts.t2 || 26);
@@ -1357,7 +1413,15 @@
     ev.push({ t: T.win0, kind: "paper", gain: 0.9 }, { t: T.chatIn[0], kind: "slide", gain: 0.7 }, { t: T.chatOut[0], kind: "slide", gain: 0.6 },
       { t: T.t2Bar, kind: "paper", gain: 0.25 }, { t: T.roomBar, kind: "paper", gain: 0.25 }, { t: T.askBox, kind: "paper", gain: 0.25 }, { t: T.briefOpen[0], kind: "paper", gain: 0.3 },
       { t: T.hide[0], kind: "lift", gain: 0.6 }, { t: T.show[0], kind: "lift", gain: 0.5 }, { t: T.lamp[0], kind: "lamp", gain: 0.8 }, { t: T.winOut[0], kind: "paper", gain: 0.7 }, { t: T.icon[0], kind: "settle", gain: 0.8 });
-    return ev.sort((a, b) => a.t - b.t);
+    ev.sort((a, b) => a.t - b.t);
+    // overlapping runs of stitches (the wordmark's letters, a sketch's lines) thin out too
+    let lastStitch = -1;
+    return ev.filter((e) => {
+      if (e.kind !== "stitch") return true;
+      if (e.t - lastStitch < 0.045) return false;
+      lastStitch = e.t;
+      return true;
+    });
   }
 
   // ======================================================================== boot

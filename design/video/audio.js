@@ -55,7 +55,7 @@
         const t = i / SR;
         const att = Math.min(1, t / 0.006), rel = t < dur ? 1 : Math.exp(-(t - dur) / 0.35);
         const ham = t < 0.02 ? (r() * 2 - 1) * 0.25 * (1 - t / 0.02) : 0;
-        lp += 0.35 * (b[i] * att * rel + ham - lp); // felt: a gentle low-pass
+        lp += 0.5 * (b[i] * att * rel + ham - lp); // felt: a gentle low-pass
         b[i] = lp * 0.55;
       }
       return b;
@@ -70,8 +70,11 @@
       const len = Math.floor(SR * (dur + 1.2)), out = new Float32Array(len), line = new Float32Array(n0), r = rng(midi * 3 + 1);
       let lp = 0;
       for (let i = 0; i < n0; i++) { lp += (bright || 0.5) * ((r() * 2 - 1) - lp); line[i] = lp; }
+      // no DC in the burst: the loop keeps whatever offset it starts with, as a thump
+      const mean = line.reduce((a, b) => a + b, 0) / n0;
+      for (let i = 0; i < n0; i++) line[i] -= mean;
       const damp = 0.9965 - Math.max(0, (midi - 72) * 0.0007);
-      let idx = 0, prev = 0, apx = 0, apy = 0;
+      let idx = 0, prev = 0, apx = 0, apy = 0, dcx = 0, dcy = 0;
       for (let i = 0; i < len; i++) {
         const y = line[idx];
         const avg = damp * 0.5 * (y + prev);
@@ -81,7 +84,9 @@
         line[idx] = ap;
         idx = idx + 1 === n0 ? 0 : idx + 1;
         const t = i / SR, rel = t < dur ? 1 : Math.exp(-(t - dur) / 0.2);
-        out[i] = y * rel * Math.min(1, t / 0.0015) * 0.9;
+        // and a gentle DC blocker on the way out
+        dcy = y - dcx + 0.995 * dcy; dcx = y;
+        out[i] = dcy * rel * Math.min(1, t / 0.0015) * 0.9;
       }
       return out;
     });
@@ -145,12 +150,12 @@
   // ---------------------------------------------------------------- the score
   const CH = {
     Dadd9: { pad: ["D3", "A3", "E4", "F#4"], bass: "D2", arp: ["D4", "E4", "F#4", "A4"] },
-    D: { pad: ["D3", "A3", "D4", "F#4"], bass: "D2", arp: ["D4", "F#4", "A4", "D5"] },
-    Bm7: { pad: ["F#3", "A3", "B3", "D4"], bass: "B1", arp: ["B3", "D4", "F#4", "A4"] },
-    Gmaj7: { pad: ["G3", "B3", "D4", "F#4"], bass: "G1", arp: ["G3", "B3", "D4", "F#4"] },
-    A7sus4: { pad: ["G3", "A3", "D4", "E4"], bass: "A1", arp: ["A3", "D4", "E4", "G4"] },
-    A: { pad: ["E3", "A3", "C#4", "E4"], bass: "A1", arp: ["A3", "C#4", "E4", "A4"] },
-    Asus4: { pad: ["E3", "A3", "D4", "E4"], bass: "A1", arp: ["A3", "D4", "E4", "A4"] },
+    D: { pad: ["D3", "A3", "D4", "F#4"], bass: "D2", arp: ["A4", "D5", "F#5", "A5"] },
+    Bm7: { pad: ["F#3", "A3", "B3", "D4"], bass: "B1", arp: ["F#4", "B4", "D5", "F#5"] },
+    Gmaj7: { pad: ["G3", "B3", "D4", "F#4"], bass: "G1", arp: ["G4", "B4", "D5", "F#5"] },
+    A7sus4: { pad: ["G3", "A3", "D4", "E4"], bass: "A1", arp: ["E4", "A4", "D5", "E5"] },
+    A: { pad: ["E3", "A3", "C#4", "E4"], bass: "A1", arp: ["E4", "A4", "C#5", "E5"] },
+    Asus4: { pad: ["E3", "A3", "D4", "E4"], bass: "A1", arp: ["E4", "A4", "D5", "E5"] },
     Em7: { pad: ["E3", "G3", "B3", "D4"], bass: "E2", arp: ["E4", "G4", "B4", "D5"] },
     "F#m7": { pad: ["E3", "F#3", "A3", "C#4"], bass: "F#1", arp: ["F#4", "A4", "C#5", "E5"] },
     "D/F#": { pad: ["F#3", "A3", "D4", "E4"], bass: "F#1", arp: ["F#4", "A4", "D5", "E5"] },
@@ -244,7 +249,7 @@
     for (const n of notes) {
       const v = n.vel;
       if (n.inst === "piano") mixIn(B.piano, piano(n.midi, n.dur), n.t, v * 0.55, n.pan);
-      else if (n.inst === "pluck") mixIn(B.pluck, pluck(n.midi, n.dur, 0.55), n.t, v * 0.5, n.pan);
+      else if (n.inst === "pluck") mixIn(B.pluck, pluck(n.midi, n.dur, 0.72), n.t, v * 0.5, n.pan);
       else if (n.inst === "bell") mixIn(B.bell, bell(n.midi, n.dur), n.t, v * 0.42, n.pan);
       else if (n.inst === "pad") mixIn(B.pad, pad(n.midi, n.dur), n.t, v * 0.5, n.pan);
       else if (n.inst === "bass") mixIn(B.bass, bass(n.midi, n.dur), n.t, v * 0.42, 0);
@@ -397,7 +402,7 @@
       renderNotes();
       renderFx(events);
       // the score: dry instruments with a warm room; the foley: close, with a little air
-      out.music = await master([[B.pad, 0.42, 0.55], [B.piano, 1.35, 0.36], [B.pluck, 1.1, 0.42], [B.bell, 1.0, 0.6], [B.bass, 0.62, 0.06], [B.flute, 0.9, 0.45], [B.perc, 1, 0.2]], 0.55, 2.8);
+      out.music = await master([[B.pad, 0.3, 0.55], [B.piano, 1.25, 0.36], [B.pluck, 1.1, 0.42], [B.bell, 1.0, 0.6], [B.bass, 0.62, 0.06], [B.flute, 0.9, 0.45], [B.perc, 1, 0.2]], 0.55, 2.8);
       out.fx = await master([[B.fx, 1, 0.12]], 1, 0.7);
       return { music: out.music.length / SR, fx: out.fx.length / SR, notes: notes.length, events: events.length };
     },

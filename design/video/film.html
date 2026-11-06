@@ -92,6 +92,7 @@ kbd { font: 500 11px/1 "Figtree"; color: var(--fg3); border: 1px solid var(--lin
 .gut .num { position: absolute; left: 50%; top: 19px; transform: translateX(-50%); font: 600 11px/1 "Figtree"; color: var(--fg3); }
 .sel { background: var(--sel); border-radius: 2px; }
 .anc.on { background: color-mix(in srgb, var(--madder) 9%, transparent); border-radius: 2px; }
+.anc.sel { background: var(--sel); } /* a selection shows through the words a thread is on */
 .cm { display: inline-block; width: 0; height: 1em; vertical-align: -0.12em; }
 .caret { position: absolute; width: 1.6px; background: var(--fg); border-radius: 1px; display: none; }
 .mg { position: absolute; left: 640px; top: 0; width: 296px; }
@@ -191,6 +192,11 @@ svg.ov { position: absolute; left: 0; top: 0; width: 968px; height: 1400px; over
 #open .wm { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 #open .wm svg { display: block; overflow: visible; }
 #open .tag-line, #close .line { position: absolute; left: 0; right: 0; text-align: center; font-size: 40px; font-weight: 400; color: var(--fg2); letter-spacing: -.005em; }
+#keys { position: absolute; left: 0; right: 0; bottom: 64px; display: none; justify-content: center; align-items: center; gap: 10px; }
+#keys .key { min-width: 64px; height: 64px; padding: 0 16px; display: grid; place-items: center; border-radius: 12px; font: 500 30px/1 "Figtree"; color: var(--fg);
+  background: var(--raised); border: 1px solid var(--line2); box-shadow: 0 4px 0 var(--line2), 0 14px 30px -14px rgba(var(--shadow), .5); }
+#keys .key.down { transform: translateY(3px); box-shadow: 0 1px 0 var(--line2), 0 10px 24px -14px rgba(var(--shadow), .5); }
+#keys .kl { margin-left: 8px; font-size: 26px; color: var(--fg2); }
 #fade { position: absolute; inset: 0; background: #0B0A0C; opacity: 0; pointer-events: none; }
 #close .icon { position: absolute; left: 50%; top: 262px; width: 300px; height: 300px; margin-left: -150px; transform-origin: 50% 60%; }
 #close .icon img { width: 100%; height: 100%; display: block; }
@@ -247,6 +253,7 @@ svg.ov { position: absolute; left: 0; top: 0; width: 968px; height: 1400px; over
   <div class="layer" id="open"><div class="wm" id="open-wm"></div><div class="tag-line" id="open-line">A notebook that asks.</div></div>
   <div class="layer" id="close"><div class="icon" id="close-icon"><img src="../directions/assets/threads/icon.svg" alt=""></div><div class="wm" id="close-wm"></div><div class="line" id="close-line">Runs on your Claude. Lives on your Mac.</div></div>
   <div id="caps"></div>
+  <div id="keys"></div>
   <div id="fade"></div>
   <div id="cursor"></div>
 </div>

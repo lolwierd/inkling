@@ -4,3 +4,4 @@ brain/dist/
 .DS_Store
 design/tools/fonts/
 .worktrees/
+design/video/*.mp4

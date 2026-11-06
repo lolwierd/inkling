@@ -1,0 +1,129 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "solid" : "srgb:0.98431,0.97255,0.94902,1.00000"
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "solid" : "srgb:0.12157,0.11373,0.13333,1.00000"
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name-specializations" : [
+            {
+              "value" : "knot.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "knot-dark.svg"
+            }
+          ],
+          "name" : "Knot"
+        },
+        {
+          "glass" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "knot-shadow.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "knot-shadow-dark.svg"
+            }
+          ],
+          "name" : "Knot shadow"
+        }
+      ],
+      "name" : "Knot",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name-specializations" : [
+            {
+              "value" : "i.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "i-dark.svg"
+            }
+          ],
+          "name" : "Satin i"
+        },
+        {
+          "glass" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "i-shadow.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "i-shadow-dark.svg"
+            }
+          ],
+          "name" : "Satin i shadow"
+        }
+      ],
+      "name" : "Satin i",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name-specializations" : [
+            {
+              "value" : "border.svg"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "border-dark.svg"
+            }
+          ],
+          "name" : "Hemstitch border"
+        }
+      ],
+      "name" : "Hemstitch border",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

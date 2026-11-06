@@ -412,6 +412,36 @@ mod tests {
         assert!(!moving(0.4, 10, false));
     }
 
+    /// WCAG contrast ratio of two opaque colours.
+    fn contrast(a: Hsla, b: Hsla) -> f32 {
+        let lum = |h: Hsla| {
+            let c = h.to_rgb();
+            let f = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+            0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+        };
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[std::prelude::v1::test]
+    fn a_callouts_name_and_words_read_on_its_patch() {
+        for p in [Palette::light(), Palette::dark()] {
+            for kind in Callout::ALL {
+                let thread = callout_thread(kind, &p);
+                // the patch: the page with 6% of the thread over it
+                let (paper, t) = (p.paper.to_rgb(), thread.to_rgb());
+                let mix = |a: f32, b: f32| a + (b - a) * PATCH_TINT;
+                let patch = Hsla::from(Rgba { r: mix(paper.r, t.r), g: mix(paper.g, t.g), b: mix(paper.b, t.b), a: 1. });
+                assert!(contrast(thread, patch) >= 4.5, "{kind:?} name: {:.2}", contrast(thread, patch));
+                assert!(contrast(p.ink, patch) >= 4.5, "{kind:?} words");
+                // never Inkling's madder, or rose beside it
+                for ink in [InkColor::Ink, InkColor::Red] {
+                    assert_ne!(thread, ink_color(ink, &p), "{kind:?}");
+                }
+            }
+        }
+    }
+
     #[std::prelude::v1::test]
     fn hit_areas() {
         let b = box_hit(px(100.), px(28.));

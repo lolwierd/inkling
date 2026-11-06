@@ -139,6 +139,25 @@ pub(crate) fn short_title(text: &str, max: usize) -> String {
 
 /// `INKLING_SLOWMO=<factor>` slows every thread animation down, for screenshots and the
 /// walkthrough video. 1 is real time.
+/// How wide an unfolded tag is and which way it opens, from the room on the paper either
+/// side of its tab. It opens away from the words (right from a right tab, left from a left
+/// one). A few pixels short on that side, it narrows instead: a left tab hangs out past the
+/// gutter, so its margin is always a little short of a full tag, and opening the other
+/// way would lay it across your words. Only with no room at all does it open the other way.
+fn panel_fit(right: bool, width: f32, room_left: f32, room_right: f32) -> (f32, bool) {
+    let away = if right { room_right } else { room_left };
+    if away < width && away >= PANEL_MIN - 12. {
+        return (away, right);
+    }
+    if right && room_right < width && room_left > room_right {
+        (width, false)
+    } else if !right && room_left < width && room_right > room_left {
+        (width, true)
+    } else {
+        (width, right)
+    }
+}
+
 fn slowmo() -> f32 {
     static F: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *F.get_or_init(|| std::env::var("INKLING_SLOWMO").ok().and_then(|v| v.parse::<f32>().ok()).filter(|f| *f >= 1.).unwrap_or(1.))
@@ -3230,7 +3249,7 @@ impl NotePage {
         };
         let tied = thread.status == ThreadStatus::Resolved;
         let right = side == Side::Right;
-        let width = self.m.margin.max(PANEL_MIN);
+        let mut width = self.m.margin.max(PANEL_MIN);
         let natural = self.panel_heights.borrow().get(&id).copied().unwrap_or(px(120.));
         // the spring's own position: it passes 1 by about 4% as the tag drops open
         let e = unfold.max(0.);
@@ -3243,13 +3262,9 @@ impl NotePage {
         if let Some(b) = self.tab_bounds.borrow().get(&id).copied() {
             // the paper is the room (the chat sits beside the sheet, so it is never room)
             let (left, top, right_edge, bottom) = self.paper();
-            let room_right = px(right_edge - 8.) - b.origin.x;
-            let room_left = b.origin.x + b.size.width - px(left + 8.);
-            if open_right && room_right < px(width) && room_left > room_right {
-                open_right = false;
-            } else if !open_right && room_left < px(width) && room_right > room_left {
-                open_right = true;
-            }
+            let room_right = (px(right_edge - 8.) - b.origin.x).as_f32();
+            let room_left = (b.origin.x + b.size.width - px(left + 8.)).as_f32();
+            (width, open_right) = panel_fit(right, width, room_left, room_right);
             let below = px(bottom - 8.) - b.origin.y;
             if natural > below {
                 lift = (natural - below).min((b.origin.y - px(top + 4.)).max(px(0.)));
@@ -4807,5 +4822,26 @@ mod tests {
             let m = Metrics::for_width(w);
             assert!(SHEET_PAD + m.column_left() - 26. - 5. >= 8., "width {w}: the gutter is on the sheet's edge");
         }
+    }
+
+    #[std::prelude::v1::test]
+    fn a_left_tag_opens_into_its_margin_not_across_the_words() {
+        // Wherever two margins fit, a left tab has its margin less the 24 px it hangs out,
+        // plus the sheet's padding less 8 px, to its left: 4 px short of a full tag.
+        for w in (900..=2400).map(|w| w as f32) {
+            let m = Metrics::for_width(w);
+            if !m.both {
+                continue;
+            }
+            let room_left = m.margin - LEFT_TAB_OUT + SHEET_PAD - 8.;
+            let room_right = m.page() + SHEET_PAD - 8. - (m.margin - LEFT_TAB_OUT - TAB_W);
+            let (width, open_right) = panel_fit(false, m.margin.max(PANEL_MIN), room_left, room_right);
+            assert!(!open_right && width <= room_left && width >= PANEL_MIN - 12., "width {w}: {width} wide, opens right: {open_right}");
+        }
+        // a right tab with its margin and the sheet's padding opens right at full width
+        assert_eq!(panel_fit(true, 249., 600., 269.), (249., true));
+        // a tab dragged to the paper's edge, with no room on its side, opens the other way
+        assert_eq!(panel_fit(true, 249., 600., 60.), (249., false));
+        assert_eq!(panel_fit(false, 249., 40., 600.), (249., true));
     }
 }

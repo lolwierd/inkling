@@ -139,6 +139,42 @@ pub(crate) fn short_title(text: &str, max: usize) -> String {
 
 /// `INKLING_SLOWMO=<factor>` slows every thread animation down, for screenshots and the
 /// walkthrough video. 1 is real time.
+/// The narrowest an unfolded tag gets when its side is short of room; its words wrap
+/// taller instead.
+const PANEL_FLOOR: f32 = 160.;
+
+/// How wide an unfolded tag is and which way it opens. A thread never covers your words
+/// unless you dragged its tag onto them (the owner's rule), so a tag opens outward, away
+/// from the column: right from a right tab, left from a left one. Short of room, in this
+/// order: it hangs over the sheet's edge onto the cloth, as far as 8 px inside the window
+/// (`out` is the room to there, paper included); then it narrows, down to
+/// [`PANEL_FLOOR`]. Only a tag you dragged opens back across the words (`back`, the room
+/// on the paper that way), and only when not even the narrowest fits outward.
+fn panel_fit(right: bool, width: f32, out: f32, back: f32, dragged: bool) -> (f32, bool) {
+    if out >= width {
+        (width, right)
+    } else if out >= PANEL_FLOOR {
+        (out, right)
+    } else if dragged && back > out {
+        (width.min(back).max(PANEL_FLOOR), !right)
+    } else {
+        (PANEL_FLOOR, right)
+    }
+}
+
+/// A tooltip for a key in the selection menu: what it makes, and its keys if it has
+/// any, as the keymap has them now (Settings › Shortcuts can change them).
+fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |window, cx| {
+        let tip = gpui_kit::component::tooltip::Tooltip::new(name);
+        match keys {
+            Some(a) => tip.action(a, Some(crate::editor::CONTEXT)),
+            None => tip,
+        }
+        .build(window, cx)
+    }
+}
+
 fn slowmo() -> f32 {
     static F: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *F.get_or_init(|| std::env::var("INKLING_SLOWMO").ok().and_then(|v| v.parse::<f32>().ok()).filter(|f| *f >= 1.).unwrap_or(1.))
@@ -431,6 +467,9 @@ pub struct NotePage {
     chat_scroll: ScrollHandle,
     /// Why the last chat question got no answer, shown under it with Try again.
     chat_error: Option<String>,
+    /// Threads whose question or reply got no answer: the request to send again, and why,
+    /// shown in the tag under your words with Try again, as the chat does.
+    unanswered: HashMap<String, (Value, String)>,
     chat_pending: Option<(String, String)>,
     pub just_my_words: bool,
     /// How present the window's controls are, 0..1: the app fades them while you type
@@ -485,6 +524,10 @@ pub struct NotePage {
     tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     /// The sheet's bounds in the window at the last paint: tags are kept on the paper.
     sheet_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// Each unfolded tag's bounds at the last paint, and the column of your words, for
+    /// the dump: no tag you have not dragged may cover the column.
+    panel_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    column_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
     _subs: Vec<Subscription>,
@@ -545,6 +588,7 @@ impl NotePage {
             chat_input,
             chat_scroll: ScrollHandle::new(),
             chat_error: None,
+            unanswered: HashMap::new(),
             chat_pending: None,
             just_my_words: false,
             enlarged: None,
@@ -574,6 +618,8 @@ impl NotePage {
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
             tab_bounds: Rc::new(RefCell::new(HashMap::new())),
             sheet_bounds: Rc::new(Cell::new(None)),
+            panel_bounds: Rc::new(RefCell::new(HashMap::new())),
+            column_bounds: Rc::new(Cell::new(None)),
             viewport: size(px(1200.), px(800.)),
             last_frame: None,
             _subs: subs,
@@ -665,8 +711,9 @@ impl NotePage {
 
     pub fn focus_editor_at_end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let empty_title = self.editor.read(cx).title().is_empty();
-        // the welcome guide is read from the top, though its caret waits at the end
-        self.hold_scroll = self.note.first_run;
+        // A note opens at its top, title and header in view, however long it is; its
+        // caret waits at the end, and the page follows it once you type or move it.
+        self.hold_scroll = true;
         self.editor.update(cx, |e, cx| {
             let target = if empty_title { 0 } else { e.text().len() };
             e.move_cursor_to(target, cx);
@@ -1273,7 +1320,7 @@ impl NotePage {
     /// One plain sentence for a failed request (see [`Self::report`]).
     fn describe_failure(&self, kind: &str, message: &str, cx: &App) -> String {
         if message.to_lowercase().contains("bun is not installed") {
-            "Inkling's brain needs Bun. Install it from bun.sh.".to_string()
+            "Inkling’s brain needs Bun. Install it from bun.sh.".to_string()
         } else {
             match kind {
                 "auth" => "Sign in to Claude Code first: run claude in Terminal, then /login.".to_string(),
@@ -1282,12 +1329,12 @@ impl NotePage {
                     Some(at) => {
                         let at = at.with_timezone(&chrono::Local);
                         let today = at.date_naive() == chrono::Local::now().date_naive();
-                        format!("You've reached your Claude usage limit. It resets {}.", at.format(if today { "at %H:%M" } else { "%a %-d %b at %H:%M" }))
+                        format!("You’ve reached your Claude usage limit. It resets {}.", at.format(if today { "at %H:%M" } else { "%a %-d %b at %H:%M" }))
                     }
-                    None => "You've reached your Claude usage limit for now. Try again later.".to_string(),
+                    None => "You’ve reached your Claude usage limit for now. Try again later.".to_string(),
                 },
                 "overloaded" => "Claude is overloaded right now. Try again in a moment.".to_string(),
-                "bad_output" => "The answer came back in a shape Inkling can't use. Try again.".to_string(),
+                "bad_output" => "The answer came back in a shape Inkling can’t use. Try again.".to_string(),
                 "timeout" => "The model took too long to answer, so Inkling stopped waiting.".to_string(),
                 _ => {
                     // short, but cut between words, and marked as cut
@@ -1305,12 +1352,12 @@ impl NotePage {
                         match m.strip_prefix("the brain stopped") {
                             Some(rest) => {
                                 let end = if rest.ends_with('\u{2026}') { "" } else { "." };
-                                format!("Inkling's brain stopped{}{end} Settings \u{203a} Model has more.", rest.trim_end_matches('.'))
+                                format!("Inkling’s brain stopped{}{end} Settings \u{203a} Model has more.", rest.trim_end_matches('.'))
                             }
-                            None => format!("Inkling's brain isn't running ({m}). Settings \u{203a} Model has more."),
+                            None => format!("Inkling’s brain isn’t running ({m}). Settings \u{203a} Model has more."),
                         }
                     } else {
-                        format!("Couldn't reach the model: {m}")
+                        format!("Couldn’t reach the model: {m}")
                     }
                 }
             }
@@ -1485,9 +1532,38 @@ impl NotePage {
         cx.notify();
     }
 
+    /// A question or reply on this thread got no answer: the tag says why under your
+    /// words and offers Try again, which sends `again`. Set after the update the failure
+    /// came in (describing it reads the brain, as `report` does).
+    fn fail_thread(&mut self, tid: String, kind: String, message: String, again: Value, cx: &mut Context<Self>) {
+        self.later(cx, move |page, cx| {
+            if page.note.threads.iter().any(|t| t.id == tid) {
+                let why = page.describe_failure(&kind, &message, cx);
+                page.unanswered.insert(tid, (again, why));
+                cx.notify();
+            }
+        });
+    }
+
+    /// Send a thread's unanswered question or reply again.
+    fn retry_thread(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.pending.contains_key(id) {
+            return;
+        }
+        let Some((input, _)) = self.unanswered.remove(id) else { return };
+        if input["task"] == "reply" {
+            let asked = input["message"].as_str().unwrap_or_default().to_string();
+            self.run_reply(id.to_string(), input, asked, cx);
+        } else {
+            self.stream_into(id.to_string(), input, cx);
+        }
+    }
+
     /// Run a streaming task whose answer becomes the thread's next message.
     fn stream_into(&mut self, thread: String, input: Value, cx: &mut Context<Self>) {
         let tid = thread.clone();
+        let again = input.clone();
+        self.unanswered.remove(&thread);
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Delta(d) => {
                 if let Some((_, Pending::Streaming(s))) = page.pending.get_mut(&tid) {
@@ -1512,6 +1588,7 @@ impl NotePage {
                 page.drop_if_empty(&tid, cx);
                 if kind != "cancelled" {
                     page.report(&kind, &message, cx);
+                    page.fail_thread(tid.clone(), kind, message, again.clone(), cx);
                 }
                 cx.notify();
             }
@@ -1545,7 +1622,7 @@ impl NotePage {
                     }
                     None => {
                         page.drop_if_empty(&tid, cx);
-                        page.notice("The sketch came back in a shape Inkling can't read.".into(), cx);
+                        page.notice("The sketch came back in a shape Inkling can’t read.".into(), cx);
                     }
                 }
                 cx.notify();
@@ -1584,7 +1661,7 @@ impl NotePage {
     /// "Find a loose thread": Inkling looks for the one thing in the selection that
     /// does not hold up yet, and always asks about it.
     pub fn find_loose_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // ⌘↵ with nothing selected and a thread open: that thread is done.
+        // ⌘↩ with nothing selected and a thread open: that thread is done.
         if self.editor.read(cx).selection().is_empty() {
             if let Some(id) = self.active.clone() {
                 self.set_status(&id, ThreadStatus::Resolved, cx);
@@ -1785,10 +1862,11 @@ impl NotePage {
             if !self.replies.contains_key(&id) {
                 let input = cx.new(|cx| InputState::new(window, cx).placeholder("Write back…"));
                 let tid = id.clone();
-                let sub = cx.subscribe_in(&input, window, move |this, _, ev: &InputEvent, window, cx| {
-                    if let InputEvent::PressEnter { .. } = ev {
-                        this.send_reply(&tid, window, cx);
-                    }
+                let sub = cx.subscribe_in(&input, window, move |this, _, ev: &InputEvent, window, cx| match ev {
+                    InputEvent::PressEnter { .. } => this.send_reply(&tid, window, cx),
+                    // its send arrow lights up once there is something to send, as the chat's does
+                    InputEvent::Change => cx.notify(),
+                    _ => {}
                 });
                 self.reply_subs.insert(id.clone(), sub);
                 self.replies.insert(id.clone(), input);
@@ -1845,8 +1923,14 @@ impl NotePage {
             "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": m.text})).collect::<Vec<_>>(),
             "message": text,
         });
-        let tid = id.to_string();
-        let asked = text.clone();
+        self.run_reply(id.to_string(), input, text, cx);
+    }
+
+    /// Send a reply on a thread (`input`, the reply task) and take in the answer.
+    fn run_reply(&mut self, tid: String, input: Value, asked: String, cx: &mut Context<Self>) {
+        let id = tid.clone();
+        let again = input.clone();
+        self.unanswered.remove(&tid);
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);
@@ -1873,12 +1957,13 @@ impl NotePage {
                 page.pending.remove(&tid);
                 if kind != "cancelled" {
                     page.report(&kind, &message, cx);
+                    page.fail_thread(tid.clone(), kind, message, again.clone(), cx);
                 }
                 cx.notify();
             }
             BrainMsg::Delta(_) => {}
         });
-        self.pending.insert(id.to_string(), (req, Pending::Thinking));
+        self.pending.insert(id, (req, Pending::Thinking));
         cx.notify();
     }
 
@@ -1969,10 +2054,12 @@ impl NotePage {
     fn thread_text(&self, id: &str) -> String {
         let Some(t) = self.note.threads.iter().find(|t| t.id == id) else { return String::new() };
         let mut out = format!("> {}\n\n", t.quote);
+        // named as Export names them: the mind (Inkling when an old thread has no name), and Me
+        let mind = if t.mind_name.trim().is_empty() { "Inkling" } else { t.mind_name.as_str() };
         for m in &t.messages {
             match m.role {
-                Role::Mind => out.push_str(&format!("{}: {}\n\n", t.mind_name, m.text)),
-                Role::You => out.push_str(&format!("You: {}\n\n", m.text)),
+                Role::Mind => out.push_str(&format!("{mind}: {}\n\n", m.text)),
+                Role::You => out.push_str(&format!("Me: {}\n\n", m.text)),
             }
         }
         out.trim_end().to_string()
@@ -1989,7 +2076,7 @@ impl NotePage {
         note.blocks = vec![Block { kind: BlockKind::Title, text: title }];
         note.blocks.push(Block { kind: BlockKind::Quote, text: quote });
         for m in &t.messages {
-            let who = if m.role == Role::Mind { t.mind_name.clone() } else { "Me".into() };
+            let who = if m.role != Role::Mind { "Me".to_string() } else if t.mind_name.trim().is_empty() { "Inkling".to_string() } else { t.mind_name.clone() };
             note.blocks.push(Block { kind: BlockKind::Paragraph, text: format!("{who}: {}", m.text.replace('\n', " ")) });
         }
         note.blocks.push(Block { kind: BlockKind::Paragraph, text: String::new() });
@@ -2290,7 +2377,7 @@ impl NotePage {
             Step::Escape => {
                 self.escape(window, cx);
             }
-            Step::Resolve(n) | Step::Reopen(n) | Step::Dismiss(n) | Step::Mark(n) | Step::Copy(n) | Step::MakeNote(n) => {
+            Step::Resolve(n) | Step::Reopen(n) | Step::Dismiss(n) | Step::Mark(n) | Step::Copy(n) | Step::MakeNote(n) | Step::Retry(n) => {
                 let Some(id) = self.nth_thread(*n) else {
                     log::warn!("script: no thread {n}");
                     return;
@@ -2304,6 +2391,7 @@ impl NotePage {
                         log::info!("script copy: {:?}", self.thread_text(&id));
                         self.show_copied(&id, cx);
                     }
+                    Step::Retry(_) => self.retry_thread(&id, cx),
                     _ => self.make_note_from_thread(&id, cx),
                 }
             }
@@ -2495,6 +2583,21 @@ impl NotePage {
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
         state["paper"] = json!([l, t, r, b]);
+        // each unfolded tag where it was drawn, and the column of your words from the header
+        // row to the last line, in the window: no tag you have not dragged may cover it
+        state["panels"] = Value::Object(
+            self.panel_bounds
+                .borrow()
+                .iter()
+                .map(|(id, b)| (short(id), json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()])))
+                .collect(),
+        );
+        if let (Some(c), Some(s)) = (self.column_bounds.get(), self.sheet_bounds.get()) {
+            let top = s.origin.y.as_f32() + 50.;
+            state["column"] = json!([c.origin.x.as_f32(), top, c.size.width.as_f32(), (c.origin.y + c.size.height).as_f32() - top]);
+        }
+        // threads whose question or reply got no answer, with why (Try again in the tag)
+        state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -2613,10 +2716,12 @@ impl NotePage {
                         .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
                 )
             })
-            .child(div().flex_1())
-            // the open count and Hide threads wrap together
+            // the open count and Hide threads wrap together, and keep to the right edge on
+            // whichever line they land (a spacer that wrapped with them, or did not, put
+            // them left or right by turns as the window narrowed)
             .child(
                 div()
+                    .ml_auto()
                     .flex()
                     .items_center()
                     .gap(px(16.))
@@ -2801,7 +2906,7 @@ impl NotePage {
                         div()
                             .text_size(px(ts::META))
                             .text_color(p.graphite)
-                            .child("What's this note for, or how should Inkling be here? It keeps this in mind."),
+                            .child("What’s this note for, or how should Inkling be here? It keeps this in mind."),
                     )
                     .child(div().mt(px(4.)).text_color(p.ink).child(Input::new(&input).appearance(false).px_0().text_size(px(ts::BODY))))
                     .child(
@@ -2953,7 +3058,7 @@ impl NotePage {
                     .w(px(236.))
                     .track_focus(&self.menu_focus)
                     .on_key_down(cx.listener(Self::menu_key))
-                    .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Reads along and speaks up when something's worth a second look.", cx))
+                    .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Speaks up when something’s worth a second look.", cx))
                     .child(item("mode-ask", Mode::WhenYouAsk, "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", cx))
                     .into_any_element()
             }
@@ -3014,7 +3119,12 @@ impl NotePage {
         let tag = if enlarged { "big" } else { "tag" };
         let control = |name: &'static str, glyph: &'static str, id: &str, cx: &mut Context<Self>, f: fn(&mut Playback)| {
             let tid = id.to_string();
-            ui::icon_button(SharedString::from(format!("{name}-{tag}-{id}")), glyph, 12., &t).on_click(cx.listener(move |this, _, _, cx| {
+            let what = match name {
+                "prev" => "Previous step",
+                "next" => "Next step",
+                _ => "Play it again",
+            };
+            ui::icon_button(SharedString::from(format!("{name}-{tag}-{id}")), glyph, 12., &t).tooltip(crate::app::tip(what, None)).on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(pb) = this.playbacks.get_mut(&tid) {
                     f(pb);
                 }
@@ -3229,26 +3339,24 @@ impl NotePage {
         };
         let tied = thread.status == ThreadStatus::Resolved;
         let right = side == Side::Right;
-        let width = self.m.margin.max(PANEL_MIN);
+        let mut width = self.m.margin.max(PANEL_MIN);
         let natural = self.panel_heights.borrow().get(&id).copied().unwrap_or(px(120.));
         // the spring's own position: it passes 1 by about 4% as the tag drops open
         let e = unfold.max(0.);
         let ec = e.min(1.);
 
-        // A tag opens away from the words, unless that runs off the paper: then it opens
-        // the other way, and it slides up when it would hang below the paper's edge.
+        // A tag opens away from the words, never across them unless you dragged it there
+        // (see `panel_fit`), and it slides up when it would hang below the paper's edge.
         let mut open_right = right;
         let mut lift = px(0.);
         if let Some(b) = self.tab_bounds.borrow().get(&id).copied() {
-            // the paper is the room (the chat sits beside the sheet, so it is never room)
             let (left, top, right_edge, bottom) = self.paper();
-            let room_right = px(right_edge - 8.) - b.origin.x;
-            let room_left = b.origin.x + b.size.width - px(left + 8.);
-            if open_right && room_right < px(width) && room_left > room_right {
-                open_right = false;
-            } else if !open_right && room_left < px(width) && room_right > room_left {
-                open_right = true;
-            }
+            let (tab_l, tab_r) = (b.origin.x.as_f32(), (b.origin.x + b.size.width).as_f32());
+            // outward, the paper and then the cloth up to 8 px inside the window; back, the
+            // paper on the words' side
+            let window_w = self.viewport.width.as_f32();
+            let (out, back) = if right { (window_w - 8. - tab_l, tab_r - (left + 8.)) } else { (tab_r - 8., right_edge - 8. - tab_l) };
+            (width, open_right) = panel_fit(right, width, out, back, thread.tag_offset != (0., 0.));
             let below = px(bottom - 8.) - b.origin.y;
             if natural > below {
                 lift = (natural - below).min((b.origin.y - px(top + 4.)).max(px(0.)));
@@ -3339,6 +3447,28 @@ impl NotePage {
                 }
                 None => {}
             }
+            // A question or reply that got no answer says why under your words, with Try
+            // again once the tag is open, as the chat does under its question.
+            if let (None, Some((_, why))) = (&pending, self.unanswered.get(&id)) {
+                let id_retry = id.clone();
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_start()
+                        .gap(px(4.))
+                        .text_size(px(ts::SMALL))
+                        .line_height(px(17.))
+                        .text_color(p.graphite)
+                        .child(why.clone())
+                        .when(is_active, |d| {
+                            d.child(
+                                ui::ghost_button(SharedString::from(format!("retry-{id}")), "Try again", &t)
+                                    .keyed_as("tag:retry", 4., thread_color, cx, move |this, _, cx| this.retry_thread(&id_retry, cx)),
+                            )
+                        }),
+                );
+            }
             if !is_active && replies > 0 {
                 body = body.child(
                     div()
@@ -3351,6 +3481,7 @@ impl NotePage {
         if is_active {
             if let Some(input) = self.replies.get(&id).cloned() {
                 let id_send = id.clone();
+                let can_send = pending.is_none() && !input.read(cx).value().trim().is_empty();
                 body = body.child(
                     div()
                         .flex()
@@ -3368,9 +3499,18 @@ impl NotePage {
                         .child(
                             div()
                                 .id(SharedString::from(format!("send-{id_send}")))
-                                .cursor_pointer()
-                                .child(icon("send", 13., p.graphite))
-                                .on_click(cx.listener(move |this, _, window, cx| this.send_reply(&id_send, window, cx))),
+                                .p(px(2.))
+                                .m(px(-2.))
+                                .rounded(px(4.))
+                                .child(icon("send", 13., if can_send { p.ink } else { p.faint }))
+                                // nothing to send, or an answer on its way: quiet, as the chat's arrow is
+                                .when(!can_send, |d| d.opacity(0.6))
+                                .when(can_send, |d| {
+                                    d.cursor_pointer()
+                                        .hover(move |s| s.bg(p.hover))
+                                        .active(|s| s.opacity(0.7))
+                                        .on_click(cx.listener(move |this, _, window, cx| this.send_reply(&id_send, window, cx)))
+                                }),
                         ),
                 );
             }
@@ -3458,6 +3598,11 @@ impl NotePage {
                         this.toggle_tag(&id_open, window, cx);
                     }
                 }))
+                // where it was drawn, for the dump
+                .child({
+                    let (panels, id) = (self.panel_bounds.clone(), id.clone());
+                    canvas(move |b, _, _| panels.borrow_mut().insert(id, b), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+                })
                 // the stitched edge grows with the tag
                 .child(
                     div()
@@ -3636,18 +3781,21 @@ impl NotePage {
                 .when(!on, |d| d.text_color(p.graphite).hover(move |s| s.bg(p.hover).text_color(p.ink)))
                 .active(|s| s.opacity(0.7))
         };
-        let block = |id: &'static str, label: &'static str, k: BlockKind, cx: &mut Context<Self>| {
+        let block = |id: &'static str, label: &'static str, name: &'static str, k: BlockKind, cx: &mut Context<Self>| {
             let glyph = matches!(k, BlockKind::Quote | BlockKind::Bullet | BlockKind::Check(_));
-            key(id, kind.same_kind(k)).text_size(px(if glyph { ts::BODY } else { ts::META })).child(label).on_click(cx.listener(move |this, _, _, cx| {
+            // ⌘L makes a line a checklist item, so that key says so
+            let keys: Option<&'static dyn Action> = matches!(k, BlockKind::Check(_)).then_some(&crate::editor::ToggleCheck);
+            key(id, kind.same_kind(k)).text_size(px(if glyph { ts::BODY } else { ts::META })).tooltip(key_tip(name, keys)).child(label).on_click(cx.listener(move |this, _, _, cx| {
                 this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));
                 this.show_toolbar = true;
                 cx.notify();
             }))
         };
         // Each mark's button wears the mark itself: B is bold, I italic, and so on.
-        let mark = |id: &'static str, label: &'static str, m: Mark, cx: &mut Context<Self>| {
+        let mark = |id: &'static str, label: &'static str, name: &'static str, keys: &'static dyn Action, m: Mark, cx: &mut Context<Self>| {
             let on = self.editor.read(cx).has_mark(m);
             key(id, on)
+                .tooltip(key_tip(name, Some(keys)))
                 .text_size(px(ts::UI))
                 .map(|d| match m {
                     Mark::Bold => d.font_weight(FontWeight::BOLD),
@@ -3718,14 +3866,14 @@ impl NotePage {
                     .px(px(5.))
                     .flex()
                     .gap(px(2.))
-                    .child(block("tb-p", "T", BlockKind::Paragraph, cx))
-                    .child(block("tb-h1", "H1", BlockKind::H1, cx))
-                    .child(block("tb-h2", "H2", BlockKind::H2, cx))
-                    .child(block("tb-h3", "H3", BlockKind::H3, cx))
-                    .child(block("tb-q", "\u{201c}", BlockKind::Quote, cx))
-                    .child(block("tb-ul", "\u{2022}", BlockKind::Bullet, cx))
-                    .child(block("tb-ol", "1.", BlockKind::Numbered, cx))
-                    .child(block("tb-check", "\u{2610}", BlockKind::Check(false), cx)),
+                    .child(block("tb-p", "T", "Text", BlockKind::Paragraph, cx))
+                    .child(block("tb-h1", "H1", "Heading 1", BlockKind::H1, cx))
+                    .child(block("tb-h2", "H2", "Heading 2", BlockKind::H2, cx))
+                    .child(block("tb-h3", "H3", "Heading 3", BlockKind::H3, cx))
+                    .child(block("tb-q", "\u{201c}", "Quote", BlockKind::Quote, cx))
+                    .child(block("tb-ul", "\u{2022}", "Bulleted list", BlockKind::Bullet, cx))
+                    .child(block("tb-ol", "1.", "Numbered list", BlockKind::Numbered, cx))
+                    .child(block("tb-check", "\u{2610}", "Checklist", BlockKind::Check(false), cx)),
             )
             .child(self.sewn_keys(kind, cx))
             .child(
@@ -3734,11 +3882,11 @@ impl NotePage {
                     .pt(px(2.))
                     .flex()
                     .gap(px(2.))
-                    .child(mark("tb-b", "B", Mark::Bold, cx))
-                    .child(mark("tb-i", "I", Mark::Italic, cx))
-                    .child(mark("tb-u", "U", Mark::Underline, cx))
-                    .child(mark("tb-s", "S", Mark::Strike, cx))
-                    .child(mark("tb-c", "</>", Mark::Code, cx)),
+                    .child(mark("tb-b", "B", "Bold", &crate::editor::ToggleBold, Mark::Bold, cx))
+                    .child(mark("tb-i", "I", "Italic", &crate::editor::ToggleItalic, Mark::Italic, cx))
+                    .child(mark("tb-u", "U", "Underline", &crate::editor::ToggleUnderline, Mark::Underline, cx))
+                    .child(mark("tb-s", "S", "Strikethrough", &crate::editor::ToggleStrike, Mark::Strike, cx))
+                    .child(mark("tb-c", "</>", "Inline code", &crate::editor::ToggleCode, Mark::Code, cx)),
             )
             .child(div().px(px(5.)).pt(px(2.)).child(colors))
             .child(div().mx(px(9.)).my(px(5.)).border_t_1().border_color(p.rule))
@@ -3764,6 +3912,8 @@ impl NotePage {
             .map(|(c, k)| (c.label(), k, crate::sewn::callout_thread(c, &p), crate::theme::SANS))
             .chain(std::iter::once(("Code", BlockKind::Code(Lang::default()), p.graphite, crate::theme::MONO)));
         for (label, k, color, family) in keys {
+            // "Code" here is a block of code; </> beside B and I is code in a line
+            let name = if k.is_code() { "Code block" } else { "Callout" };
             let on = kind.same_kind(k);
             row = row.child(
                 div()
@@ -3781,6 +3931,7 @@ impl NotePage {
                     .when(on, |d| d.bg(color).text_color(p.paper))
                     .when(!on, |d| d.text_color(color).hover(move |s| s.bg(p.hover)))
                     .active(|s| s.opacity(0.7))
+                    .tooltip(key_tip(name, None))
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.editor.update(cx, |e, cx| e.set_selection_kind(k, cx));
@@ -3873,7 +4024,7 @@ impl NotePage {
                                     .text_size(px(ts::META))
                                     .text_color(p.faint)
                                     .child(hint)
-                                    .child(div().flex_none().child("Enter to ask")),
+                                    .child(div().flex_none().child("\u{21a9} ask")),
                             ),
                     )
                     .on_mouse_down_out(cx.listener(|this, _, _, cx| {
@@ -3905,9 +4056,9 @@ impl NotePage {
                         .line_height(px(21.))
                         .text_color(p.ink)
                         .child(if visible == 0 {
-                            "I've read the whole note. Ask me anything about it."
+                            "I’ve read the whole note. Ask me anything about it."
                         } else {
-                            "I've read the whole note and its threads. Ask me anything about it."
+                            "I’ve read the whole note and its threads. Ask me anything about it."
                         }),
                 )
                 .child(
@@ -4004,8 +4155,9 @@ impl NotePage {
             .child(
                 div()
                     .px(px(16.))
-                    .pt(px(12.))
-                    .pb(px(10.))
+                    // its row centred on the traffic lights' line, where Chat was
+                    .pt(px(10.))
+                    .pb(px(12.))
                     .child(
                         div()
                             .h(px(24.))
@@ -4031,7 +4183,7 @@ impl NotePage {
                                             .note
                                             .chat
                                             .iter()
-                                            .map(|m| format!("{}: {}", if m.role == Role::You { "You" } else { this.mind.name.as_str() }, m.text))
+                                            .map(|m| format!("{}: {}", if m.role == Role::You { "Me" } else { this.mind.name.as_str() }, m.text))
                                             .collect::<Vec<_>>()
                                             .join("\n\n");
                                         cx.write_to_clipboard(ClipboardItem::new_string(text));
@@ -4040,7 +4192,7 @@ impl NotePage {
                                     .child(ui::ghost_button("chat-clear", "Clear", &t).keyed_as("chat:clear", 4., t.voice_ink, cx, |this, _, cx| this.clear_chat(cx)))
                                 }
                             })
-                            .child(div().mr(px(-4.)).child(ui::icon_button("chat-close", "x", 13., &t).keyed_as("chat:close", 5., t.voice_ink, cx, |this, window, cx| this.toggle_chat(window, cx)))),
+                            .child(div().mr(px(-4.)).child(ui::icon_button("chat-close", "x", 13., &t).tooltip(crate::app::tip("Close", Some(&crate::app::ToggleChat))).keyed_as("chat:close", 5., t.voice_ink, cx, |this, window, cx| this.toggle_chat(window, cx)))),
                     )
                     .child(
                         div()
@@ -4117,7 +4269,8 @@ impl NotePage {
                             .px(px(30.))
                             .pt(px(14.))
                             .pb(px(24.))
-                            .rounded(px(14.))
+                            // a dialog's corner, as ⌘K and Export have it
+                            .rounded(px(12.))
                             .bg(p.card)
                             .border_1()
                             .border_color(p.rule)
@@ -4131,7 +4284,7 @@ impl NotePage {
                                     .mr(px(-16.))
                                     .flex()
                                     .justify_end()
-                                    .child(ui::icon_button("enlarged-close", "x", 14., &t).keyed_as("sketch:close", 5., t.voice_ink, cx, move |this, _, cx| close(this, cx))),
+                                    .child(ui::icon_button("enlarged-close", "x", 14., &t).tooltip(crate::app::tip("Close", None)).keyed_as("sketch:close", 5., t.voice_ink, cx, move |this, _, cx| close(this, cx))),
                             )
                             .child(block),
                     ),
@@ -4317,6 +4470,9 @@ impl Render for NotePage {
         }
         self.unfold.retain(|id, _| threads.iter().any(|t| &t.id == id));
         self.unfold_v.retain(|id, _| threads.iter().any(|t| &t.id == id));
+        // tabs and panels drawn this frame put their bounds back as they paint
+        self.tab_bounds.borrow_mut().retain(|id, _| !jmw && slots.iter().any(|s| &s.id == id));
+        self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.unfold.get(id).is_some_and(|u| *u > 0.01));
         // a pointer resting on a tag, or one that just left, changes it without an event
         if self.hover_left.values().any(|t| t.elapsed() < FOLD_DELAY) || self.hover_at.values().any(|t| t.elapsed() < HOVER_REST) {
             unfolding = true;
@@ -4522,7 +4678,10 @@ impl Render for NotePage {
             .relative()
             .w(px(m.page()))
             .child(tethers)
-            .child(div().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::NOTE).child(self.editor.clone()))
+            .child(div().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::NOTE).child(self.editor.clone()).child({
+                let column = self.column_bounds.clone();
+                canvas(move |b, _, _| column.set(Some(b)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+            }))
             .children(cards)
             .children(marks)
             .children(toolbar)
@@ -4806,5 +4965,38 @@ mod tests {
             let m = Metrics::for_width(w);
             assert!(SHEET_PAD + m.column_left() - 26. - 5. >= 8., "width {w}: the gutter is on the sheet's edge");
         }
+    }
+
+    #[std::prelude::v1::test]
+    fn no_tag_opens_across_the_words() {
+        // The owner's rule: a thread never covers your words unless you dragged its tag onto
+        // them. At every window width, with the chat open and closed, a right tab (either
+        // layout) and a left tab (two margins) open outward, clear of the column, at least
+        // PANEL_FLOOR wide and 8 px inside the window.
+        for window in (720..=1800).map(|w| w as f32) {
+            for chat in [false, true] {
+                let width = window - if chat { CHAT_WIDTH } else { 0. };
+                let m = Metrics::for_width(width - 2. * (SHEET_PAD + 14.));
+                let sheet_w = m.page() + 2. * SHEET_PAD;
+                let sheet_x = if sheet_w <= width - 16. { (width - sheet_w) / 2. } else { 12. };
+                let page_x = sheet_x + SHEET_PAD;
+                let (col_l, col_r) = (page_x + m.column_left(), page_x + m.column_left() + m.column);
+                let full = m.margin.max(PANEL_MIN);
+                let tab_l = page_x + m.right_left();
+                let (w, open_right) = panel_fit(true, full, window - 8. - tab_l, tab_l + TAB_W - (sheet_x + 8.), false);
+                assert!(open_right && tab_l >= col_r && tab_l + w <= window - 8. + 0.01 && w >= PANEL_FLOOR, "{window} px, chat {chat}: a right tag {w} wide, opens right: {open_right}");
+                if m.both {
+                    let tab_r = page_x + m.margin - LEFT_TAB_OUT;
+                    let (w, open_right) = panel_fit(false, full, tab_r - 8., sheet_x + sheet_w - 8. - (tab_r - TAB_W), false);
+                    assert!(!open_right && tab_r <= col_l && tab_r - w >= 8. - 0.01 && w >= PANEL_FLOOR, "{window} px, chat {chat}: a left tag {w} wide, opens right: {open_right}");
+                }
+            }
+        }
+        // short of room outward it hangs over the sheet's edge before it narrows
+        assert_eq!(panel_fit(false, 249., 253., 600., false), (249., false));
+        assert_eq!(panel_fit(true, 249., 180., 600., false), (180., true));
+        // with no room outward, only a tag you dragged opens back over the words
+        assert_eq!(panel_fit(true, 249., 60., 600., true), (249., false));
+        assert_eq!(panel_fit(true, 249., 60., 600., false), (PANEL_FLOOR, true));
     }
 }

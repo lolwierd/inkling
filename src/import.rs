@@ -48,7 +48,7 @@ pub fn import(root: PathBuf, cx: &mut App) -> Task<String> {
             }
             Err(e) => {
                 log::error!("import from {name}: {e:#}");
-                format!("Couldn't import {name}: {e:#}")
+                format!("Couldn’t import {name}: {e:#}")
             }
         });
         IMPORTING.fetch_sub(1, Ordering::SeqCst);

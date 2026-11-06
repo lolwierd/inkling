@@ -669,7 +669,7 @@ simple_enum!(Pace { Regular => "Regular", Slow => "Slow" } default Regular);
 simple_enum!(Placement { Both => "Both margins", Right => "Right margin", Marks => "Marks only" } default Both);
 simple_enum!(Appearance { System => "System", Light => "Light", Dark => "Dark" } default System);
 simple_enum!(TextSize { Small => "Small", Default => "Default", Large => "Large" } default Default);
-simple_enum!(Lettering { Own => "Inkling's own", LikeNotes => "Like your notes" } default Own);
+simple_enum!(Lettering { Own => "Inkling’s own", LikeNotes => "Like your notes" } default Own);
 // A mind's thread. The variant names are what settings files store; the labels are
 // the thread colours of Loose Threads (madder is Inkling's own).
 simple_enum!(InkColor {

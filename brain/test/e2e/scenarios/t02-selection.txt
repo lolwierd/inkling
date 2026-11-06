@@ -51,7 +51,7 @@ select: Missing sketch here [[draw>nosvg]]
 sketch
 wait: 3000
 dump: no-svg
-expect: d.error.includes("shape Inkling can't use") && !d.threads.find(t => t.quote.startsWith("Missing sketch")).drawing
+expect: d.error.includes("shape Inkling can’t use") && !d.threads.find(t => t.quote.startsWith("Missing sketch")).drawing
 select: Empty idea here [[sketch>empty]][[draw>nosvg]]
 sketch
 wait: 3000

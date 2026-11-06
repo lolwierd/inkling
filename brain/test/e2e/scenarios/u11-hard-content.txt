@@ -6,6 +6,7 @@
 wait: 1500
 settle
 dump: wide
+expect: d.scrolled === 0   // a note longer than the window opens at its top, its caret waiting at the end
 expect: d.slots.length === 12 && overlaps(d) === 0
 expect: d.slots.findIndex(s => s.id === "h12") < d.slots.findIndex(s => s.id === "h11")   // "error budget" before "stops shipping" on one line: its tag comes first, as it is numbered
 expect: d.slots.find(s => s.id === "h12").top < d.slots.find(s => s.id === "h11").top
@@ -21,4 +22,9 @@ dump: narrow
 expect: !d.metrics.both && d.metrics.column_left >= 14   // one margin: the column keeps paper for the gutter beside it
 expect: d.slots.length === 12 && overlaps(d) === 0
 shot: narrow
+caret: end
+keys: \sStill typing at the end.
+wait: 600
+dump: typing
+expect: d.scrolled > 0   // typing at the end brings the caret into view
 quit

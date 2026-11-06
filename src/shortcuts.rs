@@ -357,7 +357,8 @@ fn key_glyph(key: &str) -> String {
         "down" => "↓",
         "backspace" => "⌫",
         "delete" => "⌦",
-        "enter" => "↵",
+        // Return, as macOS menus draw it (↵ is not a Mac key)
+        "enter" => "↩",
         "tab" => "⇥",
         "escape" => "⎋",
         "space" => "Space",
@@ -619,7 +620,7 @@ mod tests {
         assert_eq!(glyphs("cmd-shift-."), "⇧⌘.");
         assert_eq!(glyphs("cmd->"), "⌘>");
         assert_eq!(glyphs("cmd-\\"), "⌘\\");
-        assert_eq!(glyphs("cmd-enter"), "⌘↵");
+        assert_eq!(glyphs("cmd-enter"), "⌘↩");
         assert_eq!(glyphs("cmd-shift-backspace"), "⇧⌘⌫");
         assert_eq!(glyphs("shift-tab"), "⇧⇥");
         assert_eq!(glyphs("f12"), "F12");

@@ -19,4 +19,10 @@ shot: copied-dark
 wait: 1700
 dump: later
 expect: d.copied === null
+# What Copy writes names you as Export does (Me), and the mind by its name.
+reply: Starting from 8 km.
+settle
+copy: 2
+wait: 150
+expect: log.some(r => r.msg.startsWith("script copy:") && r.msg.includes("Me: Starting from 8 km.") && r.msg.includes("Inkling: "))
 quit

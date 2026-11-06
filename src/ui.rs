@@ -204,7 +204,8 @@ pub fn option_card(
         .border_1()
         .border_color(if selected { p.ink } else { p.rule })
         .cursor_pointer()
-        .hover(move |s| if selected { s } else { s.border_color(p.faint) })
+        // half way to the faint ink: a card under the pointer must not look chosen
+        .hover(move |s| if selected { s } else { s.border_color(p.faint.opacity(0.5)) })
         .active(|s| s.opacity(0.85))
         .child(div().text_size(px(ts::UI)).text_color(p.ink).child(title.into()))
         .child(div().mt(px(3.)).text_size(px(ts::META)).line_height(px(15.)).text_color(p.graphite).child(body.into()))

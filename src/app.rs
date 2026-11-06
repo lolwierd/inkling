@@ -38,6 +38,11 @@ gpui_kit::actions!(
         CloseOverlay,
         ShowWelcome,
         ImportObsidian,
+        HideApp,
+        HideOthers,
+        ShowAll,
+        Minimize,
+        Zoom,
     ]
 );
 
@@ -53,11 +58,34 @@ pub fn init(cx: &mut App) {
         }
     }
     cx.on_action(|_: &Quit, cx| cx.quit());
+    // What every Mac app's menus have, with the keys macOS gives them (they stay out of
+    // Settings › Shortcuts, as System Settings can rename any menu item's keys).
+    cx.bind_keys([KeyBinding::new("cmd-h", HideApp, None), KeyBinding::new("alt-cmd-h", HideOthers, None), KeyBinding::new("cmd-m", Minimize, None)]);
+    cx.on_action(|_: &HideApp, cx| cx.hide());
+    cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
+    cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
+    // the window in front, Settings included
+    cx.on_action(|_: &Minimize, cx| {
+        if let Some(w) = cx.active_window() {
+            let _ = w.update(cx, |_, window, _| window.minimize_window());
+        }
+    });
+    cx.on_action(|_: &Zoom, cx| {
+        if let Some(w) = cx.active_window() {
+            let _ = w.update(cx, |_, window, _| window.zoom_window());
+        }
+    });
     cx.set_menus(vec![
         Menu {
             name: "Inkling".into(),
             items: vec![
                 MenuItem::action("Settings…", OpenSettings),
+                MenuItem::separator(),
+                MenuItem::os_submenu("Services", SystemMenuType::Services),
+                MenuItem::separator(),
+                MenuItem::action("Hide Inkling", HideApp),
+                MenuItem::action("Hide Others", HideOthers),
+                MenuItem::action("Show All", ShowAll),
                 MenuItem::separator(),
                 MenuItem::action("Quit Inkling", Quit),
             ],
@@ -83,6 +111,12 @@ pub fn init(cx: &mut App) {
                 MenuItem::action("Chat", ToggleChat),
                 MenuItem::action("Hide Threads", JustMyWords),
             ],
+            disabled: false,
+        },
+        Menu {
+            name: "Window".into(),
+            // spelt as the rest of Inkling is (Colour, kilometre), as macOS spells it in British English
+            items: vec![MenuItem::action("Minimise", Minimize), MenuItem::action("Zoom", Zoom)],
             disabled: false,
         },
         Menu {
@@ -276,6 +310,19 @@ fn export_file_name(title: &str, ext: &str) -> String {
     format!("{base}.{ext}")
 }
 
+/// A tooltip for an icon that has no words of its own: what it does, and its keys as the
+/// keymap has them now.
+pub(crate) fn tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |window, cx| {
+        let t = gpui_kit::component::tooltip::Tooltip::new(name);
+        match keys {
+            Some(a) => t.action(a, None),
+            None => t,
+        }
+        .build(window, cx)
+    }
+}
+
 /// Script steps that act on the window itself, as the platform would: keystrokes and
 /// the pointer.
 fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
@@ -429,7 +476,7 @@ impl AppView {
                 this.listening = false;
                 this.talk.ended();
                 this.partial.clear();
-                crate::toast::show(cx, Kind::Problem, format!("Couldn't listen: {e}"));
+                crate::toast::show(cx, Kind::Problem, format!("Couldn’t listen: {e}"));
             }
             _ => {}
         }));
@@ -789,10 +836,13 @@ impl AppView {
                 .into_any_element();
         }
         let partial = if self.partial.is_empty() { "Listening…".to_string() } else { self.partial.clone() };
+        // where the corner hint sits, on the paper, not across the sheet's corner and the
+        // weave; beside the chat when it is open
+        let right = self.page.read(cx).sheet_inner_right() + if chat_open { crate::note_page::CHAT_WIDTH } else { 0. };
         div()
             .absolute()
-            .bottom(px(14.))
-            .right(px(14.))
+            .bottom(px(24.))
+            .right(px(right))
             .max_w(px(360.))
             .px(px(12.))
             .py(px(8.))
@@ -800,6 +850,8 @@ impl AppView {
             .bg(p.card)
             .border_1()
             .border_color(p.rule)
+            // lifted off the page as the toasts and menus are
+            .shadow(ui::popover_shadow(&p))
             .flex()
             .items_center()
             .gap(px(8.))
@@ -1086,12 +1138,14 @@ impl AppView {
                     div()
                         .id("toggle-sidebar")
                         .absolute()
-                        .top(px(10.))
+                        // centred on the traffic lights' line, as Chat is
+                        .top(px(11.))
                         .left(px(76.))
                         .p(px(4.))
                         .rounded(px(5.))
                         .cursor_pointer()
                         .hover(move |s| s.bg(p.hover))
+                        .tooltip(tip("Notes", Some(&ToggleSidebar)))
                         .child(icon("menu", 14., p.graphite))
                         // first in the Tab order (no part of the window comes before it)
                         .keyed_as("chrome:sidebar", 5., t.voice_ink, cx, |this, _, cx| {
@@ -1102,7 +1156,7 @@ impl AppView {
                 .child(
                     div()
                         .absolute()
-                        .top(px(9.))
+                        .top(px(8.))
                         .right(px(14.))
                         .flex()
                         .items_center()
@@ -1128,6 +1182,7 @@ impl AppView {
                                     .text_color(p.ink)
                                     .cursor_pointer()
                                     .hover(move |s| s.border_color(p.faint))
+                                    .tooltip(tip("Chat about this note", Some(&ToggleChat)))
                                     .child(ui::small_dot(t.voice_ink, 5.))
                                     .child("Chat")
                                     .keyed_as("chrome:chat", 12., t.voice_ink, cx, |this, window, cx| {
@@ -1260,7 +1315,7 @@ impl AppView {
             );
             if !collapsed {
                 if inside.is_empty() {
-                    list = list.child(div().pl(px(42.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
+                    list = list.child(div().pl(px(49.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
                 }
                 for n in inside {
                     list = list.child(note_row(n, 14., cx));
@@ -1273,12 +1328,13 @@ impl AppView {
 
         // the keys each row shows are the ones bound now (Settings > Shortcuts)
         let keys_of = |name: &str| crate::shortcuts::keys_for(name, cx).unwrap_or_default();
-        let (k_copy, k_export, k_hide, k_settings, k_find) = (
+        let (k_copy, k_export, k_hide, k_settings, k_find, k_new) = (
             keys_of("app::CopyNote"),
             keys_of("app::ExportNote"),
             keys_of("app::JustMyWords"),
             keys_of("app::OpenSettings"),
             keys_of("app::OpenPalette"),
+            keys_of("app::NewNote"),
         );
         let action = |id: &'static str, label: &'static str, keys: String| {
             div()
@@ -1330,7 +1386,8 @@ impl AppView {
                             .pl(px(86.))
                             .pr(px(10.))
                             .child(ui::wordmark(&t, 18.))
-                            .child(ui::icon_button("sidebar-close", "x", 13., &t).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
+                            // 1 px above the row's middle: on the traffic lights' line
+                            .child(ui::icon_button("sidebar-close", "x", 13., &t).mb(px(2.)).tooltip(tip("Close", Some(&ToggleSidebar))).keyed_as("sidebar:close", 5., ring, cx, |this, _, cx| {
                                 this.sidebar_open = false;
                                 cx.notify();
                             })),
@@ -1348,7 +1405,7 @@ impl AppView {
                             .text_color(p.graphite)
                             .child(icon("plus", 13., p.faint))
                             .child(div().flex_1().child("New note"))
-                            .child(ui::key_hint("\u{2318}N", &t))
+                            .child(ui::key_hint(k_new, &t))
                             .keyed_as("sidebar:new", 6., ring, cx, |this, window, cx| this.create_note("", None, window, cx)),
                     )
                     .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().child(list).child(
@@ -1501,7 +1558,8 @@ impl AppView {
                         .w(px(440.))
                         .p(px(18.))
                         .rounded(px(12.))
-                        .bg(p.paper)
+                        // the dialogs' card, as ⌘K and the sketch seen larger have it
+                        .bg(p.card)
                         .border_1()
                         .border_color(p.rule)
                         .shadow(ui::modal_shadow(&p))
@@ -1539,7 +1597,7 @@ impl AppView {
                                         .flex_1()
                                         .min_w(px(0.))
                                         .child(div().text_size(px(ts::UI)).text_color(p.ink).child("Include the threads"))
-                                        .child(div().text_size(px(ts::META)).text_color(p.graphite).child("Each thread sits under the paragraph it's about.")),
+                                        .child(div().text_size(px(ts::META)).text_color(p.graphite).child("Each thread sits under the paragraph it’s about.")),
                                 )
                                 .child(ui::switch("ex-threads", with_threads, &t))
                                 .keyed_as("export:threads", 9., ring, cx, |this, _, cx| {

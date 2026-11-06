@@ -376,7 +376,8 @@ pub fn stack<V: 'static>(
                             undo(this, kind, window, cx);
                         })),
                 )
-                .when(kind == Kind::ThreadDismissed, |d| d.children(undo_keys.clone().map(|k| ui::key_hint(k, &t))))
+                // the keys close the label as Undo's own padding would: as far in as the words start
+                .when(kind == Kind::ThreadDismissed, |d| d.children(undo_keys.clone().map(|k| ui::key_hint(k, &t).pr(px(6.)))))
             })
             .when(problem, |d| {
                 d.cursor_pointer()
@@ -384,7 +385,7 @@ pub fn stack<V: 'static>(
                         cx.global_mut::<Toasts>().close_id(id, Instant::now());
                         cx.notify();
                     }))
-                    .child(ui::icon_button(("toast-close", id as usize), "x", 12., &t).on_click(cx.listener(move |_, _, _, cx| {
+                    .child(ui::icon_button(("toast-close", id as usize), "x", 12., &t).tooltip(crate::app::tip("Close", None)).on_click(cx.listener(move |_, _, _, cx| {
                         cx.stop_propagation();
                         cx.global_mut::<Toasts>().close_id(id, Instant::now());
                         cx.notify();

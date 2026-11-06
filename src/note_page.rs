@@ -773,6 +773,14 @@ impl NotePage {
         self.last_typed.is_some_and(|t| t.elapsed() < QUIET_WHILE_TYPING)
     }
 
+    /// Nothing is scheduled or in flight, so the page will not change on its own: no
+    /// pause pending, no read, no thread or chat request, not typing. A script's `settle`
+    /// waits for this. Learning about the writer runs untracked, and saves wait 600 ms
+    /// (quitting flushes them); neither shows on the page.
+    pub(crate) fn settled(&self) -> bool {
+        self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently()
+    }
+
     /// The words of an open thread were edited: look at them again at the next pause.
     fn note_rechecks(&mut self, line: usize, cx: &mut Context<Self>) {
         let ed = self.editor.read(cx);
@@ -2115,7 +2123,9 @@ impl NotePage {
         let placement = cx.global::<Store>().settings.placement;
         let viewport = window.viewport_size().width.as_f32();
         let available = viewport - if self.chat_open { CHAT_WIDTH } else { 0. };
-        let m = Metrics::for_width(available);
+        // the page's geometry as `render` works it out, so the dump matches the screen
+        let m = Metrics::for_width(available - 2. * (SHEET_PAD + 14.));
+        let fits = m.page() + 2. * SHEET_PAD <= available - 16.;
         let (_, slots, _) = self.margin_layout(placement, m, cx);
         let ed = self.editor.read(cx);
         let error = self.error.as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(12)).map(|(m, _)| m.clone());
@@ -2136,7 +2146,7 @@ impl NotePage {
             "asking": self.asking.is_some(),
             "last_edited": self.last_edited,
             "cursor_line": ed.line_of(ed.cursor()),
-            "metrics": {"viewport": viewport, "available": available, "column": m.column, "margin": m.margin, "both": m.both, "page": m.page(), "fits": m.page() <= available, "column_left": m.column_left(), "right_left": m.right_left()},
+            "metrics": {"viewport": viewport, "available": available, "column": m.column, "margin": m.margin, "both": m.both, "page": m.page(), "fits": fits, "column_left": m.column_left(), "right_left": m.right_left()},
             "slots": slots.iter().map(|s| json!({"id": short(&s.id), "side": format!("{:?}", s.side), "anchor": s.anchor_top.as_f32(), "top": s.top.as_f32(), "h": s.height.as_f32()})).collect::<Vec<_>>(),
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),

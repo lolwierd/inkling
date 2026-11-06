@@ -458,6 +458,22 @@ impl AppView {
                     cx.background_executor().timer(std::time::Duration::from_millis(ms)).await;
                     continue;
                 }
+                if let crate::script::Step::Settle(max) = step {
+                    let started = std::time::Instant::now();
+                    loop {
+                        cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
+                        let Ok(settled) = this.update_in(cx, |app, _, cx| app.page.read(cx).settled()) else { return };
+                        if settled {
+                            log::info!("script: settled after {} ms", started.elapsed().as_millis());
+                            break;
+                        }
+                        if started.elapsed() >= std::time::Duration::from_millis(max) {
+                            log::warn!("script: settle gave up after {max} ms");
+                            break;
+                        }
+                    }
+                    continue;
+                }
                 let ok = this.update_in(cx, |app, window, cx| app.script_step(step, window, cx));
                 if ok.is_err() {
                     break;

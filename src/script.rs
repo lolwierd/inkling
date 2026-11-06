@@ -17,6 +17,11 @@
 //! open: settings          # or sidebar, palette, minds, model, export, jmw, welcome
 //! ```
 //!
+//! `wait: ms` waits on the clock. `settle` waits until the page has nothing scheduled
+//! or in flight (no pause pending, no read, no thread or chat request, not typing), up
+//! to `settle: ms` (default 20000); prefer it after typing or asking, so a run does not
+//! depend on how busy the machine is.
+//!
 //! Steps that type or move like a person, for the reading loop:
 //!
 //! ```text
@@ -125,7 +130,12 @@ pub enum Step {
     /// A screenshot named by the label. Nothing happens in the app: the runner sees the
     /// step in the log and captures the window (parse adds a `Wait` so it holds still).
     Shot(String),
+    /// Wait until the page is settled (`NotePage::settled`), at most this many ms.
+    Settle(u64),
 }
+
+/// How long `settle` waits at most when the step does not say.
+pub const SETTLE_MAX_MS: u64 = 20000;
 
 pub fn parse(src: &str) -> Vec<Step> {
     src.lines()
@@ -204,6 +214,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                     }
                 }
                 "shot" => Step::Shot(arg),
+                "settle" => Step::Settle(arg.parse().unwrap_or(SETTLE_MAX_MS)),
                 // for the runner, which checks it after the run
                 "expect" => return None,
                 _ => {
@@ -239,7 +250,9 @@ mod tests {
              bogus: step\n\
              edit: no arrow\n\
              expect: d.threads.length === 1\n\
-             shot: after tie\n",
+             shot: after tie\n\
+             settle\n\
+             settle: 500\n",
         );
         assert_eq!(
             steps,
@@ -255,6 +268,8 @@ mod tests {
                 Step::Wait(1000),
                 Step::Shot("after tie".into()),
                 Step::Wait(SHOT_HOLD_MS),
+                Step::Settle(SETTLE_MAX_MS),
+                Step::Settle(500),
             ]
         );
     }

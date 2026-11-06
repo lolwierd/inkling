@@ -1,0 +1,32 @@
+# The sidebar slides in from the left edge and fades up, and slides out quicker. Caught
+# halfway (the motion is slowed eight times here), it is partly open; turned over and
+# over, fast, it always ends all the way open or all the way closed, never stuck halfway.
+# fixture: running-plan
+# env: INKLING_SLOWMO=8
+wait: 1500
+open: sidebar
+dump: opening
+expect: d.sidebar.open && d.sidebar.shown > 0 && d.sidebar.shown < 1   // on its way in
+shot: opening
+wait: 2500
+dump: opened
+expect: d.sidebar.open && d.sidebar.shown === 1
+close
+dump: closing
+expect: !d.sidebar.open && d.sidebar.shown > 0 && d.sidebar.shown < 1   // on its way out
+wait: 2500
+dump: closed
+expect: !d.sidebar.open && d.sidebar.shown === 0
+# turned again before it gets anywhere, a step at a time and many in one frame
+key: cmd-\
+key: cmd-\
+key: cmd-\ cmd-\ cmd-\
+wait: 3000
+dump: turned
+expect: d.sidebar.open && d.sidebar.shown === 1   // five turns: open, all the way
+key: cmd-\ cmd-\
+key: cmd-\
+wait: 3000
+dump: turned-back
+expect: !d.sidebar.open && d.sidebar.shown === 0   // three more: closed, all the way
+quit

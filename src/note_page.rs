@@ -175,7 +175,7 @@ fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mu
     }
 }
 
-fn slowmo() -> f32 {
+pub(crate) fn slowmo() -> f32 {
     static F: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *F.get_or_init(|| std::env::var("INKLING_SLOWMO").ok().and_then(|v| v.parse::<f32>().ok()).filter(|f| *f >= 1.).unwrap_or(1.))
 }
@@ -2596,6 +2596,8 @@ impl NotePage {
             let top = s.origin.y.as_f32() + 50.;
             state["column"] = json!([c.origin.x.as_f32(), top, c.size.width.as_f32(), (c.origin.y + c.size.height).as_f32() - top]);
         }
+        // the sidebar: asked open, and how much of it shows (0 to 1) as it slides
+        state["sidebar"] = cx.try_global::<crate::app::SidebarShown>().map_or(Value::Null, |s| json!({"open": s.open, "shown": s.shown}));
         // threads whose question or reply got no answer, with why (Try again in the tag)
         state["unanswered"] = self.unanswered.iter().map(|(id, (_, why))| json!({"id": short(id), "why": why})).collect();
         state["tabs"] = Value::Object(

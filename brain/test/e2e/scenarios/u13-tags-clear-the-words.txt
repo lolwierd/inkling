@@ -1,5 +1,5 @@
 # The owner's rule: a thread never covers your words unless you dragged its tag onto them.
-# Every tag of hard-content and of the first-run guide (its five threads, whatever the
+# Every tag of hard-content and of the first-run guide (its six open threads, whatever the
 # guide says; the old guide's fifth was the Moon correction with a sketch, in the left
 # margin, the owner's case), folded and opened one at a time, stays clear of
 # the text column (from the header row to the last line): in Both margins and Right
@@ -342,6 +342,9 @@ dump: open-guide-1800-4
 activate: 5
 wait: 700
 dump: open-guide-1800-5
+activate: 6
+wait: 700
+dump: open-guide-1800-6
 escape
 wait: 300
 dump: open-guide-1800-folded
@@ -362,6 +365,9 @@ dump: open-guide-1320-4
 activate: 5
 wait: 700
 dump: open-guide-1320-5
+activate: 6
+wait: 700
+dump: open-guide-1320-6
 escape
 wait: 300
 dump: open-guide-1320-folded
@@ -382,6 +388,9 @@ dump: open-guide-760-4
 activate: 5
 wait: 700
 dump: open-guide-760-5
+activate: 6
+wait: 700
+dump: open-guide-760-6
 escape
 wait: 300
 dump: open-guide-760-folded
@@ -403,6 +412,9 @@ dump: open-guide-1800-dark-4
 activate: 5
 wait: 700
 dump: open-guide-1800-dark-5
+activate: 6
+wait: 700
+dump: open-guide-1800-dark-6
 escape
 wait: 300
 dump: open-guide-1800-dark-folded
@@ -424,6 +436,9 @@ dump: open-guide-1320-chat-dark-4
 activate: 5
 wait: 700
 dump: open-guide-1320-chat-dark-5
+activate: 6
+wait: 700
+dump: open-guide-1320-chat-dark-6
 escape
 wait: 300
 dump: open-guide-1320-chat-dark-folded
@@ -444,6 +459,9 @@ dump: open-guide-760-chat-dark-4
 activate: 5
 wait: 700
 dump: open-guide-760-chat-dark-5
+activate: 6
+wait: 700
+dump: open-guide-760-chat-dark-6
 escape
 wait: 300
 dump: open-guide-760-chat-dark-folded

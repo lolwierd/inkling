@@ -1,9 +1,10 @@
 # Shortcuts: keys recorded in Settings are saved and work at once in the note; the old keys stop.
-# env: INKLING_SETTINGS_RECORD=app::NewNote INKLING_SETTINGS_KEYS=settings:alt-cmd-right,main:alt-cmd-right,main:cmd-n
+# ⌥⌘N is bound to nothing out of the box (⌥⌘→, used before, is Go there since threads between notes).
+# env: INKLING_SETTINGS_RECORD=app::NewNote INKLING_SETTINGS_KEYS=settings:alt-cmd-n,main:alt-cmd-n,main:cmd-n
 # tags: settings
 wait: 1500
 open: settings
 wait: 4500
 quit
-expect: JSON.stringify(settings.shortcuts["app::NewNote"]) === '["alt-cmd-right"]'
-expect: notes.length === 2   // the tour, and the note ⌥⌘→ started; ⌘N no longer starts one
+expect: JSON.stringify(settings.shortcuts["app::NewNote"]) === '["alt-cmd-n"]'
+expect: notes.length === 2   // the tour, and the note ⌥⌘N started; ⌘N no longer starts one

@@ -1,0 +1,22 @@
+# The open tag's Copy confirms: a tick in place of its icon for a moment, and "Thread
+# copied" in the toasts. (The `copy:` step confirms the same way and leaves the clipboard
+# alone.)
+# fixture: running-plan
+wait: 1500
+set: appearance=light
+activate: 2
+wait: 600
+copy: 2
+wait: 150
+dump: copied
+expect: d.copied === "t2" && d.active === "t2"
+expect: d.toasts.some(t => t.kind === "done" && t.text === "Thread copied")
+shot: copied
+set: appearance=dark
+copy: 2
+wait: 150
+shot: copied-dark
+wait: 1700
+dump: later
+expect: d.copied === null
+quit

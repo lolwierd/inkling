@@ -35,6 +35,8 @@ const SHEET_PAD: f32 = 28.;
 const TIE_SHOW: Duration = Duration::from_millis(1700);
 /// A snipped thread falls and fades over this long.
 const SNIP_FADE: Duration = Duration::from_millis(900);
+/// How long the open tag's Copy shows its tick.
+const COPIED_FOR: Duration = Duration::from_millis(1500);
 /// A question that arrives while you type waits, folded, until you pause this long.
 const QUIET_WHILE_TYPING: Duration = Duration::from_millis(2000);
 /// The most minds that can answer one question side by side.
@@ -392,6 +394,8 @@ pub struct NotePage {
     /// and brings them back when the pointer moves. The page's header row follows it.
     pub chrome: Rc<std::cell::Cell<f32>>,
     enlarged: Option<String>,
+    /// The thread whose Copy was just pressed, and when: it shows a tick for a moment.
+    copied: Option<(String, std::time::Instant)>,
     marks_open: HashSet<String>,
     m: Metrics,
     /// Each visible thread's rope, kept between frames so it can sway and settle.
@@ -496,6 +500,7 @@ impl NotePage {
             chat_pending: None,
             just_my_words: false,
             enlarged: None,
+            copied: None,
             marks_open: HashSet::new(),
             m: Metrics::for_width(1320.),
             ropes: HashMap::new(),
@@ -1870,6 +1875,25 @@ impl NotePage {
         cx.notify();
     }
 
+    /// Copy says it copied: a tick in place of its icon for a moment, and "Thread copied" in
+    /// the toasts, as the chat's and the note's copies do.
+    fn show_copied(&mut self, id: &str, cx: &mut Context<Self>) {
+        crate::toast::show(cx, crate::toast::Kind::Done, "Thread copied");
+        let at = std::time::Instant::now();
+        self.copied = Some((id.to_string(), at));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(COPIED_FOR).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.copied.as_ref().is_some_and(|(_, t)| *t == at) {
+                    this.copied = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     /// The "?" after a quote in Marks-only placement: show or hide its card.
     fn toggle_mark(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.marks_open.contains(id) {
@@ -2215,7 +2239,10 @@ impl NotePage {
                     Step::Reopen(_) => self.set_status(&id, ThreadStatus::Open, cx),
                     Step::Dismiss(_) => self.set_status(&id, ThreadStatus::Dismissed, cx),
                     Step::Mark(_) => self.toggle_mark(&id, window, cx),
-                    Step::Copy(_) => log::info!("script copy: {:?}", self.thread_text(&id)),
+                    Step::Copy(_) => {
+                        log::info!("script copy: {:?}", self.thread_text(&id));
+                        self.show_copied(&id, cx);
+                    }
                     _ => self.make_note_from_thread(&id, cx),
                 }
             }
@@ -2344,6 +2371,8 @@ impl NotePage {
             "editor_focused": ed.is_focused(window),
             "menu": self.menu.map(|m| format!("{m:?}")),
             "enlarged": self.enlarged.as_deref().map(short),
+            // the thread whose Copy shows its tick right now
+            "copied": self.copied.as_ref().filter(|(_, at)| at.elapsed() < COPIED_FOR).map(|(id, _)| short(id)),
             "brief_editing": self.brief_input.is_some(),
             "chat_open": self.chat_open,
             "chat_error": self.chat_error,
@@ -3113,6 +3142,7 @@ impl NotePage {
             let id_res = id.clone();
             let id_dis = id.clone();
             let id_copy = id.clone();
+            let copied = self.copied.as_ref().is_some_and(|(c, at)| *c == id && at.elapsed() < COPIED_FOR);
             let id_note = id.clone();
             body = body.child(
                 div()
@@ -3145,10 +3175,12 @@ impl NotePage {
                             .rounded(px(4.))
                             .hover(move |s| s.bg(p.wash))
                             .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Copy the thread").build(window, cx))
-                            .child(icon("copy", 12., p.faint))
+                            // a tick where the pointer is, the words in the toasts (the row has no room)
+                            .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 let text = this.thread_text(&id_copy);
                                 cx.write_to_clipboard(ClipboardItem::new_string(text));
+                                this.show_copied(&id_copy, cx);
                             })),
                     ),
             );

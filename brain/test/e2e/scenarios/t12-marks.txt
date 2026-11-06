@@ -4,6 +4,7 @@
 # fixture: running-plan
 wait: 1500
 set: placement=marks
+set: appearance=light
 wait: 300
 dump: marks
 expect: d.marks.length === 2 && d.marks.includes("t1:×") && d.marks.includes("t2:?")

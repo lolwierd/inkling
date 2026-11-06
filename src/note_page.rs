@@ -547,7 +547,7 @@ pub struct NotePage {
     /// newest paragraph read meanwhile, which waits for it.
     relating: Option<Reading>,
     relate_next: Option<(usize, String)>,
-    /// Threads between notes: the one being followed, and its words to bring into view.
+    /// Threads between notes: the thread being followed into the next note to open.
     ends: ends::Ends,
 }
 

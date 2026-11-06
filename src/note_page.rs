@@ -173,6 +173,32 @@ fn panel_fit(right: bool, width: f32, out: f32, back: f32, dragged: bool) -> (f3
     }
 }
 
+/// How far past the point where [`panel_fit`] would change sides a held tag has to be
+/// dragged before its open panel does: a tag dragged back and forth across that point
+/// keeps its side instead of flipping every frame.
+const PANEL_HYSTERESIS: f32 = 24.;
+
+/// [`panel_fit`] for a tag being dragged, knowing the side its panel opened on last frame
+/// (`was_right`). The side changes only once the room outward is [`PANEL_HYSTERESIS`]
+/// past the floor that decides it: back across the words only when even the narrowest
+/// panel is that far from fitting outward (and the room back is as clearly more), and
+/// outward again only when the room outward is that far over the floor. In between, the
+/// panel keeps its side at the width that side allows.
+fn panel_fit_held(was_right: bool, right: bool, width: f32, out: f32, back: f32) -> (f32, bool) {
+    let (w, side) = panel_fit(right, width, out, back, true);
+    if side == was_right {
+        (w, side)
+    } else if side != right {
+        // it would open back across the words: only once clearly short of room outward
+        if out + PANEL_HYSTERESIS < PANEL_FLOOR && back > out + PANEL_HYSTERESIS { (w, side) } else { (PANEL_FLOOR, right) }
+    } else if out >= PANEL_FLOOR + PANEL_HYSTERESIS || back <= out {
+        // it would open outward again: only once clearly back in room
+        (w, side)
+    } else {
+        (width.min(back).max(PANEL_FLOOR), was_right)
+    }
+}
+
 /// A tooltip for a key in the selection menu: what it makes, and its keys if it has
 /// any, as the keymap has them now (Settings › Shortcuts can change them).
 fn key_tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
@@ -535,6 +561,9 @@ pub struct NotePage {
     panel_heights: Heights,
     /// Each tab's bounds in the window at the last paint: where its panel has room to open.
     tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// The side each tag's panel opened on at the last frame (true: to the right), so a
+    /// dragged tag keeps its side through small moves (`panel_fit_held`).
+    panel_sides: HashMap<String, bool>,
     /// The sheet's bounds in the window at the last paint: tags are kept on the paper.
     sheet_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// Each unfolded tag's bounds at the last paint, and the column of your words, for
@@ -651,6 +680,7 @@ impl NotePage {
             last_drag_end: None,
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
             tab_bounds: Rc::new(RefCell::new(HashMap::new())),
+            panel_sides: HashMap::new(),
             sheet_bounds: Rc::new(Cell::new(None)),
             panel_bounds: Rc::new(RefCell::new(HashMap::new())),
             column_bounds: Rc::new(Cell::new(None)),
@@ -758,6 +788,7 @@ impl NotePage {
         self.back.reset();
         self.heights.borrow_mut().clear();
         self.marks_open.clear();
+        self.panel_sides.clear();
         self.load_into_editor(cx);
         self.scroll.set_offset(point(px(0.), px(0.)));
         self.focus_editor_at_end(window, cx);
@@ -3669,7 +3700,12 @@ impl NotePage {
             // paper on the words' side
             let window_w = self.viewport.width.as_f32();
             let (out, back) = if right { (window_w - 8. - tab_l, tab_r - (left + 8.)) } else { (tab_r - 8., right_edge - 8. - tab_l) };
-            (width, open_right) = panel_fit(right, width, out, back, thread.tag_offset != (0., 0.));
+            let held = self.drag.as_ref().filter(|d| d.id == id && d.moved).and_then(|_| self.panel_sides.get(&id).copied());
+            (width, open_right) = match held {
+                Some(was_right) => panel_fit_held(was_right, right, width, out, back),
+                None => panel_fit(right, width, out, back, thread.tag_offset != (0., 0.)),
+            };
+            self.panel_sides.insert(id.clone(), open_right);
             let below = px(bottom - 8.) - b.origin.y;
             if natural > below {
                 lift = (natural - below).min((b.origin.y - px(top + 4.)).max(px(0.)));
@@ -5403,5 +5439,32 @@ mod tests {
         // with no room outward, only a tag you dragged opens back over the words
         assert_eq!(panel_fit(true, 249., 60., 600., true), (249., false));
         assert_eq!(panel_fit(true, 249., 60., 600., false), (PANEL_FLOOR, true));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_held_tag_keeps_its_side_through_the_band_round_the_floor() {
+        let (w, back) = (249., 600.);
+        // Opened outward, dragged toward the edge: it stays outward, narrowing to the floor,
+        // until the room is 24 px short of the floor; then it opens back across the words.
+        for out in [200., 170., 160., 150., 137.] {
+            let (_, side) = panel_fit_held(true, true, w, out, back);
+            assert!(side, "out {out}: still outward");
+        }
+        assert_eq!(panel_fit_held(true, true, w, 150., back), (PANEL_FLOOR, true));
+        assert_eq!(panel_fit_held(true, true, w, 135., back), (w, false));
+        // Opened back across the words, dragged out again: it keeps that side until the
+        // room outward is 24 px over the floor, then opens outward at the room's width.
+        for out in [140., 160., 170., 183.] {
+            let (_, side) = panel_fit_held(false, true, w, out, back);
+            assert!(!side, "out {out}: still back across the words");
+        }
+        assert_eq!(panel_fit_held(false, true, w, 184., back), (184., true));
+        assert_eq!(panel_fit_held(false, true, w, 300., back), (w, true));
+        // The same from a left tab, mirrored; and a side that agrees with the plain fit is the plain fit.
+        assert_eq!(panel_fit_held(false, false, w, 150., back), (PANEL_FLOOR, false));
+        assert_eq!(panel_fit_held(true, false, w, 170., back), (w.min(back), true));
+        assert_eq!(panel_fit_held(true, true, w, 300., back), panel_fit(true, w, 300., back, true));
+        // No room back either: the narrowest, outward, with no flip to speak of.
+        assert_eq!(panel_fit_held(true, true, w, 100., 90.), (PANEL_FLOOR, true));
     }
 }

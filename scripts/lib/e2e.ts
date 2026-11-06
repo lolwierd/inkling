@@ -361,7 +361,8 @@ export async function runSuite(o: RunOptions): Promise<number> {
 
   const results: Result[] = [];
   const started = Date.now();
-  say(`e2e: ${chosen.length} scenario(s), ${Math.min(o.jobs, chains.length)} at a time -> ${root}`);
+  const jobs = Math.max(1, Math.min(Number.isFinite(o.jobs) ? Math.floor(o.jobs) : 1, chains.length));
+  say(`e2e: ${chosen.length} scenario(s), ${jobs} at a time -> ${root}`);
   await withLock(o.lock, say, async () => {
     const queue = [...chains];
     const worker = async () => {
@@ -377,7 +378,7 @@ export async function runSuite(o: RunOptions): Promise<number> {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.max(1, Math.min(o.jobs, chains.length)) }, worker));
+    await Promise.all(Array.from({ length: jobs }, worker));
   });
 
   const order = new Map(chosen.map((s, i) => [s.name, i]));

@@ -1,0 +1,30 @@
+{
+  "id": "00000000-0000-4000-8000-0000000000e3",
+  "title": "March budget",
+  "folder": null,
+  "blocks": [
+    {
+      "kind": "title",
+      "text": "March budget"
+    },
+    {
+      "kind": "paragraph",
+      "text": "The March budget for running gear is £120, mostly for new shoes."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Rent and bills go out on the first of the month."
+    }
+  ],
+  "marks": [],
+  "brief": null,
+  "mode": "thinks_with_you",
+  "mind_id": "inkling",
+  "threads": [],
+  "chat": [],
+  "read_hashes": [],
+  "left_alone": [],
+  "first_run": false,
+  "created_at": "2026-10-01T08:00:00Z",
+  "updated_at": "2026-10-01T08:00:00Z"
+}

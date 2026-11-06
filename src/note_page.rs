@@ -29,6 +29,10 @@ use crate::ui::{self, Keyed, icon};
 
 mod show_working;
 mod goto;
+/// Threads between notes: the reading loop's look at other notes after a read.
+mod between;
+/// Threads between notes, as the page shows and follows them.
+mod ends;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -541,6 +545,12 @@ pub struct NotePage {
     /// A thread gone to from Loose ends, whose words are brought into view once the note
     /// is laid out (`goto.rs`).
     goto: Option<goto::Goto>,
+    /// The look at other notes in flight (threads between notes), one at a time, and the
+    /// newest paragraph read meanwhile, which waits for it.
+    relating: Option<Reading>,
+    relate_next: Option<(usize, String)>,
+    /// Threads between notes: the thread being followed into the next note to open.
+    ends: ends::Ends,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -636,6 +646,9 @@ impl NotePage {
             _subs: subs,
             disputes: HashSet::new(),
             goto: None,
+            relating: None,
+            relate_next: None,
+            ends: Default::default(),
         };
         page.load_into_editor(cx);
         page
@@ -646,6 +659,7 @@ impl NotePage {
     }
 
     fn load_into_editor(&mut self, cx: &mut Context<Self>) {
+        crate::between::add_visitors(&mut self.note, &cx.global::<Store>().notes);
         let lines = self.note.blocks.iter().map(|b| (b.kind, b.text.clone())).collect();
         let text = self.note.joined_text();
         let anchors = self
@@ -689,6 +703,10 @@ impl NotePage {
             self.note.read_hashes.retain(|h| *h != r.hash);
             self.cancel_request(&r.req, cx);
         }
+        self.relate_next = None;
+        if let Some(r) = self.relating.take() {
+            self.cancel_request(&r.req, cx);
+        }
         // Threads still waiting for their first words (a loose thread, a sketch, a
         // call by name) would be saved as empty cards: drop them with their requests.
         for (id, (req, _)) in std::mem::take(&mut self.pending) {
@@ -723,6 +741,7 @@ impl NotePage {
         self.load_into_editor(cx);
         self.scroll.set_offset(point(px(0.), px(0.)));
         self.focus_editor_at_end(window, cx);
+        self.arrive(window, cx);
         cx.notify();
     }
 
@@ -761,8 +780,13 @@ impl NotePage {
     pub fn flush(&mut self, cx: &mut Context<Self>) {
         self.save_task = None;
         self.sync_from_editor(cx);
-        self.note.updated_at = Utc::now();
-        let note = self.note.clone();
+        // Leaving a note you only looked at keeps the day it was last edited.
+        let kept = {
+            let clean = crate::between::without_visitors(&self.note);
+            cx.global::<Store>().note(&clean.id).filter(|n| n.same_writing(&clean)).map(|n| n.updated_at)
+        };
+        self.note.updated_at = kept.unwrap_or_else(Utc::now);
+        let note = crate::between::save_visitors_home(&self.note, cx.global_mut::<Store>());
         let store = cx.global_mut::<Store>();
         match store.notes.iter_mut().find(|n| n.id == note.id) {
             Some(n) => *n = note.clone(),
@@ -1087,6 +1111,7 @@ impl NotePage {
     /// (quitting flushes them); neither shows on the page.
     pub(crate) fn settled(&self) -> bool {
         self.last_edited.is_none() && self.reading.is_none() && self.pending.is_empty() && self.chat_pending.is_none() && !self.typing_recently() && self.goto.is_none()
+            && self.relating.is_none() && self.relate_next.is_none()
     }
 
     /// The words of an open thread were edited: look at them again at the next pause.
@@ -1141,6 +1166,7 @@ impl NotePage {
             "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
             "message": message,
         });
+        let input = self.between_reply(&t, input, cx);
         let tid = id.to_string();
         self.rechecking.insert(tid.clone());
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
@@ -1260,6 +1286,7 @@ impl NotePage {
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
                     "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+                    "elsewhere": crate::between::summary_wire(&self.note, &t.id),
                 })
             })
             .collect();
@@ -1384,6 +1411,7 @@ impl NotePage {
     /// Is `req` still something this page is waiting on?
     fn tracks(&self, req: &str) -> bool {
         self.reading.as_ref().is_some_and(|r| r.req == req)
+            || self.relating.as_ref().is_some_and(|r| r.req == req)
             || self.pending.values().any(|(r, _)| r == req)
             || self.chat_pending.as_ref().is_some_and(|(r, _)| r == req)
     }
@@ -1473,6 +1501,7 @@ impl NotePage {
         let task = if self.note.first_run { "probe" } else { "read" };
         let input = json!({"task": task, "ctx": self.context(cx), "target": text});
         let target = text.clone();
+        let reads = task == "read";
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.reading = None;
@@ -1495,6 +1524,14 @@ impl NotePage {
                 if page.note.first_run {
                     page.note.first_run = false;
                     page.schedule_save(cx);
+                }
+                if reads {
+                    let (target, note) = (target.clone(), page.note.id.clone());
+                    page.later(cx, move |page, cx| {
+                        if page.note.id == note {
+                            page.look_elsewhere(line, target, cx)
+                        }
+                    });
                 }
                 page.later(cx, |page, cx| page.after_read(cx));
                 cx.notify();
@@ -2048,6 +2085,7 @@ impl NotePage {
             "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
             "message": dispute.unwrap_or(text.clone()),
         });
+        let input = self.between_reply(&t, input, cx);
         self.run_reply(id.to_string(), input, text, disputed, cx);
     }
 
@@ -2538,7 +2576,7 @@ impl NotePage {
                     Step::Dismiss(_) => self.set_status(&id, ThreadStatus::Dismissed, cx),
                     Step::Mark(_) => self.toggle_mark(&id, window, cx),
                     Step::Copy(_) => {
-                        log::info!("script copy: {:?}", self.thread_text(&id));
+                        log::info!("script copy: {:?}", self.copy_text(&id, cx));
                         self.show_copied(&id, cx);
                     }
                     Step::Retry(_) => self.retry_thread(&id, cx),
@@ -2622,6 +2660,10 @@ impl NotePage {
                     self.end_tag_drag(cx);
                 }
             }
+            Step::Follow(n) => match self.nth_thread(*n) {
+                Some(id) if self.far_end(&id).is_some() => self.follow(&id, cx),
+                _ => log::warn!("script: no thread between notes {n}"),
+            },
             Step::Log(text) => log::info!("script log: {text}"),
             Step::Export(format) => {
                 self.sync_from_editor(cx);
@@ -2770,6 +2812,7 @@ impl NotePage {
         state["loose_ends"] = crate::loose_ends::describe(&self.note, window, cx);
         // the back of the note: `turned`, and `back`, its entries in order
         crate::back::dump_into(&mut state, self, window, cx);
+        self.between_state(&mut state, cx);
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -2777,6 +2820,8 @@ impl NotePage {
                 .map(|(id, b)| (short(id), json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()])))
                 .collect(),
         );
+        // threads between notes: each one's far end as its tag shows it, and following
+        state["ends"] = self.ends_state(window, cx);
         state.to_string()
     }
 
@@ -3401,6 +3446,8 @@ impl NotePage {
         let number = self.numbers.get(&id).copied();
         let correction = thread.kind == ThoughtKind::Correction;
         let right = side == Side::Right;
+        // a thread between notes has a second loop, and its number and mark move over for it
+        let between = self.far_end(&id).is_some();
 
         // ---- the folded tab ----
         let glyph: AnyElement = if tied {
@@ -3418,6 +3465,7 @@ impl NotePage {
             .top(px(4.))
             .when(right, |d| d.left(px(22.)))
             .when(!right, |d| d.right(px(22.)))
+            .when(between, |d| if right { d.left(px(22. + ends::LOOP_STEP)) } else { d.right(px(22. + ends::LOOP_STEP)) })
             .h(px(18.))
             .flex()
             .items_center()
@@ -3446,6 +3494,7 @@ impl NotePage {
                     .border_color(thread_color.opacity(0.4)),
             )
             .child(Self::tag_ring(right, thread_color))
+            .when(between, |d| d.child(Self::second_loop(right, thread_color)))
             .child(label);
 
         let panel = (unfold > 0.01).then(|| self.tag_panel(thread, side, thread_color, unfold, cx));
@@ -3523,6 +3572,7 @@ impl NotePage {
             ThoughtKind::Answer => "answer",
             ThoughtKind::Question => "question",
         };
+        let kind = self.between_kind(&id).unwrap_or(kind);
         let tied = thread.status == ThreadStatus::Resolved;
         let right = side == Side::Right;
         let mut width = self.m.margin.max(PANEL_MIN);
@@ -3555,6 +3605,9 @@ impl NotePage {
         let ring_on_left = ring_x < w / 2.;
         // the header keeps clear of the loop: 12 px past it, less the tag's own padding
         let ring_pad = if lift < px(6.) { (if ring_on_left { ring_x } else { w - ring_x }) + 1. } else { 0. };
+        // ...and clear of the second loop of a thread between notes
+        let between = self.far_end(&id).is_some();
+        let ring_pad = ring_pad + if between && lift < px(6.) { ends::LOOP_STEP } else { 0. };
 
         // the top row: name and kind, number; it is also where an open tag is dragged from
         let id_down = id.clone();
@@ -3614,12 +3667,16 @@ impl NotePage {
             } else {
                 thread.messages.iter().take(1).collect()
             };
+            // a thread between notes quotes the other end under what it asks
+            let mut far = self.far_end_block(thread, thread_color, cx);
             for m in messages {
                 body = body.child(self.message_view(m, &t, false));
                 if let Some(w) = self.working_block(thread, m, thread_color, is_active, width - 30., cx) {
                     body = body.child(w);
                 }
+                body = body.children(far.take());
             }
+            body = body.children(far);
             if let Some(Pending::Streaming(s)) = &pending {
                 body = body.child(self.message_view(&Message::new(Role::Mind, s.clone()), &t, false));
             }
@@ -3750,7 +3807,7 @@ impl NotePage {
                             // a tick where the pointer is, the words in the toasts (the row has no room)
                             .child(icon(if copied { "check" } else { "copy" }, 12., if copied { p.ink } else { p.faint }))
                             .keyed_as("tag:copy", 4., thread_color, cx, move |this, _, cx| {
-                                let text = this.thread_text(&id_copy);
+                                let text = this.copy_text(&id_copy, cx);
                                 cx.write_to_clipboard(ClipboardItem::new_string(text));
                                 this.show_copied(&id_copy, cx);
                             }),
@@ -3834,7 +3891,8 @@ impl NotePage {
                             .border(px(1.5))
                             .border_color(thread_color.opacity(0.9)),
                     )
-                }),
+                })
+                .when(between && lift < px(6.), |d| d.child(Self::panel_second_loop(ring_x, ring_on_left, px(9.) + lift, thread_color))),
         )
         .with_priority(2)
         .into_any_element()
@@ -4578,6 +4636,8 @@ impl Render for NotePage {
         if !self.typing_recently() {
             self.arrived.clear();
         }
+        // a thread between notes: its far end's side the first time it shows here
+        self.side_new_far_ends(cx);
 
         // The paragraph being read, and words being looked at again: the needle works beside them.
         let thinking: Vec<usize> = {

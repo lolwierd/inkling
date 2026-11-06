@@ -1,0 +1,32 @@
+# A reply at the far end carries the other end as it is now and is answered by
+# the thread's mind (the home note's Inkling, though Race calendar's own mind is Skeptic); fixing
+# the far words looks again at both ends, and the thread ties off in both notes (the fake brain
+# resolves when the words say [[resolved]]).
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race calendar
+mind: Skeptic
+settle
+activate: 1
+reply: The office moved the race this year.
+settle
+dump: replied
+expect: d.active === "b1" && d.threads.find(t => t.id === "b1").msgs === 3
+edit: Sunday 15 => Sunday 22 [[resolved]]
+caret: end
+settle
+dump: tied
+expect: d.statuses.includes("b1:Resolved:Inkling")
+switch: Race-week plan
+settle
+dump: home
+expect: d.statuses.includes("b1:Resolved:Inkling") && d.threads.find(t => t.id === "b1").msgs === 4
+quit
+expect: note("Race-week plan").threads.find(t => t.id === "b1").status === "resolved"
+expect: note("Race-week plan").elsewhere[0].quote.startsWith("Sunday 22")   // the far words, fixed, went home too
+expect: tasks.filter(t => t === "reply").length === 2
+expect: requests.filter(r => r.input.task === "reply").every(r => r.input.elsewhere && r.input.elsewhere.noteTitle === "Race-week plan" && r.input.elsewhere.quote === "Sunday 22 March")
+expect: requests.filter(r => r.input.task === "reply").every(r => r.input.ctx.mind.name === "Inkling" && r.input.ctx.noteTitle === "Race calendar")
+expect: note("Race calendar").mind_id === "skeptic-1"

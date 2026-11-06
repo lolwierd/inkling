@@ -87,6 +87,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/app.rs` | the window: no title bar (traffic lights, sidebar toggle and Chat sit on the cloth above the sheet and fade while you type), the sidebar with the wordmark, ⌘K palette and export overlays, opening Settings, hold-⌥ dictation, the script runner (`run_script`) and window-level steps | actions and menus (`init`), `chrome_layer`, `INKLING_OPEN`, `INKLING_JIGGLE` |
 | `src/shortcuts.rs` | every shortcut: the table (app actions here, the editor's from `editor::bindings()`), your keys from `settings.json` `shortcuts`, clashes, the keymap rebuild and menu refresh when a key changes | `table`, `apply`, `clashes`, `take` (what recording accepts) |
 | `src/note_page.rs` | one note: header row, editor, the margin's tags (folded to a tab until pointed at or opened; draggable, `Thread.tag_offset`), threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
+| `src/note_page/ends.rs` | threads between notes on the page: the tab's second loop, the other end inside the tag (Go there, `· deleted`), following (Go there, ⌥⌘→ `FollowThread`, `follow:`), a far end's side on its first show, replies and second looks by the thread's mind with the other end, Copy's far line, the dump's `ends` | `far_end_block`, `follow`, `arrive`, `between_reply` |
 | `src/editor.rs` | the document as one string with `\n` between blocks; block kinds, marks, undo, IME, layout, painting; `Anchor`s (thread ranges) that follow edits; gutter marks; checklists, callouts and code blocks (typing them, Return, the box's click, Copy) | `State` (pure, tested headless), `map_anchor`, `NoteEditor` API, `shortcut_kind`, `layout_doc` |
 | `src/code.rs` | code blocks' languages, a small lexer per language (a comment or string carries across lines), each token's thread, the contrast test on the code ground | `lex_block`, `color` |
 | `src/sewn.rs` | your blocks, sewn: the checklist box and its cross-stitch (and its timing), a callout's patch, a quote's seam, the block geometry the editor lays out and hit-tests | `patch`, `check_box`, `cross_at`, `lay_along` |
@@ -95,8 +96,9 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
 | `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open (the bundle's `.icns` is the light Initial; per-appearance bundle icons need Xcode's `actool`) | `follow` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
+| `src/between.rs` | threads between notes, the data side: an in-memory index of every searchable paragraph and the gate that picks at most three passages for `relate`; a thread's far end (`Note.elsewhere`) shown in the other note as a visiting end (`add_visitors`) and sent home on save (`save_visitors_home`); the wire shapes. The page's half is `src/note_page/between.rs` (`look_elsewhere`, after a read). Design: `design/features/threads-between-notes.md` | `Index::passages`, `searchable`, `send_home` |
 | `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
-| `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped, an unknown block kind reads as a paragraph); notes as Markdown | `Note`, `Thread`, `Settings`, `BlockKind` (`Check`, `Callout`, `Code(Lang)`), `markdown_blocks` |
+| `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped, an unknown block kind reads as a paragraph); notes as Markdown | `Note`, `Thread`, `Elsewhere` (a thread's far end in another note), `Settings`, `BlockKind` (`Check`, `Callout`, `Code(Lang)`), `markdown_blocks` |
 | `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
 | `src/export.rs` | Markdown, HTML, Word (via `textutil`) with threads under paragraphs; checklists, callouts and code in each | `to_markdown`, `to_html`, `to_word_html` |
 | `src/import.rs` | File > Import from Obsidian…: a vault's Markdown as notes and folders, as Obsidian shows it; every imported paragraph goes in `Note.left_alone`; the vault is only read | `convert` (one note), `read_vault`, `add_to_store` |
@@ -122,7 +124,9 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
    left, at least four words, nothing else reading), Answer (it calls the mind by name),
    Later, or Skip. A paragraph's hash goes into `note.read_hashes` so it is read once.
 3. `read_line` sends `{"task":"read"}` (or `probe` for a new notebook's first
-   sentence) through `send_task` → `Brain::run` → one JSON line to the brain.
+   sentence) through `send_task` → `Brain::run` → one JSON line to the brain. After a
+   read, `look_elsewhere` (`src/note_page/between.rs`) asks `relate` about passages from
+   other notes, only when the local index finds some (threads between notes).
 4. The brain (`main.ts` `run`) builds the prompt (`prompts.ts`), calls the SDK
    (`claude.ts runStructured`), snaps the quote onto the paragraph (`output.ts`), and
    answers with exactly one `done` or `error`.

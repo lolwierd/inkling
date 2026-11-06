@@ -125,7 +125,10 @@ pub fn collect(notes: &[Note], folders: &[Folder], live: Option<&Note>, mind_of:
         let title = if note.title.trim().is_empty() { "Untitled".to_string() } else { one_line(&note.title) };
         let own_mind = mind_of(&note.mind_id);
         let here = live.is_some_and(|l| l.id == note.id);
-        for t in note.threads.iter().filter(|t| t.status == ThreadStatus::Open) {
+        // a thread between notes is listed once, under its home: the open note's copy also
+        // holds the far ends of threads that live in other notes (visiting ends), never saved
+        let visiting = |id: &str| note.elsewhere_of(id).is_some_and(|e| e.visiting);
+        for t in note.threads.iter().filter(|t| t.status == ThreadStatus::Open && !visiting(&t.id)) {
             let quote = one_line(&t.quote);
             let mind = who(t);
             let hay = format!("{quote}\n{title}\n{}\n{mind}", folder.as_deref().unwrap_or("")).to_lowercase();
@@ -673,6 +676,17 @@ mod tests {
         // a note the store does not have yet (made a moment ago) still counts
         let fresh = note("fresh", "Fresh", None, vec![thread("f1", "f", Open, "", "2026-11-07T10:00:00Z", 0)]);
         assert_eq!(keys(&collect(&[], &[], Some(&fresh), mind_of)), ["fresh/f1"]);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_between_notes_is_one_row_under_its_home() {
+        let home = note("plan", "Plan", None, vec![thread("b1", "Saturday 14 March", Open, "Inkling", "2026-11-06T18:00:00Z", 0)]);
+        let far = note("cal", "Calendar", None, vec![]);
+        // the calendar open on the page: the thread visits it on its own words
+        let mut live = far.clone();
+        live.threads.push(thread("b1", "Friday 13 March", Open, "Inkling", "2026-11-06T18:00:00Z", 0));
+        live.elsewhere.push(crate::store::Elsewhere { thread: "b1".into(), note: "plan".into(), visiting: true, ..Default::default() });
+        assert_eq!(keys(&collect(&[home, far], &[], Some(&live), mind_of)), ["plan/b1"]);
     }
 
     #[std::prelude::v1::test]

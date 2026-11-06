@@ -19,6 +19,7 @@ use crate::app::{
     CopyNote, DismissThread, ExportNote, FindLooseThread, JustMyWords, LooseEnds, NewNote, NextThread, OpenPalette,
     OpenSettings, PrevThread, Quit, ToggleChat, ToggleSidebar, TurnOver, UndoDismiss,
 };
+use crate::app::FollowThread;
 use crate::store::Store;
 
 /// The app's shortcuts out of the box. They work anywhere in the window.
@@ -39,6 +40,7 @@ fn app_bindings() -> Vec<KeyBinding> {
         // the margin, from the keyboard
         KeyBinding::new("alt-cmd-down", NextThread, None),
         KeyBinding::new("alt-cmd-up", PrevThread, None),
+        KeyBinding::new("alt-cmd-right", FollowThread, None),
         KeyBinding::new("cmd-shift-backspace", DismissThread, None),
         KeyBinding::new("alt-cmd-z", UndoDismiss, None),
         KeyBinding::new("cmd-shift-b", TurnOver, None),
@@ -109,6 +111,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("app::NextThread", "Next open thread", Group::Threads, None),
     ("app::PrevThread", "Previous open thread", Group::Threads, None),
     ("app::LooseEnds", "Loose ends", Group::Threads, Some("Every open thread in the notebook, oldest first.")),
+    ("app::FollowThread", "Go to the other end", Group::Threads, Some("From an open thread between notes: the other note, at its words.")),
     ("app::DismissThread", "Let stand or dismiss the open thread", Group::Threads, Some("A mind's question or correction is let stand, with what you typed in its box as your reason.")),
     ("app::UndoDismiss", "Undo let stand or dismiss", Group::Threads, None),
     ("app::JustMyWords", "Hide threads", Group::Threads, None),

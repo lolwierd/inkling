@@ -1,0 +1,38 @@
+{
+  "id": "00000000-0000-4000-8000-0000000000e1",
+  "title": "Race calendar",
+  "folder": null,
+  "blocks": [
+    {
+      "kind": "title",
+      "text": "Race calendar"
+    },
+    {
+      "kind": "h2",
+      "text": "Spring"
+    },
+    {
+      "kind": "paragraph",
+      "text": "City 10k: Sunday 15 March, 9:00 start from the harbour."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Pick up the race bib on Friday 13 March at the harbour office."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Spring half marathon in Leeds on 26 April, if the knee holds."
+    }
+  ],
+  "marks": [],
+  "brief": null,
+  "mode": "thinks_with_you",
+  "mind_id": "inkling",
+  "threads": [],
+  "chat": [],
+  "read_hashes": [],
+  "left_alone": [],
+  "first_run": false,
+  "created_at": "2026-09-03T09:00:00Z",
+  "updated_at": "2026-09-03T09:00:00Z"
+}

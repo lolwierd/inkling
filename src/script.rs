@@ -47,6 +47,7 @@
 //! drag: 1 -40 120 (move thread 1's tag by that many pixels, as a finished drag would)
 //! see: 1 2        (click the 2nd words thread 1's check rests on: they are selected)
 //! disagree: 1     (press Disagree on thread 1's working: the next `reply:` disputes it)
+//! follow: 1       (thread 1 is a thread between notes: open its other end, as Go there does)
 //! ```
 //!
 //! The back of the note, whose entries are numbered from 1 in the order the back lists
@@ -78,6 +79,7 @@
 //! ```text
 //! clear                     # Clear in the chat panel
 //! switch: Other note title  # open another note, as the sidebar does
+//! delete: Other note title  # delete a note, as ⌘⌫ in ⌘K does; `undo-delete` brings it back
 //! import: ../fixtures/vault # File > Import from Obsidian… with this folder; a relative
 //!                           # path starts at the script's own folder
 //! set: pace=slow            # pace=regular|slow, placement=both|right|marks,
@@ -192,6 +194,12 @@ pub enum Step {
     BackReopen(usize),
     /// On the back, Show on the page for entry N.
     BackShow(usize),
+    /// Follow a thread between notes to its other end, as Go there and ⌥⌘→ do.
+    Follow(usize),
+    /// Delete the note with this title, as ⌘⌫ in ⌘K does (with its Undo).
+    Delete(String),
+    /// Bring back the note deleted last, as the toast's Undo does.
+    UndoDelete,
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -331,6 +339,9 @@ pub fn parse(src: &str) -> Vec<Step> {
                         return None;
                     }
                 },
+                "follow" => Step::Follow(n()),
+                "delete" => Step::Delete(arg),
+                "undo-delete" => Step::UndoDelete,
                 _ => {
                     log::warn!("script: unknown step {l:?}");
                     return None;
@@ -455,6 +466,14 @@ mod tests {
                 Step::Click(640., 300.),
                 Step::Pointer(12., 40.),
             ]
+        );
+    }
+
+    #[std::prelude::v1::test]
+    fn parses_steps_for_threads_between_notes() {
+        assert_eq!(
+            parse("follow: 2\nfollow\ndelete: Race calendar\nundo-delete\n"),
+            vec![Step::Follow(2), Step::Follow(1), Step::Delete("Race calendar".into()), Step::UndoDelete]
         );
     }
 }

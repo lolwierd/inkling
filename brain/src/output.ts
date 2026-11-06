@@ -4,7 +4,7 @@
 
 import { ProviderError } from "./claude.ts";
 
-const EDGE_MARKS = /^[\s«»"“”„'‘’‹›`「」『』]+|[\s«»"“”„'‘’‹›`「」『』]+$/gu;
+const EDGE_MARKS = /^[\s«»"“”„'‘’‹›`「」『』…]+|[\s«»"“”„'‘’‹›`「」『』…]+$/gu;
 
 /**
  * Snap a model-provided quote onto the exact text it should come from. The
@@ -15,7 +15,11 @@ export function snapQuote(quote: string, source: string): string {
   return findQuote(quote, source) ?? source;
 }
 
-/** Like `snapQuote`, but `null` when the quote is not in `source` at all. */
+/**
+ * Like `snapQuote`, but `null` when the quote is not in `source` at all: for a quote that
+ * must not fall back to the whole text (a check's words, the far end of a thread between
+ * notes), which the model could otherwise invent.
+ */
 export function findQuote(quote: string, source: string): string | null {
   const q = quote.replace(EDGE_MARKS, "");
   if (!q) return null;

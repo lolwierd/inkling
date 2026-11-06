@@ -39,7 +39,7 @@ What an `expect:` can see:
 
 | Name | What |
 |---|---|
-| `d` | the nearest `dump:` above this line (the page: `note`, `reading`, `waiting`, `pending`, `chat_pending`, `active`, `error`, `threads`, `anchors`, `slots`, `metrics`, `statuses`, `kinds` (each line's block kind: `paragraph`, `check:done`, `callout:tip`, `code:rust`), `loose_ends` (Loose ends: `open`, `focused`, `query`, `selected`, `count`, and `rows`, each `note`, `folder`, `thread`, `quote`, `mind`, `mark`, `state`, `here`, `age`; with the card closed, the rows it would show now), ...; `debug_state` in `src/note_page.rs` builds it) |
+| `d` | the nearest `dump:` above this line (the page: `note`, `reading`, `waiting`, `pending`, `chat_pending`, `active`, `error`, `threads`, `anchors`, `slots`, `metrics`, `statuses`, `kinds` (each line's block kind: `paragraph`, `check:done`, `callout:tip`, `code:rust`), `relating` and `between` (threads between notes: the look at other notes in flight, and each far end on the page, `visiting` when its thread lives in another note), `loose_ends` (Loose ends: `open`, `focused`, `query`, `selected`, `count`, and `rows`, each `note`, `folder`, `thread`, `quote`, `mind`, `mark`, `state`, `here`, `age`; with the card closed, the rows it would show now), ...; `debug_state` in `src/note_page.rs` builds it) |
 | `dumps` | every dump by label |
 | `notes`, `settings`, `minds`, `folders`, `note(title)` | the notebook files after the app quit |
 | `requests`, `tasks` | what the app sent the brain (`{id, settings, input}`) and the task names, in order |

@@ -205,7 +205,14 @@ fn mind_name(t: &Thread) -> &str {
     if t.mind_name.trim().is_empty() { "Inkling" } else { &t.mind_name }
 }
 
-fn thread_markdown(t: &Thread) -> String {
+/// A thread between notes: the other note's title and the words it quotes there.
+fn also_in(note: &Note, t: &Thread) -> Option<(String, String)> {
+    let e = note.elsewhere_of(&t.id)?;
+    let title = if e.title.trim().is_empty() { "Untitled" } else { e.title.trim() };
+    Some((title.to_string(), e.quote.replace('\n', " ")))
+}
+
+fn thread_markdown(note: &Note, t: &Thread) -> String {
     let name = mind_name(t);
     let mut out = format!("> **{name}** on “{}”\n", t.quote.replace('\n', " "));
     for m in &t.messages {
@@ -219,6 +226,9 @@ fn thread_markdown(t: &Thread) -> String {
             }
         }
     }
+    if let Some((title, quote)) = also_in(note, t) {
+        out.push_str(&format!(">\n> *Also in “{title}”:* “{quote}”\n"));
+    }
     if t.drawing.is_some() {
         out.push_str(">\n> *(drawing)*\n");
     }
@@ -229,7 +239,7 @@ fn thread_markdown(t: &Thread) -> String {
 pub fn to_markdown(note: &Note, with_threads: bool) -> String {
     let under = threads_under_blocks(note);
     let threads = |i: usize| {
-        (with_threads && !under[i].is_empty()).then(|| under[i].iter().map(|t| thread_markdown(t)).collect::<String>())
+        (with_threads && !under[i].is_empty()).then(|| under[i].iter().map(|t| thread_markdown(note, t)).collect::<String>())
     };
     let mut out = format!("# {}\n\n", title_of(note));
     if let Some(on_title) = threads(0) {
@@ -244,7 +254,7 @@ fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
-fn thread_html(t: &Thread) -> String {
+fn thread_html(note: &Note, t: &Thread) -> String {
     let name = mind_name(t);
     let mut out = format!(
         "<div class=\"thread\"><div class=\"on\"><span class=\"who\">{}</span> on “{}”</div>\n",
@@ -260,6 +270,9 @@ fn thread_html(t: &Thread) -> String {
                 out.push_str(&format!("<p class=\"working\">{}: {open}{}{close}</p>\n", esc(&label), esc(&body)));
             }
         }
+    }
+    if let Some((title, quote)) = also_in(note, t) {
+        out.push_str(&format!("<p class=\"on\">Also in “{}”: “{}”</p>\n", esc(&title), esc(&quote)));
     }
     if t.drawing.is_some() {
         out.push_str("<p class=\"on\">(drawing)</p>\n");
@@ -291,7 +304,7 @@ fn callout_hex(kind: Callout) -> &'static str {
 fn html(note: &Note, with_threads: bool, word: bool) -> String {
     let under = threads_under_blocks(note);
     let threads = |i: usize| -> String {
-        if with_threads { under[i].iter().map(|t| thread_html(t)).collect() } else { String::new() }
+        if with_threads { under[i].iter().map(|t| thread_html(note, t)).collect() } else { String::new() }
     };
     let starts = block_starts(note);
     let mut body = threads(0);
@@ -490,6 +503,21 @@ mod tests {
         assert!(thread_at > quote_at);
         let plain = to_markdown(&note, false);
         assert!(!plain.contains("**Inkling** on"));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_between_notes_names_the_other_note_and_its_words() {
+        let mut note = Note::new("Race-week plan", crate::store::Mode::ThinksWithYou, None);
+        note.blocks = vec![b(BlockKind::Title, "Race-week plan"), b(BlockKind::Paragraph, "I'll pick up my bib on Saturday 14 March.")];
+        let t = thread(&note, "Saturday 14 March", ThreadStatus::Open, &[(Role::Mind, "Race calendar says Friday 13 March. Which day?")]);
+        note.elsewhere.push(crate::store::Elsewhere { thread: t.id.clone(), note: "cal".into(), quote: "Friday 13 March".into(), title: "Race <calendar>".into(), ..Default::default() });
+        note.threads = vec![t];
+        let md = to_markdown(&note, true);
+        assert!(md.contains("> *Editor:* Race calendar says Friday 13 March. Which day?\n>\n> *Also in “Race <calendar>”:* “Friday 13 March”\n"), "{md}");
+        for html in [to_html(&note, true), to_word_html(&note, true)] {
+            assert!(html.contains("<p class=\"on\">Also in “Race &lt;calendar&gt;”: “Friday 13 March”</p>"), "{html}");
+        }
+        assert!(!to_markdown(&note, false).contains("Also in"));
     }
 
     fn b(kind: BlockKind, text: &str) -> Block {

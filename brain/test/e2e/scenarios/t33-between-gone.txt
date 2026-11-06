@@ -1,0 +1,34 @@
+# With the other note deleted, the thread stays at home with the other words
+# kept, says the note is deleted and offers no Go there; Undo brings the note back with the link.
+# With the home note deleted, the far end is gone from the other note the next time it opens.
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race-week plan
+settle
+delete: Race calendar
+activate: 1
+dump: gone
+expect: d.between.some(e => e.thread === "b1" && e.gone && e.quote === "Sunday 15 March")   // the other words kept
+expect: d.ends.tags.length === 1 && d.ends.tags[0].line === "Race calendar · deleted" && d.ends.tags[0].go === false
+expect: d.statuses.includes("b1:Open:Inkling") && d.ends.sidebar["Race-week plan"] === 1 && !("Race calendar" in d.ends.sidebar)
+follow: 1
+dump: stayed
+expect: d.note.title === "Race-week plan" && d.ends.following === null
+copy: 1
+undo-delete
+settle
+dump: back
+expect: d.note.title === "Race calendar" && d.ends.tags.some(e => e.thread === "b1" && e.line.startsWith("Race-week plan · ") && e.go)
+expect: d.anchors.some(a => a.id === "b1" && a.open)
+delete: Race-week plan
+switch: March budget
+settle
+switch: Race calendar
+settle
+dump: orphan
+expect: d.note.title === "Race calendar" && d.threads.length === 0 && d.ends.tags.length === 0
+quit
+expect: log.some(r => r.msg.startsWith("script copy: \"> Sunday 22 March\\n> *Also in “Race calendar”:* “Sunday 15 March”\\n\\nInkling: "))   // Copy names the other end, gone or not
+expect: !notes.some(n => n.title === "Race-week plan") && note("Race calendar").threads.length === 0

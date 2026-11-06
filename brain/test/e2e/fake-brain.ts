@@ -40,6 +40,10 @@
 //   [[words:PASSAGE]]           a passage from elsewhere in the note (repeatable)
 //   [[question:TEXT]]           the question to ask instead;  [[nocheck]] none of these
 //   A bare [[correction]] is passed through unchecked, as before.
+//   [[elsewhere]]         relate: speak about passage 1 (relate is silent without it);
+//                         [[passage:N]] (1-based) picks another, [[other:TEXT]] the words
+//                         quoted there (snapped onto the passage; default its first three
+//                         words), [[quote:TEXT]] the words here, [[depends]] the relation
 //
 // Prefix a directive with a task to scope it: [[draw>badsvg]], [[reply>resolved]],
 // [[chat>error:overloaded]]. Directives are only read from the request's own
@@ -107,6 +111,7 @@ function ownText(input: Any): string {
     case "probe":
     case "answer":
     case "sketch":
+    case "relate":
       parts.push(input.target);
       break;
     case "ask":
@@ -241,6 +246,26 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): { data?:
       const learned = arg("learn") ?? clean(input.message ?? "").slice(0, 80);
       const about = [input.aboutMe ?? "", learned].filter((s: string) => s && s.trim()).join(" ");
       return { data: { update: true, aboutMe: about.slice(0, 700) } };
+    }
+    case "relate": {
+      const passages: Any[] = Array.isArray(input.passages) ? input.passages : [];
+      if (!has("elsewhere") || passages.length === 0) return { data: { speak: false } };
+      const n = Math.min(Math.max(1, num(arg("passage") ?? undefined, 1)), passages.length) - 1;
+      const p = passages[n];
+      const ptext: string = typeof p.text === "string" ? p.text : "";
+      const other = arg("other") !== null ? snapQuote(arg("other")!, ptext) : firstWords(ptext, 3);
+      const quote = snapQuote(arg("quote") ?? firstWords(target, 3), target);
+      return {
+        data: {
+          speak: true,
+          passage: n,
+          note: p.note ?? "",
+          quote,
+          other,
+          relation: has("depends") ? "depends" : "contradicts",
+          text: `[${id}] Between notes: “${other}” in ${p.noteTitle ?? "?"}?`,
+        },
+      };
     }
   }
   return { error: ["other", `fake brain does not know task ${task}`] };

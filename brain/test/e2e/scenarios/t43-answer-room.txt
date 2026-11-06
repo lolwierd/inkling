@@ -1,0 +1,17 @@
+# Several minds: three minds asked the same thing (Ask the room). One paragraph answers all
+# three; each is confirmed by its own mind, ties off in its own colour, and gets its own
+# knot, side by side after the answer.
+# fixture: running-plan
+wait: 1500
+select: four days a week
+room: Inkling, Skeptic, Tutor
+ask: Is four days enough?
+settle
+escape
+type: Four days is enough because two of them are easy runs and one is intervals [[silent]] [[answers:3,4,5]].
+settle
+dump: answered
+expect: d.knots.length === 3 && d.answers.every(a => a.quote.startsWith("Four days is enough"))
+expect: d.statuses.filter(s => s.includes(":Resolved:")).length === 3 && d.statuses.includes("t1:Open:Inkling")
+expect: requests.filter(r => r.input.task === "settle").map(r => r.input.ctx.mind.name).sort().join() === "Inkling,Skeptic,Socratic tutor"
+quit

@@ -218,6 +218,11 @@ fn also_in(note: &Note, t: &Thread) -> Option<(String, String)> {
     Some((title.to_string(), e.quote.replace('\n', " ")))
 }
 
+/// The words in the note that answered a tied-off thread (Answer in the note, Write it in).
+fn answered_with(t: &Thread) -> Option<String> {
+    t.answer.as_ref().filter(|_| t.status == ThreadStatus::Resolved).map(|a| a.quote.replace('\n', " ")).filter(|w| !w.trim().is_empty())
+}
+
 fn thread_markdown(note: &Note, t: &Thread) -> String {
     let name = mind_name(t);
     let mut out = format!("> **{name}** on “{}”\n", t.quote.replace('\n', " "));
@@ -234,6 +239,9 @@ fn thread_markdown(note: &Note, t: &Thread) -> String {
     }
     if let Some((title, quote)) = also_in(note, t) {
         out.push_str(&format!(">\n> *Also in “{title}”:* “{quote}”\n"));
+    }
+    if let Some(words) = answered_with(t) {
+        out.push_str(&format!(">\n> *Answered in the note:* \u{201c}{words}\u{201d}\n"));
     }
     if t.drawing.is_some() {
         out.push_str(">\n> *(drawing)*\n");
@@ -281,6 +289,9 @@ fn thread_html(note: &Note, t: &Thread) -> String {
     }
     if let Some((title, quote)) = also_in(note, t) {
         out.push_str(&format!("<p class=\"on\">Also in “{}”: “{}”</p>\n", esc(&title), esc(&quote)));
+    }
+    if let Some(words) = answered_with(t) {
+        out.push_str(&format!("<p class=\"on\">Answered in the note: \u{201c}{}\u{201d}</p>\n", esc(&words)));
     }
     if t.drawing.is_some() {
         out.push_str("<p class=\"on\">(drawing)</p>\n");
@@ -644,6 +655,21 @@ A paragraph after the list.\n\n\
         let plain = to_markdown(&sample(), false);
         assert!(plain.contains("1. Measure first\n2. Then cache\n\nA paragraph after the list.\n\n- loose idea\n\n> Premature"));
         assert!(!plain.contains("**Editor**"));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_answered_in_the_note_says_where() {
+        let mut note = sample();
+        let i = note.threads.iter().position(|t| t.quote == "Measure first").unwrap();
+        note.threads[i].answer = Some(crate::store::Answer { start: 0, end: 5, quote: "We measured p99 first.".into() });
+        let md = to_markdown(&note, true);
+        assert!(md.contains("> *Answered in the note:* \u{201c}We measured p99 first.\u{201d}\n"), "{md}");
+        assert!(to_html(&note, true).contains("<p class=\"on\">Answered in the note: \u{201c}We measured p99 first.\u{201d}</p>"));
+        // without threads, nothing: the answer is already in the text
+        assert!(!to_markdown(&note, false).contains("Answered in the note"));
+        // an open thread has no answer to print, whatever it holds
+        note.threads[i].status = ThreadStatus::Open;
+        assert!(!to_markdown(&note, true).contains("Answered in the note"));
     }
 
     #[std::prelude::v1::test]

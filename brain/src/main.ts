@@ -5,7 +5,7 @@
 
 import { createInterface } from "node:readline";
 import { accountStatus, ProviderError, runStructured, runText, WebSpent, type LimitInfo } from "./claude.ts";
-import { cleanSvg, clip, findQuote, snapQuote } from "./output.ts";
+import { cleanSvg, clip, findQuote, pickAnswers, snapQuote } from "./output.ts";
 import {
   answerPrompt,
   askPrompt,
@@ -26,6 +26,12 @@ import {
   THOUGHT_SCHEMA,
   SKETCH_SCHEMA,
   RELATE_SCHEMA,
+  answersBlock,
+  answersOnlyPrompt,
+  openThreadNumbers,
+  settlePrompt,
+  SETTLE_SCHEMA,
+  THOUGHT_WITH_ANSWERS_SCHEMA,
 } from "./prompts.ts";
 import type { Context, ElsewhereEnd, Event, Frequency, LetStandPoint, Passage, Relation, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
 import { withWorking } from "./working.ts";
@@ -67,6 +73,10 @@ function optionalText(v: unknown): string | null {
 function required(v: unknown, field: string): string {
   if (typeof v !== "string" || !v.trim()) badRequest(`${field} is missing`);
   return v;
+}
+
+function strings(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : [];
 }
 
 function messages(v: unknown): ThreadMessage[] {
@@ -129,6 +139,9 @@ function context(v: unknown): Context {
           resolved: t.resolved === true,
           elsewhere: isObject(t.elsewhere) && text(t.elsewhere.quote).trim() ? { noteTitle: text(t.elsewhere.noteTitle), quote: text(t.elsewhere.quote) } : null,
           own: t.own === true,
+          id: optionalText(t.id) ?? undefined,
+          open: typeof t.open === "boolean" ? t.open : undefined,
+          notAnswers: strings(t.notAnswers),
         }))
       : [],
     now: text(v.now) || new Date().toDateString(),
@@ -179,7 +192,7 @@ function task(v: unknown): Task {
   if (!isObject(v)) badRequest("input is missing");
   switch (v.task) {
     case "read":
-      return { task: "read", ctx: context(v.ctx), target: required(v.target, "target"), through: v.through === true };
+      return { task: "read", ctx: context(v.ctx), target: required(v.target, "target"), through: v.through === true, answersOnly: v.answersOnly === true };
     case "probe":
     case "answer":
     case "sketch":
@@ -208,6 +221,16 @@ function task(v: unknown): Task {
         target: required(v.target, "target"),
         before: Array.isArray(v.before) ? v.before.filter((b): b is string => typeof b === "string" && b.trim() !== "").slice(-2) : [],
         passages: passages(v.passages),
+      };
+    case "settle":
+      return {
+        task: "settle",
+        ctx: context(v.ctx),
+        quote: text(v.quote),
+        messages: messages(v.messages),
+        target: required(v.target, "target"),
+        answer: optionalText(v.answer) ?? undefined,
+        notAnswers: strings(v.notAnswers),
       };
     default:
       return badRequest(`unknown task ${JSON.stringify(v.task ?? null)}`);
@@ -279,21 +302,32 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
     case "probe": {
       // Reading it through, the note rides in the system prompt (`throughSystemPrompt`).
       const through = input.task === "read" && input.through === true;
+      // A read in a note with open threads also says which of them the paragraph answers
+      // (Answer in the note); a note that waits to be asked only asks that.
+      const answering = input.task === "read" && openThreadNumbers(input.ctx).length > 0;
+      if (input.task === "read" && input.answersOnly && !answering) return { data: { speak: false }, usage: { ms: 0 } };
       const [system, prompt, schema] =
-        input.task === "read"
-          ? [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through), THOUGHT_SCHEMA]
-          : [sys, probePrompt(input.ctx, input.target, web), PROBE_SCHEMA];
+        input.task === "probe"
+          ? [sys, probePrompt(input.ctx, input.target, web), PROBE_SCHEMA]
+          : input.answersOnly
+            ? [sys, answersOnlyPrompt(input.ctx, input.target), THOUGHT_WITH_ANSWERS_SCHEMA]
+            : [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through) + answersBlock(input.ctx), answering ? THOUGHT_WITH_ANSWERS_SCHEMA : THOUGHT_SCHEMA];
       const { data, usage, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, web);
       const d = structured(data);
+      // Answer in the note: the open threads this paragraph answers, whatever else the read says.
+      const answers = answering ? pickAnswers(d.answers, input.ctx.threads, input.target) : [];
+      const answered = answers.length > 0 ? { answers } : {};
+      // A note that waits to be asked raises nothing new.
+      if (input.task === "read" && input.answersOnly) return { data: { speak: false, ...answered }, usage };
       // A point the writer let stand is not raised again, in any words: the model says
       // which one its note repeats, and then the note is held back.
       const repeats = repeated(d.repeats, input.ctx.letStand.length);
       if (repeats > 0) {
         log(`${input.task} ${id} held back: it makes let-stand point ${repeats} again`);
-        return { data: { speak: false, repeats }, usage };
+        return { data: { speak: false, repeats, ...answered }, usage };
       }
       // Read may stay silent; a probe was asked for, so it always says something.
-      if (input.task === "read" && !(d.speak === true && text(d.text).trim())) return { data: { speak: false }, usage };
+      if (input.task === "read" && !(d.speak === true && text(d.text).trim())) return { data: { speak: false, ...answered }, usage };
       const quote = snapQuote(text(d.quote), input.target);
       // A page a correction cites counts only if this call's searches returned it and the
       // passage is on it.
@@ -307,9 +341,18 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
         cited,
       );
       // A correction with neither a check nor a question to fall back on is never shown.
-      if (!thought && input.task === "read") return { data: { speak: false }, usage };
+      if (!thought && input.task === "read") return { data: { speak: false, ...answered }, usage };
       if (!thought) throw new ProviderError("bad_output", "a correction came without a check or a question");
-      return { data: thought, usage };
+      return { data: { ...thought, ...answered }, usage };
+    }
+    case "settle": {
+      const prompt = settlePrompt(input.ctx, input.quote, input.messages, input.target, input.answer, input.notAnswers);
+      const { data, usage } = await runStructured<unknown>(sys, prompt, SETTLE_SCHEMA, settings, signal, onLimit);
+      const d = structured(data);
+      // An answer with no words has nothing for the knot to point at: it is not one.
+      const words = text(d.quote).trim();
+      if (d.settled !== true || !words) return { data: { settled: false, quote: "", text: "" }, usage };
+      return { data: { settled: true, quote: snapQuote(words, input.target), text: text(d.text).trim() }, usage };
     }
     case "sketch": {
       const { data, usage } = await runStructured<unknown>(sys, sketchPrompt(input.ctx, input.target), SKETCH_SCHEMA, settings, signal, onLimit);

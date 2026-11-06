@@ -1,0 +1,24 @@
+# Answer in the note on a thread between notes: words in the note it visits never tie it
+# off there (its answer is kept in its home note's words, and the visiting end is not
+# offered as open), while words in its home note do, with the knot after them.
+# fixture: between
+# env: FAKE_READ_DEFAULT=silent
+# tags: between
+wait: 1500
+switch: Race calendar
+settle
+type: This year the race is on Sunday 22 March, a week later than the 15th [[answers:1]].
+settle
+dump: far
+expect: d.statuses.includes("b1:Open:Inkling") && d.answers.length === 0 && d.knots.length === 0
+expect: !requests.some(r => r.input.task === "settle" && r.input.target.startsWith("This year"))
+expect: requests.filter(r => r.input.task === "read" && r.input.target.startsWith("This year")).every(r => r.input.ctx.threads.find(t => t.id === "b1").open === false)
+switch: Race-week plan
+settle
+type: The race is on Sunday 22 March, so the taper starts on Monday 9 March [[answers:1]].
+settle
+dump: home
+expect: d.statuses.includes("b1:Resolved:Inkling") && d.knots.includes("b1") && d.tied_by.b1 === "answer"
+expect: tasks.filter(t => t === "settle").length === 1 && requests.find(r => r.input.task === "settle").input.target.startsWith("The race is on")
+quit
+expect: note("Race-week plan").threads.find(t => t.id === "b1").answer.quote === "The race is on Sunday 22"

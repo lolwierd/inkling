@@ -1,0 +1,19 @@
+# Answer in the note never ties off a thread of your own (only you tie it off): the read is
+# told it is not open, names nothing for it, and no settle runs; a mind's thread on the same
+# words still is answered.
+# fixture: running-plan
+# env: FAKE_READ_DEFAULT=silent
+wait: 1200
+select: four days a week
+ask-yourself: Is four too many with the long run on Sunday?
+settle
+dump: hung
+expect: d.threads.filter(t => t.own).length === 1
+type: Four is fine because two of the four are easy runs, and the long run starts at 8 km [[answers:2,3]].
+settle
+dump: answered
+expect: d.statuses.filter(s => s.includes(":Resolved:")).length === 1 && d.statuses.includes("t2:Resolved:Inkling")
+expect: d.threads.find(t => t.own).status === "Open" && d.knots.length === 1 && d.knots[0] === "t2"
+expect: requests.find(r => r.input.task === "read").input.ctx.threads[2].open === false
+expect: tasks.filter(t => t === "settle").length === 1
+quit

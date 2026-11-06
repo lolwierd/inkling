@@ -188,3 +188,27 @@ export function cleanSvg(raw: string): string {
     })
     .replace(/<(?![A-Za-z/!?])/g, "&lt;");
 }
+
+/**
+ * The threads a read says its paragraph answers, as the app can use them: each thread's id
+ * (from its number in the context's margin), only threads still open, each once, the
+ * words snapped onto the paragraph, at most three.
+ */
+export function pickAnswers(
+  raw: unknown,
+  threads: { id?: string; resolved: boolean; open?: boolean; own?: boolean }[],
+  target: string,
+): { thread: string; quote: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { thread: string; quote: string }[] = [];
+  for (const a of raw) {
+    if (typeof a !== "object" || a === null) continue;
+    const n = Number((a as Record<string, unknown>).thread);
+    const t = Number.isInteger(n) && n >= 1 ? threads[n - 1] : undefined;
+    if (!t || !t.id || !(t.open ?? !t.resolved) || t.own || out.some((o) => o.thread === t.id)) continue;
+    const q = (a as Record<string, unknown>).quote;
+    out.push({ thread: t.id, quote: snapQuote(typeof q === "string" ? q : "", target) });
+    if (out.length === 3) break;
+  }
+  return out;
+}

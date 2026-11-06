@@ -185,6 +185,9 @@ pub struct Entry {
     pub sketch: bool,
     /// A thread of your own (Ask yourself): named You, in your ink.
     pub own: bool,
+    /// Where it was answered in the note, for a thread tied off there (Answer in the note,
+    /// Write it in): the words.
+    pub answer: Option<String>,
 }
 
 /// What an entry offers.
@@ -251,6 +254,7 @@ impl Entry {
             words_found: !t.quote.is_empty() && text.contains(t.quote.as_str()),
             sketch: t.drawing.is_some(),
             own: t.own,
+            answer: t.answer.as_ref().filter(|_| t.status == crate::store::ThreadStatus::Resolved).map(|a| one_line(&a.quote)).filter(|w| !w.is_empty()),
         }
     }
 
@@ -370,6 +374,7 @@ pub fn dump(threads: &[Thread], text: &str) -> Value {
                     "before": e.words_before(), "after": e.after, "changed": e.before.is_some(),
                     "mind": e.who(), "kind": format!("{:?}", e.kind), "found": e.words_found,
                     "ended": e.ended.is_some(), "acts": e.acts().iter().map(|a| a.name()).collect::<Vec<_>>(),
+                    "answer": e.answer,
                 })
             })
             .collect(),
@@ -451,6 +456,9 @@ fn markdown_in(note: &Note, tz: &impl TimeZone<Offset: std::fmt::Display>, this_
         }
         if e.sketch {
             out.push_str("\n*With a sketch.*\n");
+        }
+        if let Some(words) = e.answer.as_ref().filter(|_| e.ending == Ending::TiedOff) {
+            out.push_str(&format!("\nAnswered in your note: \u{201c}{words}\u{201d}\n"));
         }
         if e.ending == Ending::LetStand {
             match &e.reason {
@@ -544,6 +552,17 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
     };
     if let Some(u) = under {
         col = col.child(div().mt(px(4.)).child(u));
+    }
+    if let Some(answer) = e.answer.as_ref().filter(|_| e.ending == Ending::TiedOff) {
+        col = col.child(
+            div()
+                .mt(px(6.))
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(div().text_size(px(ts::SMALL)).text_color(p.faint).child("Answered in your note:"))
+                .child(div().font_family(SERIF).text_size(words).line_height(words_lh).text_color(p.ink).child(format!("\u{201c}{answer}\u{201d}"))),
+        );
     }
     // the quiet controls, as the tags have them (while its box is open, Return and Esc are
     // the reason's controls)
@@ -995,6 +1014,29 @@ mod tests {
         note.threads.push(mine);
         let md = to_markdown(&note);
         assert!(md.contains("## Snipped \u{b7} Your question") && md.contains("> *You:* Too many?") && md.contains("> *Skeptic:* Two of them easy."), "{md}");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_answered_in_the_note_says_where_on_the_back() {
+        let mut note = running_plan();
+        let answer = "The long run starts at 8 km on 6 December.";
+        let t1 = note.threads.iter_mut().find(|t| t.id == "t1").unwrap();
+        t1.answer = Some(crate::store::Answer { start: 0, end: answer.len(), quote: format!("{answer}\n") });
+        t1.tied_by = Some(crate::store::TiedBy::Answer);
+        let list = entries(&note.threads, &note.joined_text());
+        assert_eq!(list[0].answer.as_deref(), Some(answer), "on one line, as the back writes words");
+        assert_eq!(list[1].answer, None, "a point let stand was never answered");
+        assert_eq!(dump(&note.threads, &note.joined_text())[0]["answer"], answer);
+        let md = markdown_in(&note, &Utc, 2026);
+        assert!(md.contains(&format!("\nAnswered in your note: \u{201c}{answer}\u{201d}\n")), "{md}");
+        // the ending still reads as it did: tied off, with the mind's last word under it
+        assert_eq!(list[0].ending_line(&Utc, 2026), "Tied off \u{b7} 5 Nov");
+        assert_eq!(list[0].why().map(|m| m.text.as_str()), Some("4:55 a km comes to 49:10. That works."));
+        // opened again, its answer goes, and the back says nothing of it
+        let t1 = note.threads.iter_mut().find(|t| t.id == "t1").unwrap();
+        t1.set_status(ThreadStatus::Open);
+        assert_eq!((t1.answer.clone(), t1.tied_by, t1.not_answers.len()), (None, None, 1));
+        assert_eq!(entries(&note.threads, &note.joined_text())[0].answer, None);
     }
 
     #[std::prelude::v1::test]

@@ -503,6 +503,47 @@ describe("what each task sends back", () => {
     expect(await b.end("d2")).toMatchObject({ ev: "error", kind: "bad_output" });
   });
 
+  test("read with open threads: the threads its paragraph answers, by id, only when there are some", async () => {
+    const b = brain();
+    const target = "The long run starts at 8 km on 6 December.";
+    const threads = [
+      { id: "t1", quote: "q1", messages: [], resolved: true, open: false },
+      { id: "t2", quote: "q2", messages: [], resolved: false, open: true },
+    ];
+    const answers = [{ thread: 2, quote: "STARTS at 8 km" }, { thread: 1, quote: "x" }];
+    b.send(run("a", { task: "read", ctx: ctx(fake(thought(false, "", "", { answers })), { threads }), target }));
+    expect((await b.end("a")).data).toEqual({ speak: false, answers: [{ thread: "t2", quote: "starts at 8 km" }] });
+    b.send(run("s", { task: "read", ctx: ctx(fake(thought(true, "8 km", "From when?", { answers })), { threads }), target }));
+    expect((await b.end("s")).data).toEqual({ speak: true, kind: "question", quote: "8 km", text: "From when?", sketch: false, answers: [{ thread: "t2", quote: "starts at 8 km" }] });
+    // no open thread: no answers, whatever comes back
+    b.send(run("n", { task: "read", ctx: ctx(fake(thought(false, "", "", { answers })), { threads: [threads[0]] }), target }));
+    expect((await b.end("n")).data).toEqual({ speak: false });
+  });
+
+  test("a read for answers only never speaks, and costs nothing with no open thread", async () => {
+    const b = brain();
+    const threads = [{ id: "t2", quote: "q2", messages: [], resolved: false, open: true }];
+    b.send(run("q", { task: "read", answersOnly: true, ctx: ctx(fake(thought(true, "8 km", "From when?", { answers: [{ thread: 1, quote: "8 km" }] })), { threads }), target: "From 8 km." }));
+    expect((await b.end("q")).data).toEqual({ speak: false, answers: [{ thread: "t2", quote: "8 km" }] });
+    b.send(run("z", { task: "read", answersOnly: true, ctx: ctx(fake({ hang: true })), target: "From 8 km." }));
+    expect(await b.end("z", 2000)).toMatchObject({ ev: "done", data: { speak: false } });
+  });
+
+  test("settle: settled with the words, snapped; settled with no words is not settled", async () => {
+    const b = brain();
+    const target = "The long run starts at 8 km on 6 December.";
+    const settle = (id: string, structured: object) =>
+      run(id, { task: "settle", ctx: ctx(fake({ structured })), quote: "add a kilometre", messages: [{ role: "mind", text: "From how far?" }], target, answer: "starts at 8 km", notAnswers: [] });
+    b.send(settle("y", { settled: true, quote: "STARTS at 8 km", text: " From 8 km, 16 comes in week nine. " }));
+    expect((await b.end("y")).data).toEqual({ settled: true, quote: "starts at 8 km", text: "From 8 km, 16 comes in week nine." });
+    b.send(settle("w", { settled: true, quote: "  ", text: "Settled." }));
+    expect((await b.end("w")).data).toEqual({ settled: false, quote: "", text: "" });
+    b.send(settle("x", { settled: false, quote: "", text: "" }));
+    expect((await b.end("x")).data).toEqual({ settled: false, quote: "", text: "" });
+    b.send(run("m", { task: "settle", ctx: ctx(), quote: "q", messages: [] }));
+    expect(await b.end("m")).toMatchObject({ ev: "error", kind: "other" });
+  });
+
   test("reply: text, resolved, redraw", async () => {
     const b = brain();
     b.send(run("p", { task: "reply", ctx: ctx(fake({ structured: { text: "Yes.", resolved: true, redraw: false } })), quote: "q", messages: [{ role: "mind", text: "Why?" }], message: "Because." }));

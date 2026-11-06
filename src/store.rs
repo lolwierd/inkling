@@ -332,6 +332,8 @@ fn check_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Check>
 
 /// Fields with a sensible empty value default when a file lacks them, so a note
 /// written by hand or by another build still opens. A thread keeps its id and quote.
+/// `Default` lets the places that make one end with `..Default::default()`, so a new
+/// field does not have to touch each of them.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Thread {
     pub id: String,
@@ -378,6 +380,18 @@ pub struct Thread {
     /// answers in it unless you call one. `mind_name` stays empty.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub own: bool,
+    /// Where in the note it was answered, while it is tied off and those words are there
+    /// (Answer in the note, Write it in).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<Answer>,
+    /// What tied it off. `None` while it is open, and for threads tied before this was kept
+    /// (or by a way this build does not know, which costs only this field).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "tied_by_or_none")]
+    pub tied_by: Option<TiedBy>,
+    /// Words you said are not its answer (Reopen after a paragraph tied it off), at most
+    /// five: they never tie it off again, and its mind is told.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not_answers: Vec<String>,
 }
 
 /// The most characters a reason for letting a point stand keeps.
@@ -437,8 +451,20 @@ impl Thread {
         if status == ThreadStatus::Open {
             self.ended_at = None;
             self.reason = None;
+            // answers in the note: what tied it off goes, and so does its answer; words that
+            // tied it off as an answer are remembered as not its answer
+            if let Some(a) = self.answer.take() {
+                if self.tied_by == Some(TiedBy::Answer) {
+                    crate::answers::push_not_answer(self, &a.quote);
+                }
+            }
+            self.tied_by = None;
         } else {
             self.ended_at = Some(Utc::now());
+            // tied off by hand, unless a reply, an edit or an answer said so first
+            if status == ThreadStatus::Resolved {
+                self.tied_by.get_or_insert(TiedBy::Hand);
+            }
         }
     }
 
@@ -542,6 +568,38 @@ pub struct Elsewhere {
     /// now on. While it is false, the app picks the far end's side the first time it lays
     /// it out (and sets this on the visiting end); the next save carries both home.
     pub placed: bool,
+}
+
+/// Where a thread was answered in the note: words you wrote that tied it off (Answer in
+/// the note), or your reply, written in under its paragraph (Write it in). A byte range of
+/// the joined text, like the thread's own, and the words it covered, by which it is found
+/// again when the range goes stale.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct Answer {
+    #[serde(default)]
+    pub start: usize,
+    #[serde(default)]
+    pub end: usize,
+    #[serde(default)]
+    pub quote: String,
+}
+
+fn tied_by_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<TiedBy>, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).unwrap_or_default())
+}
+
+/// What tied a thread off.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum TiedBy {
+    /// Resolve, or ⌘↵, by hand.
+    Hand,
+    /// Your reply in the margin, which its mind said settles it.
+    Reply,
+    /// You fixed the words it hangs on, and its mind said that settles it.
+    Edit,
+    /// A paragraph you wrote in the note answers it.
+    Answer,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -1436,6 +1494,31 @@ mod tests {
         let mut cut = back.clone();
         cut.set_status(ThreadStatus::Dismissed);
         assert!(!cut.is_point() && cut.ending() == Ending::Snipped);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_keeps_where_it_was_answered_and_old_threads_have_none() {
+        // written before answers were kept: everything defaults
+        let old: Thread = serde_json::from_str(r#"{"id": "a", "quote": "q", "status": "resolved"}"#).unwrap();
+        assert_eq!((old.answer.clone(), old.tied_by, old.not_answers.len()), (None, None, 0));
+        // a thread that uses none of them writes none of their keys
+        let plain = serde_json::to_value(&old).unwrap();
+        assert!(["answer", "tied_by", "not_answers"].iter().all(|k| plain.get(k).is_none()), "{plain}");
+        // and one that does keeps them
+        let answered = Thread {
+            answer: Some(Answer { start: 4, end: 9, quote: "words".into() }),
+            tied_by: Some(TiedBy::Answer),
+            not_answers: vec!["not these".into()],
+            ..old
+        };
+        let json = serde_json::to_string(&answered).unwrap();
+        assert!(json.contains(r#""tied_by":"answer""#), "{json}");
+        let back: Thread = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.answer, Some(Answer { start: 4, end: 9, quote: "words".into() }));
+        assert_eq!((back.tied_by, back.not_answers), (Some(TiedBy::Answer), vec!["not these".to_string()]));
+        // a way of tying off that this build does not know costs that field, not the note
+        let note: Note = serde_json::from_str(r#"{"id": "n", "threads": [{"id": "a", "quote": "q", "tied_by": "by_magic"}]}"#).unwrap();
+        assert_eq!((note.threads.len(), note.threads[0].tied_by), (1, None));
     }
 
     #[std::prelude::v1::test]

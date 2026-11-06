@@ -42,5 +42,5 @@ settle: 30000
 dump: failed
 expect: d.read_through === null && d.error.startsWith("Couldn’t read it through. You’ve reached your Claude usage limit")
 expect: d.read_hashes === 4   // the failed paragraph stays unread, for the next pass
-expect: requests.filter(r => r.input.task === "read").length === 5 && requests.every(r => r.input.task !== "read" || r.input.through === true)
+expect: requests.filter(r => r.input.task === "read" && !r.input.answersOnly).length === 5 && requests.every(r => r.input.task !== "read" || r.input.through === true || r.input.answersOnly === true)   // with a thread open, a waiting note also reads new paragraphs for answers only (Answer in the note)
 quit

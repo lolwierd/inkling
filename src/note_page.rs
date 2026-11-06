@@ -2533,6 +2533,8 @@ impl NotePage {
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
         state["paper"] = json!([l, t, r, b]);
+        // whether the open tag's second button reads Let stand (else Dismiss), or null with none open
+        state["lets_stand"] = json!(self.active.as_ref().and_then(|a| self.note.threads.iter().find(|t| &t.id == a)).map(crate::stand::lets_stand));
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()

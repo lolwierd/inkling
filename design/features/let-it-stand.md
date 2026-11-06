@@ -171,7 +171,8 @@ impl Ending {
 
 impl Thread {
     /// A point a mind raised on its own: a question or a correction (reading along, Find a
-    /// loose thread). Only these are let stand; dismissing anything else snips it.
+    /// loose thread) that the mind has said. Only these are let stand; dismissing anything
+    /// else (a loose thread still being looked for included) snips it.
     pub fn is_point(&self) -> bool;
     /// Open → Open; Resolved → TiedOff; Dismissed → LetStand on a point, else Snipped.
     pub fn ending(&self) -> Ending;
@@ -291,6 +292,22 @@ handful of calls through `brain/test/live.ts` (a new scenario, `letstand`): the 
 paragraph read again, the same point asked in new words, a different point on the same words
 (which must still be raised), and a probe on the words.
 
+**Checked on 7 Nov 2026** (`bun run test/live.ts <dir> letstand`, Opus 5.5, reads at low
+effort, the probe at medium; four calls), against the running plan with two points let stand:
+the long run's start (with the reason "I start at 8 km and the race is ten weeks out") and
+Skeptic's "Why four?" (no reason).
+
+| Call | What came back |
+|---|---|
+| The long-run paragraph read again | silent |
+| The same point in new words ("By race week the Sunday run is 16 km, one more kilometre each week.") | silent |
+| A new point on words with one let stand ("Four days a week, 10 km each, is 50 km a week.") | a correction: "Four runs of 10 km is 40 km, not 50. Also, the Sunday long run goes from 8 km up to 16…", which uses the writer's reason as a fact |
+| Find a loose thread on "add a kilometre every week until I reach 16" | a different point: how long the other three runs are |
+
+None of the four needed the `repeats` hold: the instruction alone kept the minds off the
+points, and the reason was used as a fact. The hold remains as the guard for a model that
+writes a point anyway.
+
 ## 5. Fit with the features designed in parallel
 
 The shared types this design changes, exactly: `store::Thread` (three fields at the end),
@@ -340,18 +357,22 @@ The shared types this design changes, exactly: `store::Thread` (three fields at 
 - `points_in_the_note_come_first_then_newest`
 - `at_most_twelve_and_each_cut_short`: the cap, and cuts at char boundaries with an ellipsis.
 - `old_dismissed_points_are_told_without_a_reason`
+- `dismissing_a_point_lets_it_stand_with_what_you_typed`: the reason and toast for a mind's
+  open point. An asked thread and a tied-off one are dismissed as before, with no reason.
 
 `brain/test/unit.test.ts`
-- `systemPrompt` numbers the points, writes "Their reason:" or "(No reason given.)", and
-  leaves the block out when the list is empty.
-- `context()` reads `letStand`: drops bad entries, caps at 20, cuts long fields, and treats
-  a missing list as empty.
+- `letStandBlock` numbers the points, writes "Their reason:" or "(No reason given.)"; the
+  system prompt carries the block before the date and leaves it out when the list is empty.
+- The read and probe prompts carry their lines; both schemas list `repeats` last, as an
+  integer.
 
 `brain/test/protocol.test.ts` (the real `main.ts`, fake SDK)
+- `context()` reads `letStand`: each field folded to one line, bad entries dropped, at most
+  20, long fields cut; a missing list is none.
 - A read whose structured answer has `repeats: 1` with one point comes back
-  `{speak: false, repeats: 1}`; `repeats: 3` with one point is ignored and the read speaks.
+  `{speak: false, repeats: 1}`; `repeats: 3` with one point, or any `repeats` with no points,
+  is ignored and the read speaks.
 - A probe with `repeats: 1` comes back `{speak: false, repeats: 1}`.
-- Both schemas list `repeats` last.
 
 ### End to end (fake brain, `scripts/dev e2e`)
 
@@ -359,29 +380,34 @@ The shared types this design changes, exactly: `store::Thread` (three fields at 
 the question on the long run:
 
 ```text
-# Let it stand: a mind's point let stand with the words in its box as the reason; Undo puts
-# it back; every later request carries it, and the same point does not come back.
+# Let it stand: a mind's point let stand with the words in its box as the reason; Undo puts it
+# back on its words; every later read and probe carries the point, and the same point does not
+# come back, though a new one on the same words still lands (design/features/let-it-stand.md).
 # fixture: running-plan
 wait: 1500
 stand: 2 I start at 8 km, and the race is ten weeks out.
 dump: stood
-expect: d.threads.find(t => t.id === "t2").ending === "LetStand"
+expect: d.threads.find(t => t.id === "t2").status === "Dismissed" && d.threads.find(t => t.id === "t2").ending === "LetStand"
 expect: d.threads.find(t => t.id === "t2").reason === "I start at 8 km, and the race is ten weeks out."
-expect: d.toasts.some(t => t.kind === "thread_dismissed" && t.text === "Let stand, with your reason. No mind will raise it again.")
+expect: d.toasts.some(t => t.kind === "thread_dismissed" && t.live && t.text === "Let stand, with your reason. No mind will raise it again.")
+expect: d.undo === "t2" && !d.anchors.some(a => a.id === "t2")
 undo-dismiss
 dump: undone
 expect: d.threads.find(t => t.id === "t2").status === "Open" && d.threads.find(t => t.id === "t2").reason === null
 expect: d.anchors.some(a => a.id === "t2" && a.open)
 stand: 2 I start at 8 km, and the race is ten weeks out.
 caret: end
-type: I add a kilometre every week until I reach 16, then hold it. [[quote:add a kilometre every week until I reach 16]]
+type: I add a kilometre every week until I reach 16, then hold it [[quote:add a kilometre every week until I reach 16]].
 settle
 dump: told
+expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand.length === 1
+expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand[0].quote === "add a kilometre every week until I reach 16"
 expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand[0].reason === "I start at 8 km, and the race is ten weeks out."
 expect: requests.filter(r => r.input.task === "read").at(-1).input.ctx.letStand[0].mind === "Inkling"
 expect: events.some(e => e.ev === "done" && e.data && e.data.repeats === 1)
+expect: log.some(r => r.msg.includes("read held back"))
 expect: d.threads.filter(t => t.status === "Open").length === 1   // only t1: the point did not come back
-type: Sunday will add a kilometre every week until I reach 16, then hold. [[quote:add a kilometre every week until I reach 16]] [[again]]
+type: Sunday will add a kilometre every week until I reach 16, then hold [[quote:add a kilometre every week until I reach 16]] [[again]].
 settle
 dump: other
 expect: d.threads.filter(t => t.status === "Open").length === 2   // a new point on the same words still lands
@@ -389,16 +415,18 @@ select: add a kilometre every week until I reach 16
 probe
 settle
 dump: probed
-expect: d.toasts.some(t => t.text === "Nothing new to ask here: you let its point stand.")
-expect: d.threads.filter(t => t.status === "Open").length === 2
-expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").ended_at !== undefined
+expect: d.toasts.some(t => t.kind === "done" && t.text === "Nothing new to ask here: you let its point stand.")
+expect: d.threads.filter(t => t.status === "Open").length === 2 && d.threads.length === 3   // the probe's empty thread went
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").reason === "I start at 8 km, and the race is ten weeks out."
+expect: typeof note("Sub-50 10k by March").threads.find(t => t.id === "t2").ended_at === "string"
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t1").reason === undefined   // nothing new written on threads that did not change
 quit
 ```
 
 `u13-let-stand-room.txt`: Ask the room (`room: Inkling, Skeptic`, then `ask:`) sends
-`letStand` to each mind; Marks-only placement shows **Let stand** on a question's card and
-**Dismiss** on an asked thread's card (dump `buttons`); a shot of the open tag in linen and in
-lamplight.
+`letStand` to each mind. In Marks only, a question's card has **Let stand** and an asked
+thread's card has **Dismiss** (the dump's `lets_stand`: true, false, or null with no tag
+open). It also takes shots of the open tag in linen and in lamplight.
 
 `u14-turn-over.txt` (Turn it over), from `running-plan`:
 
@@ -457,7 +485,12 @@ reason, before, after, mind, kind}`.
 - `brain/src/protocol.ts`, `main.ts` (`context`, read and probe), `prompts.ts` (4.2, the
   schemas); `brain/test/e2e/fake-brain.ts` (`letStand`, `[[again]]`); `live.ts`
   (`letstand`).
-- `design/capabilities.md`: the Snip row becomes Let stand.
+- `design/capabilities.md`: the Snip row becomes Let stand. `AGENTS.md`: a map row for
+  `src/stand.rs` (lint asks for one). The dump gains `lets_stand`: whether the open tag's second
+  button reads Let stand.
+- Shots: `design/features/shots/let-it-stand-reason-{light,dark}.jpg` (a reason typed in the
+  tag's box) and `let-it-stand-toast-{light,dark}.jpg` (after Let stand: the toast, the next tag
+  open).
 
 **Turn it over: M** (a few days).
 - New `src/back.rs`: the back's view (`view`, `entry`), its words, the ending marks,
@@ -468,7 +501,11 @@ reason, before, after, mind, kind}`.
   unfolded entries), `turn_over()`, the render branch that swaps the page's contents for
   `back::view` (the sheet, border and linen stay), the header's Turn over control, `escape`,
   `open()` (show the front), `set_hidden` (turn back first), `show_thread(id)` (pulled out of
-  `jump_to_open`), the steps and the dump keys.
+  `jump_to_open`), the steps and the dump keys. Reopen from the back goes through
+  `NotePage::set_status(id, Open)`, then finds the words again as `undo_dismiss` does
+  (`nearest_match` from the old `start`) and adds the anchor. It also drops the thread's reply
+  box (`replies`, `reply_subs`): Let stand leaves the reason typed there, so that Undo can put
+  it back.
 - `app.rs`: the `TurnOver` action, View › Turn Over, and `copy_note` copying the back while it
   shows. `shortcuts.rs`: ⇧⌘B and the label **Turn the note over**. `script.rs`: four steps.
 - `design/capabilities.md`: a Turn it over row under Threads.

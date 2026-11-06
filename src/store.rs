@@ -338,9 +338,10 @@ impl Ending {
 
 impl Thread {
     /// A point a mind raised on its own: a question or a correction (reading along, Find a
-    /// loose thread). Only these are let stand; dismissing anything else snips it.
+    /// loose thread) that the mind has said. Only these are let stand; dismissing anything
+    /// else (a loose thread still being looked for included) snips it.
     pub fn is_point(&self) -> bool {
-        matches!(self.kind, ThoughtKind::Question | ThoughtKind::Correction)
+        matches!(self.kind, ThoughtKind::Question | ThoughtKind::Correction) && self.messages.iter().any(|m| m.role == Role::Mind)
     }
 
     /// Open is still open, Resolved is tied off, and Dismissed is let stand on a point and
@@ -1568,7 +1569,8 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
 
     #[std::prelude::v1::test]
     fn old_threads_load_without_the_new_fields() {
-        let old = r#"{"id": "a", "quote": "four days a week", "kind": "question", "status": "dismissed"}"#;
+        let old = r#"{"id": "a", "quote": "four days a week", "kind": "question", "status": "dismissed",
+            "messages": [{"role": "mind", "text": "Why four?"}]}"#;
         let t: Thread = serde_json::from_str(old).unwrap();
         assert_eq!((t.reason.as_deref(), t.ended_at, t.first_quote.as_deref()), (None, None, None));
         assert_eq!(t.ending(), Ending::LetStand);
@@ -1599,6 +1601,10 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
             assert_eq!(a_thread("q", kind, ThreadStatus::Dismissed).ending(), Ending::Snipped);
             assert!(!a_thread("q", kind, ThreadStatus::Open).is_point());
         }
+        // a loose thread dismissed before its mind said anything raised no point
+        let mut empty = a_thread("q", Question, ThreadStatus::Dismissed);
+        empty.messages.clear();
+        assert_eq!((empty.is_point(), empty.ending()), (false, Ending::Snipped));
         assert_eq!(a_thread("q", Ask, ThreadStatus::Resolved).ending(), Ending::TiedOff);
         assert_eq!(a_thread("q", Question, ThreadStatus::Open).ending(), Ending::Open);
         assert_eq!(

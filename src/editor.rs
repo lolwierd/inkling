@@ -1161,6 +1161,20 @@ impl State {
         Some((last + 1, Fx { moved: true, ..Fx::edited(last) }))
     }
 
+    /// Take line `line` out with the line break before it, as one undo step (what the
+    /// toast's Undo does after Write it in); the caret goes to the end of the line above.
+    /// `None` for the title or a line that is not there.
+    fn remove_paragraph(&mut self, line: usize) -> Option<Fx> {
+        if line == 0 || line >= self.kinds.len() {
+            return None;
+        }
+        let r = self.line_range(line);
+        self.push_undo(EditKind::Other);
+        self.replace(r.start - 1..r.end, "", None);
+        self.place_after_edit(r.start - 1);
+        Some(Fx { moved: true, ..Fx::edited(line - 1) })
+    }
+
     // ----- mouse ------------------------------------------------------------
 
     fn mouse_down(&mut self, hit: (usize, bool), clicks: usize, shift: bool) -> Fx {
@@ -2091,6 +2105,14 @@ impl NoteEditor {
         let (new, fx) = self.st.insert_paragraph_after(line, text)?;
         self.apply(fx, cx);
         Some(new)
+    }
+
+    /// Take line `line` out with the line break before it, as one undo step; the caret
+    /// goes to the end of the line above. Whether there was such a line (not the title).
+    pub fn remove_paragraph(&mut self, line: usize, cx: &mut Context<Self>) -> bool {
+        let Some(fx) = self.st.remove_paragraph(line) else { return false };
+        self.apply(fx, cx);
+        true
     }
 
     pub fn set_line_kind(&mut self, line: usize, kind: BlockKind, cx: &mut Context<Self>) {
@@ -4391,6 +4413,20 @@ mod tests {
         assert_eq!(s.kinds.len(), 3);
         s.redo();
         assert_eq!(s.text, "T\nfirst words\nI start at 8 km.\nsecond");
+        check(&s);
+        // the toast's Undo takes it out as an edit of its own, which ⌘Z puts back
+        let fx = s.remove_paragraph(2).unwrap();
+        assert_eq!((s.text.as_str(), s.kinds.len(), fx.edited), ("T\nfirst words\nsecond", 3, Some(1)));
+        assert_eq!(s.selected, nl..nl, "the caret at the end of the paragraph above");
+        assert_eq!(&s.text[s.anchors[0].range.clone()], "words");
+        s.undo();
+        assert_eq!(s.text, "T\nfirst words\nI start at 8 km.\nsecond");
+        assert!(s.remove_paragraph(0).is_none() && s.remove_paragraph(9).is_none(), "not the title, not past the end");
+        check(&s);
+        // the last line of a two-line note goes, and a body line is kept
+        let mut s = st("T\nonly");
+        s.remove_paragraph(1).unwrap();
+        assert_eq!((s.text.as_str(), s.kinds.len()), ("T\n", 2));
         check(&s);
     }
 

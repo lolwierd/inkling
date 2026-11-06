@@ -36,6 +36,7 @@ mod ends;
 mod read_through;
 pub(crate) mod own;
 mod answers;
+mod write_in;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -561,6 +562,8 @@ pub struct NotePage {
     /// Paragraphs a note that waits to be asked has read for answers only (by hash), so
     /// each version is checked once (`answers.rs`).
     answer_checks: HashSet<u64>,
+    /// The reply written in last (Write it in), while the toast's Undo can take it out.
+    written_in: Option<write_in::WrittenIn>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -662,6 +665,7 @@ impl NotePage {
             read_through: None,
             own_calls: HashMap::new(),
             answer_checks: HashSet::new(),
+            written_in: None,
         };
         page.load_into_editor(cx);
         page
@@ -2703,6 +2707,7 @@ impl NotePage {
                 }
                 self.set_status(&id, ThreadStatus::Dismissed, cx);
             }
+            Step::WriteIn | Step::UndoWriteIn => self.write_in_step(step, window, cx),
             Step::Jump(forward) => self.jump_to_open(*forward, window, cx),
             Step::Hover(n) => {
                 let ids: Vec<String> = self.hover_tag.drain().filter_map(|k| k.split_once(':').map(|(id, _)| id.to_string())).collect();
@@ -2891,6 +2896,7 @@ impl NotePage {
         );
         // threads between notes: each one's far end as its tag shows it, and following
         state["ends"] = self.ends_state(window, cx);
+        self.dump_write_in(&mut state, cx);
         state.to_string()
     }
 
@@ -3793,6 +3799,7 @@ impl NotePage {
                         }),
                 );
             }
+            body = body.children(self.write_in_offer(thread, thread_color, cx));
             if !is_active && replies > 0 {
                 body = body.child(
                     div()

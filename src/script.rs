@@ -72,6 +72,8 @@
 //! ask-yourself: Too many?   # Ask yourself on the selection: a thread of your own, no mind
 //! call: Skeptic             # call a mind into the open thread of yours (empty: the note's)
 //! undo-dismiss              # put back the last dismissed thread
+//! writein                   # press Write it in on the open tag (your reply tied it off)
+//! undo-writein              # the toast's Undo: the reply written in comes back out
 //! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
 //! read-through              # Read it through, as ⇧⌘R: start a pass, or stop the one running
 //! open: settings            # sidebar|palette|loose|settings|minds|newmind|model|about|export|jmw
@@ -216,6 +218,10 @@ pub enum Step {
     Knot(usize),
     /// Rest the pointer on thread n's knot (0 = on none): its answer washes.
     HoverKnot(usize),
+    /// Press Write it in on the open tag: your reply goes in under its paragraph.
+    WriteIn,
+    /// The Undo on Write it in's toast: the paragraph comes back out.
+    UndoWriteIn,
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -310,6 +316,8 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "room" => Step::Room(arg.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect()),
                 "undo-dismiss" => Step::UndoDismiss,
                 "read-through" => Step::ReadThrough,
+                "writein" => Step::WriteIn,
+                "undo-writein" => Step::UndoWriteIn,
                 "jump" => Step::Jump(arg != "prev"),
                 "hover" => Step::Hover(arg.parse().unwrap_or(0)),
                 "drag" => {

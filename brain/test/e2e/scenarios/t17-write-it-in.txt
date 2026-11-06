@@ -1,0 +1,54 @@
+# Write it in: a reply that ties its thread off is offered into the note, word for word,
+# under its paragraph. It goes in as the thread's answer (its knot), the tag closes with the
+# caret at its end, and those words are not read again. ⌘Z takes it out and the tag offers
+# it again; the toast's Undo takes it out too, but only while it reads as it went in. Once
+# reworked, it is read like any paragraph.
+# fixture: running-plan
+# env: FAKE_READ_DEFAULT=silent
+wait: 1500
+activate: 2
+reply: I start at 8 km in the first week of December and take the last week easy. [[resolved]]
+settle
+dump: offered
+expect: d.statuses.includes("t2:Resolved:Inkling") && d.active === "t2" && d.offer === "t2"
+expect: d.tied_by.t2 === "reply" && d.answers.length === 0
+writein
+settle
+dump: written
+expect: d.kinds.length === 7 && d.cursor_line === 4 && d.focus === "note"
+expect: d.answers.length === 1 && d.answers[0].thread === "t2" && d.answers[0].tied_by === "reply"
+expect: d.answers[0].quote === "I start at 8 km in the first week of December and take the last week easy. [[resolved]]"
+expect: d.knots.includes("t2") && d.active === null && d.offer === null && !d.slots.some(s => s.id === "t2")
+expect: d.toasts.some(t => t.kind === "written_in" && t.live && t.text === "Your reply is in the note, ready to rework.")
+expect: d.written_in === "t2"
+# (requests are the whole run's: the reply's own words are never read, only the reworked paragraph)
+expect: !requests.some(r => r.input.task === "read" && r.input.target.startsWith("I start at 8 km") && !r.input.target.includes("seven weeks"))
+# ⌘Z takes it out, the toast goes with it, and the offer is back
+key: cmd-z
+settle
+dump: undone
+expect: d.kinds.length === 6 && d.answers.length === 0 && d.knots.length === 0
+expect: d.written_in === null && !d.toasts.some(t => t.kind === "written_in" && t.live)
+activate: 2
+dump: offered-again
+expect: d.offer === "t2"
+# the toast's Undo, while the paragraph is as it went in
+writein
+undo-writein
+dump: taken-out
+expect: d.kinds.length === 6 && d.answers.length === 0 && d.written_in === null && d.cursor_line === 3
+expect: !d.toasts.some(t => t.kind === "written_in" && t.live)
+# reworked, it is yours: the toast's Undo goes, the answer stays, and it is read
+activate: 2
+writein
+keys: \sThat leaves seven weeks.
+dump: reworked
+expect: d.written_in === null && !d.toasts.some(t => t.kind === "written_in" && t.live)
+expect: d.answers.length === 1 && d.knots.includes("t2") && d.kinds.length === 7
+settle
+expect: requests.some(r => r.input.task === "read" && r.input.target.endsWith("That leaves seven weeks."))
+expect: textOf(note("Sub-50 10k by March")).split("\n")[3].startsWith("Sunday is the long run.")
+expect: textOf(note("Sub-50 10k by March")).split("\n")[4].startsWith("I start at 8 km in the first week of December")
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").answer.quote.startsWith("I start at 8 km")
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t2").tied_by === "reply"
+quit

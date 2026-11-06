@@ -460,7 +460,7 @@ impl AppView {
                 this.listening = false;
                 this.talk.ended();
                 this.partial.clear();
-                crate::toast::show(cx, Kind::Problem, format!("Couldn't listen: {e}"));
+                crate::toast::show(cx, Kind::Problem, format!("Couldn’t listen: {e}"));
             }
             _ => {}
         }));
@@ -1574,7 +1574,7 @@ impl AppView {
                                         .flex_1()
                                         .min_w(px(0.))
                                         .child(div().text_size(px(ts::UI)).text_color(p.ink).child("Include the threads"))
-                                        .child(div().text_size(px(ts::META)).text_color(p.graphite).child("Each thread sits under the paragraph it's about.")),
+                                        .child(div().text_size(px(ts::META)).text_color(p.graphite).child("Each thread sits under the paragraph it’s about.")),
                                 )
                                 .child(ui::switch("ex-threads", with_threads, &t))
                                 .keyed_as("export:threads", 9., ring, cx, |this, _, cx| {

@@ -1310,7 +1310,7 @@ impl NotePage {
     /// One plain sentence for a failed request (see [`Self::report`]).
     fn describe_failure(&self, kind: &str, message: &str, cx: &App) -> String {
         if message.to_lowercase().contains("bun is not installed") {
-            "Inkling's brain needs Bun. Install it from bun.sh.".to_string()
+            "Inkling’s brain needs Bun. Install it from bun.sh.".to_string()
         } else {
             match kind {
                 "auth" => "Sign in to Claude Code first: run claude in Terminal, then /login.".to_string(),
@@ -1319,12 +1319,12 @@ impl NotePage {
                     Some(at) => {
                         let at = at.with_timezone(&chrono::Local);
                         let today = at.date_naive() == chrono::Local::now().date_naive();
-                        format!("You've reached your Claude usage limit. It resets {}.", at.format(if today { "at %H:%M" } else { "%a %-d %b at %H:%M" }))
+                        format!("You’ve reached your Claude usage limit. It resets {}.", at.format(if today { "at %H:%M" } else { "%a %-d %b at %H:%M" }))
                     }
-                    None => "You've reached your Claude usage limit for now. Try again later.".to_string(),
+                    None => "You’ve reached your Claude usage limit for now. Try again later.".to_string(),
                 },
                 "overloaded" => "Claude is overloaded right now. Try again in a moment.".to_string(),
-                "bad_output" => "The answer came back in a shape Inkling can't use. Try again.".to_string(),
+                "bad_output" => "The answer came back in a shape Inkling can’t use. Try again.".to_string(),
                 "timeout" => "The model took too long to answer, so Inkling stopped waiting.".to_string(),
                 _ => {
                     // short, but cut between words, and marked as cut
@@ -1342,12 +1342,12 @@ impl NotePage {
                         match m.strip_prefix("the brain stopped") {
                             Some(rest) => {
                                 let end = if rest.ends_with('\u{2026}') { "" } else { "." };
-                                format!("Inkling's brain stopped{}{end} Settings \u{203a} Model has more.", rest.trim_end_matches('.'))
+                                format!("Inkling’s brain stopped{}{end} Settings \u{203a} Model has more.", rest.trim_end_matches('.'))
                             }
-                            None => format!("Inkling's brain isn't running ({m}). Settings \u{203a} Model has more."),
+                            None => format!("Inkling’s brain isn’t running ({m}). Settings \u{203a} Model has more."),
                         }
                     } else {
-                        format!("Couldn't reach the model: {m}")
+                        format!("Couldn’t reach the model: {m}")
                     }
                 }
             }
@@ -1612,7 +1612,7 @@ impl NotePage {
                     }
                     None => {
                         page.drop_if_empty(&tid, cx);
-                        page.notice("The sketch came back in a shape Inkling can't read.".into(), cx);
+                        page.notice("The sketch came back in a shape Inkling can’t read.".into(), cx);
                     }
                 }
                 cx.notify();
@@ -2881,7 +2881,7 @@ impl NotePage {
                         div()
                             .text_size(px(ts::META))
                             .text_color(p.graphite)
-                            .child("What's this note for, or how should Inkling be here? It keeps this in mind."),
+                            .child("What’s this note for, or how should Inkling be here? It keeps this in mind."),
                     )
                     .child(div().mt(px(4.)).text_color(p.ink).child(Input::new(&input).appearance(false).px_0().text_size(px(ts::BODY))))
                     .child(
@@ -3033,7 +3033,7 @@ impl NotePage {
                     .w(px(236.))
                     .track_focus(&self.menu_focus)
                     .on_key_down(cx.listener(Self::menu_key))
-                    .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Speaks up when something's worth a second look.", cx))
+                    .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Speaks up when something’s worth a second look.", cx))
                     .child(item("mode-ask", Mode::WhenYouAsk, "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", cx))
                     .into_any_element()
             }
@@ -4019,9 +4019,9 @@ impl NotePage {
                         .line_height(px(21.))
                         .text_color(p.ink)
                         .child(if visible == 0 {
-                            "I've read the whole note. Ask me anything about it."
+                            "I’ve read the whole note. Ask me anything about it."
                         } else {
-                            "I've read the whole note and its threads. Ask me anything about it."
+                            "I’ve read the whole note and its threads. Ask me anything about it."
                         }),
                 )
                 .child(

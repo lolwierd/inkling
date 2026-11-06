@@ -27,11 +27,11 @@ select: bad [[error:bad_output]]
 probe
 wait: 600
 dump: bad_output
-expect: d.error.includes("shape Inkling can't use")
+expect: d.error.includes("shape Inkling can’t use")
 select: other [[error:other]]
 probe
 wait: 600
 dump: other
-expect: d.error.startsWith("Couldn't reach the model: fake other error")
+expect: d.error.startsWith("Couldn’t reach the model: fake other error")
 expect: d.threads.length === 0 && tasks.length === 6 && tasks.every(t => t === "probe")
 quit

@@ -78,7 +78,7 @@ impl Tab {
             Tab::Minds => "Each mind reads your notes its own way. Pick one for any note from the row above its title.",
             Tab::NewMind => "A mind is what reads your notes: what it looks for, and how it asks. Give any note the one it needs.",
             Tab::AboutYou => "A short paragraph every note starts out knowing. It stays on this Mac.",
-            Tab::Model => "Inkling thinks with Claude through the Claude Agent SDK, using this Mac's Claude Code login, so it runs on your Claude subscription. No API key.",
+            Tab::Model => "Inkling thinks with Claude through the Claude Agent SDK, using this Mac’s Claude Code login, so it runs on your Claude subscription. No API key.",
             Tab::Shortcuts => "Click keys to change them. New keys work at once, in your notes and in the menu bar.",
             Tab::Help => "How Inkling works, and where your notes are kept.",
         }
@@ -225,12 +225,12 @@ impl SettingsView {
         let about = cx.new(|cx| {
             let mut t = TextareaState::new(window, cx)
                 .auto_grow(5, 12)
-                .placeholder("Nothing yet. What you do, what you're working toward, how you like feedback.");
+                .placeholder("Nothing yet. What you do, what you’re working toward, how you like feedback.");
             t.set_value(s.about_me.clone(), window, cx);
             t
         });
         let model = cx.new(|cx| {
-            let mut i = InputState::new(window, cx).placeholder("Claude Code's default");
+            let mut i = InputState::new(window, cx).placeholder("Claude Code’s default");
             i.set_value(s.model.clone(), window, cx);
             i
         });
@@ -620,7 +620,7 @@ impl SettingsView {
             let body = match v {
                 Placement::Both => "Your words in the middle, questions to either side.",
                 Placement::Right => "Every question in one column beside your writing.",
-                Placement::Marks => "A small ? or \u{d7} after the passage. Open it when you're ready.",
+                Placement::Marks => "A small ? or \u{d7} after the passage. Open it when you’re ready.",
             };
             let card = div()
                 .child(parts::page_picture(v, &p, t.voice_ink).w_full())
@@ -638,7 +638,7 @@ impl SettingsView {
                 div()
                     .flex()
                     .gap(px(10.))
-                    .child(mode("m-think", "Reads along", "Speaks up when something's worth a second look.", Mode::ThinksWithYou, cx))
+                    .child(mode("m-think", "Reads along", "Speaks up when something’s worth a second look.", Mode::ThinksWithYou, cx))
                     .child(mode("m-ask", "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", Mode::WhenYouAsk, cx)),
             )
             .child(note("Change any note on its own, from the row above its title.", &t))
@@ -729,15 +729,15 @@ impl SettingsView {
                     .keyed_as(format!("settings:ink-{i}"), 12., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.ink = ink)),
             );
         }
-        let thread_name = if s.ink == InkColor::Ink { format!("{} (Inkling's own)", s.ink.label()) } else { s.ink.label().to_string() };
+        let thread_name = if s.ink == InkColor::Ink { format!("{} (Inkling’s own)", s.ink.label()) } else { s.ink.label().to_string() };
         div()
             .child(section("Appearance", None, &t).mt(px(4.)))
             .child(looks)
             .child(section("Text size", Some("Your words, in Fraunces".into()), &t))
             .child(sizes)
-            .child(section("Inkling's lettering", None, &t))
+            .child(section("Inkling’s lettering", None, &t))
             .child(div().flex().gap(px(10.)).child(lettering("let-own", SANS, Lettering::Own, cx)).child(lettering("let-notes", SERIF, Lettering::LikeNotes, cx)))
-            .child(section("Inkling's thread", None, &t))
+            .child(section("Inkling’s thread", None, &t))
             .child(group(
                 vec![
                     row("Colour", Some(thread_name.into()), swatches, &t).into_any_element(),
@@ -752,7 +752,7 @@ impl SettingsView {
                 ],
                 &t,
             ))
-            .child(note("Questions from the note's own mind are stitched in this thread; other minds keep their own.", &t))
+            .child(note("Questions from the note’s own mind are stitched in this thread; other minds keep their own.", &t))
     }
 
     fn minds(&mut self, cx: &mut Context<Self>) -> Div {
@@ -989,7 +989,7 @@ impl SettingsView {
         let mut rows: Vec<(ModelChoice, bool)> = choices.iter().cloned().enumerate().map(|(i, c)| (c, Some(i) == current)).collect();
         if current.is_none() {
             let (value, name, description) = if s.model.trim().is_empty() {
-                (String::new(), "Claude Code's default".to_string(), "Whatever model Claude Code uses unless told otherwise.".to_string())
+                (String::new(), "Claude Code’s default".to_string(), "Whatever model Claude Code uses unless told otherwise.".to_string())
             } else {
                 (s.model.clone(), s.model.clone(), "Not in the list Claude Code gave. It is sent as written.".to_string())
             };

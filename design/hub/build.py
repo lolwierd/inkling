@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 02:00 IST"
+UPDATED = "7 Nov 2026, 01:57 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -27,21 +27,23 @@ WAITING = [
 ]
 
 RUNNING = [
-    ("Nine features from the manifesto, being designed",
+    ("Nine features from the manifesto, being built",
      "Seven agents, one per feature or pair: Answer in the note with Write it in; Let it stand with Turn it over; Threads of your own; "
-     "Show its working; Loose ends; Threads between notes; Read it through. Each writes a design first. They build once the polish and code-health "
-     "passes land, so nobody rewrites code another agent is changing, and then the film gets a second pass with them in it. "
-     "Keep the old words is skipped for now."),
+     "Show its working; Loose ends; Threads between notes; Read it through. Each writes a short design, then builds straight away on its "
+     "own branch. I merge them as they finish, each one catching up with master first. Rough ETA: built by about 04:15, Threads between "
+     "notes by about 04:30. Keep the old words is skipped for now."),
     ("The film, re-cut",
      "A much quieter score: one calm piece under the whole film, almost no sound effects, no sewing machine or ticking. "
      "The running plan is replaced by a technical note, in the film and in the app's Start here guide, with fresh real answers from the model. "
-     "The last chapter ends on Initial."),
+     "The last chapter ends on Initial. Rough ETA 03:00. A second cut that shows the new features follows: it gets ready from their designs "
+     "while they are built, and switches to the real app as each one lands, rough ETA 05:00."),
     ("UI polish, every screen and flow",
      "A fresh agent on Opus at max effort, looking for the small things that are easy to miss: pixel alignment, states, "
      "wording, empty and error states, keyboard flows, light and dark, four window sizes."),
     ("Code health, now",
      "An agent on Fable at max effort is going through the code for performance, bugs, code smells, complexity and implicit "
-     "state machines, and fixing what it finds. It works beside the polish on its own branch and rebases onto it once the polish lands."),
+     "state machines, and fixing what it finds in place. It splits no files while the features are being built; that waits for a pass of its own. "
+     "Rough ETA 03:30."),
 ]
 
 DONE = [

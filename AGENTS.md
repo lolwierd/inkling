@@ -18,8 +18,9 @@ reasoning (`README.md`), recipes (`recipes.md`) and the test layers (`testing.md
    the window titled `Inkling Agents`. Do not drive it with clicks or keystrokes; use a
    script.
 4. **None of Riddled's words**, in any string a person or the model can see: no riddle,
-   riddled, riddler, visualize, "thinks with you", "when you ask", "just my words". Say
-   Find a loose thread, Sketch it, Reads along, Waits to be asked, Hide threads, mind.
+   riddled, riddler, visualize, and not the old labels "Thinks with you", "When you ask",
+   "Just my words". Say Find a loose thread, Sketch it, Reads along, Waits to be asked,
+   Hide threads, mind.
    `scripts/dev lint` checks it. (`docs/spec.md` describes Riddled on purpose.)
 5. **Other agents work in this repo at the same time.** Work in your own worktree under
    `.worktrees/`, commit early (an uncommitted worktree has been lost before), keep
@@ -34,7 +35,7 @@ failure, and those that report take `--json`.
 
 | To | Run | Takes |
 |---|---|---|
-| Check everything before a commit | `scripts/dev check` | ~20 s |
+| Check everything before a commit | `scripts/dev check` | ~15 s |
 | ... plus the smoke scenarios in the app | `scripts/dev check --e2e` | ~1 min |
 | Run scenarios (all, by name, prefix or tag) | `scripts/dev e2e`, `scripts/dev e2e u01 t02`, `scripts/dev e2e smoke` | all: ~7.5 min |
 | List scenarios, their fixtures and expects | `scripts/dev e2e --list` | |
@@ -90,7 +91,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped) | `Note`, `Thread`, `Settings` |
 | `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
 | `src/export.rs` | Markdown, HTML, Word (via `textutil`) with threads under paragraphs | |
-| `src/theme.rs`, `src/ui.rs`, `src/palette.rs`, `src/settings.rs`, `src/welcome.rs` | colours and fonts, small widgets, ⌘K, the settings window, the first-run note | |
+| `src/welcome.rs` | the first-run note "Start here": a tour with real threads, whose own paragraphs are never read (`Note.left_alone`); the writer's first sentence is probed | `first_run_note` |
+| `src/theme.rs`, `src/ui.rs`, `src/palette.rs`, `src/settings.rs` | colours and fonts, small widgets, ⌘K, the settings window | |
 | `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
@@ -119,6 +121,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 
 - Thread `start`/`end`, mark spans and anchor ranges are **byte** offsets into the
   note's blocks joined by `\n`, title included; they must sit on char boundaries.
+- A paragraph is read once: its trimmed text's hash goes into `note.read_hashes`
+  (or was put in `note.left_alone` because the app wrote it) and is skipped from then on.
 - A quote from the brain is always a substring of the text it was asked about
   (`snapQuote`); the app anchors by searching for it verbatim.
 - Every `run` request ends in exactly one `done` or `error`, and never `done` after a

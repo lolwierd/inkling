@@ -12,7 +12,9 @@ export const BANNED: { re: RegExp; use: string }[] = [
   { re: /riddl/i, use: "Find a loose thread (the action), Socratic (the voice), mind (the reader)" },
   { re: /visuali[sz]/i, use: "Sketch it" },
   { re: /thinks with you/i, use: "Reads along" },
-  { re: /when you ask/i, use: "Waits to be asked" },
+  // The old mode's label. Lower case it is ordinary English ("it answers only when you
+  // ask"), so only the label form counts.
+  { re: /\bWhen you ask\b/, use: "Waits to be asked" },
   { re: /just my words/i, use: "Hide threads" },
 ];
 

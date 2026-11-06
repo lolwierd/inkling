@@ -1,11 +1,11 @@
-# A new notebook: the first sentence is always asked about
+# A new notebook opens on the tour ("Start here"); the first sentence you write is always asked about.
 wait: 1500
 dump: fresh
-expect: d.first_run && d.note.title === "Start here" && d.threads.length === 0
+expect: d.first_run && d.note.title === "Start here" && d.left_alone > 0 && d.reading === null   // the tour, its own words left alone
 keys: We should drop the old cache next week because nobody reads from it anymore.
 caret: end
 wait: 4500
 dump: asked
-expect: !d.first_run && d.threads.length === 1 && d.threads[0].kind === "Question"
-expect: tasks.join() === "probe"   // the first sentence is always asked about, never read silently
+expect: !d.first_run && d.threads.length === dumps.fresh.threads.length + 1 && d.threads.some(t => t.kind === "Question" && t.quote.startsWith("We should drop"))
+expect: tasks.join() === "probe"   // the first sentence is always asked about, never read silently; the tour is never read
 quit

@@ -13,7 +13,7 @@ things that a person does from habit, and before this branch each of them was ha
 |---|---|---|
 | Learn the codebase in one read | 20k lines; a six-line module list in `README.md` | `AGENTS.md`: rules, commands, the map, how a question reaches the margin, invariants, quirks |
 | Not hurt anyone by accident | Rules lived in people's heads | The app refuses a script without a scratch notebook; every tool run is scratch notebook + fake brain + background window |
-| Know whether a change works | 32 scenarios that drove the real app and printed JSON, and checked nothing | `scripts/dev check` (20 s) and `scripts/dev e2e`: scenarios with `expect:` lines that fail the run |
+| Know whether a change works | 32 scenarios that drove the real app and printed JSON, and checked nothing | `scripts/dev check` (15 s) and `scripts/dev e2e`: scenarios with `expect:` lines that fail the run |
 | See the running app | Run it by hand and look | `scripts/dev state` prints the page as JSON; `scripts/dev shot` prints a PNG path |
 
 "For agents" did not mean less for people. Everything here is plain text, plain commands
@@ -193,7 +193,7 @@ reach for `cargo run`, which takes the owner's focus and opens their real notebo
 | `cargo build` in a fresh worktree with `target/` cloned | 16 s |
 | `cargo test` (117 tests) | 7.4 s |
 | `bun test test/` (100 tests) | 5 s |
-| `scripts/dev check` | about 20 s |
+| `scripts/dev check` (build after an edit, cargo test, brain tests, types, lint) | 13 s |
 | `scripts/dev e2e` (32 scenarios, one at a time) | about 7.5 min, 2.1 of them in `r07b-timeout` |
 | `scripts/dev state` / `shot` | 5 to 6 s |
 

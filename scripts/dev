@@ -14,8 +14,8 @@ import { show } from "./lib/show.ts";
 
 const HELP = `scripts/dev <command> [options]
 
-  check [--e2e] [--json]       build, cargo test, brain tests, brain types, banned words
-                               (~20 s); --e2e adds the smoke scenarios. Run before a commit.
+  check [--e2e] [--json]       build, cargo test, brain tests, brain types, lint (~15 s);
+                               --e2e adds the smoke scenarios (~1 min). Run before a commit.
   e2e [name|prefix|tag ...]    play scenarios against the app with the fake brain and check
                                their expect: lines. Default: all. Tags: smoke.
       --list                   list scenarios with their fixtures, env and expects
@@ -33,6 +33,7 @@ const HELP = `scripts/dev <command> [options]
       --open chat,sidebar      panels to open at launch (INKLING_OPEN)
       --width PX               window width before the dump
       --appearance light|dark  (shot; default light) --out FILE (shot) --slowmo N (shot)
+      --timeout S              stop the app after S seconds (default 120)
   show DIR [notes|dumps|brain|log|all] [--json]
                                what a run left: notes and threads, dumps, brain traffic, log
   lint [--json]                banned words (the Riddled rule) in app and brain strings,
@@ -225,4 +226,10 @@ async function main(): Promise<number> {
   }
 }
 
-process.exit(await main());
+try {
+  process.exit(await main());
+} catch (e) {
+  // A usage problem (no such scenario or fixture) is a message, not a stack trace.
+  console.error(`scripts/dev ${cmd}: ${e instanceof Error ? e.message : e}`);
+  process.exit(2);
+}

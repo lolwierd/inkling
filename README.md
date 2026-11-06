@@ -62,14 +62,18 @@ GPUI app (Rust, src/)                        brain sidecar (Bun + TypeScript, br
 
 ## Testing hooks
 
+Agents, and anyone scripting the app: start at `AGENTS.md`. `scripts/dev help` lists the
+commands (checks, scenarios with expectations, the page state as JSON, screenshots).
+
 | Variable | Effect |
 |---|---|
 | `INKLING_DATA_DIR=<dir>` | Use another notebook folder. |
-| `INKLING_SCRIPT=<file>` | Play a script against the UI (see `src/script.rs`): type, select, ask, sketch, room, reply, jump, dismiss, undo, chat, open panels. End-to-end scenarios: `bash brain/test/e2e/run.sh brain/test/e2e/scenarios/<name>.txt`. |
+| `INKLING_SCRIPT=<file>` | Play a script against the UI (see `src/script.rs`): type, select, ask, sketch, room, reply, jump, dismiss, undo, chat, open panels. Needs `INKLING_DATA_DIR`, so a script never edits the real notebook. End-to-end scenarios: `scripts/dev e2e <name>`. |
 | `INKLING_OPEN=sidebar,chat,...` | Open panels at launch. |
 | `INKLING_BACKGROUND=1` | Don't take focus when launched. |
 | `INKLING_JIGGLE=<ms>` | Nudge the window so it keeps drawing while covered (for screenshots). |
 | `INKLING_SLOWMO=<factor>` | Slow every thread animation down (screenshots, the walkthrough video). |
+| `INKLING_LOG_JSON=1` | Log one JSON object per line (`ms`, `level`, `target`, `msg`), for tools. |
 | `INKLING_BRAIN_ENTRY=<file.ts>` | Run another brain, e.g. the fake one in `brain/test/e2e/fake-brain.ts` (no model calls). |
 | `INKLING_CLAUDE_PATH=<path>` | Use a specific `claude` binary instead of the SDK's bundled one. |
 

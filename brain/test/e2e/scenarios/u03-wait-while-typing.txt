@@ -11,7 +11,7 @@ wait: 1200
 keys: \sand keeps going
 wait: 1300
 dump: while-typing
-expect: d.typing && d.waiting_tags.length === 1 && d.threads.length === 1   // it arrived mid-sentence: it waits, folded
+expect: d.typing && d.waiting_tags.length === 1 && d.threads.filter(t => t.quote.startsWith("The first claim")).length === 1   // it arrived mid-sentence: it waits, folded
 wait: 2600
 dump: paused
 expect: !d.typing && d.waiting_tags.length === 0

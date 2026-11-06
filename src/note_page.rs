@@ -1638,7 +1638,7 @@ impl NotePage {
     /// "Find a loose thread": Inkling looks for the one thing in the selection that
     /// does not hold up yet, and always asks about it.
     pub fn find_loose_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // ⌘↵ with nothing selected and a thread open: that thread is done.
+        // ⌘↩ with nothing selected and a thread open: that thread is done.
         if self.editor.read(cx).selection().is_empty() {
             if let Some(id) = self.active.clone() {
                 self.set_status(&id, ThreadStatus::Resolved, cx);
@@ -3017,7 +3017,7 @@ impl NotePage {
                     .w(px(236.))
                     .track_focus(&self.menu_focus)
                     .on_key_down(cx.listener(Self::menu_key))
-                    .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Reads along and speaks up when something's worth a second look.", cx))
+                    .child(item("mode-thinks", Mode::ThinksWithYou, "Reads along", "Speaks up when something's worth a second look.", cx))
                     .child(item("mode-ask", Mode::WhenYouAsk, "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", cx))
                     .into_any_element()
             }
@@ -3955,7 +3955,7 @@ impl NotePage {
                                     .text_size(px(ts::META))
                                     .text_color(p.faint)
                                     .child(hint)
-                                    .child(div().flex_none().child("Enter to ask")),
+                                    .child(div().flex_none().child("\u{21a9} ask")),
                             ),
                     )
                     .on_mouse_down_out(cx.listener(|this, _, _, cx| {

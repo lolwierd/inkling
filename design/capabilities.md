@@ -52,7 +52,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 
 | Capability | How |
 |---|---|
-| Find a loose thread | select words, ⌘↵: the one thing in them most worth a question |
+| Find a loose thread | select words, ⌘↩: the one thing in them most worth a question |
 | Ask your own question | select words, Ask Inkling |
 | Sketch it | select words, Sketch it: a drawing stitched out step by step, with captions; click to enlarge |
 | Ask the room | up to three minds at once, each on its own thread in its own colour |

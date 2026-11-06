@@ -638,7 +638,7 @@ impl SettingsView {
                 div()
                     .flex()
                     .gap(px(10.))
-                    .child(mode("m-think", "Reads along", "Reads along and speaks up when something's worth a second look.", Mode::ThinksWithYou, cx))
+                    .child(mode("m-think", "Reads along", "Speaks up when something's worth a second look.", Mode::ThinksWithYou, cx))
                     .child(mode("m-ask", "Waits to be asked", "Quiet until you say its name, select words, or open the chat.", Mode::WhenYouAsk, cx)),
             )
             .child(note("Change any note on its own, from the row above its title.", &t))

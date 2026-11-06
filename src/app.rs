@@ -1271,12 +1271,13 @@ impl AppView {
 
         // the keys each row shows are the ones bound now (Settings > Shortcuts)
         let keys_of = |name: &str| crate::shortcuts::keys_for(name, cx).unwrap_or_default();
-        let (k_copy, k_export, k_hide, k_settings, k_find) = (
+        let (k_copy, k_export, k_hide, k_settings, k_find, k_new) = (
             keys_of("app::CopyNote"),
             keys_of("app::ExportNote"),
             keys_of("app::JustMyWords"),
             keys_of("app::OpenSettings"),
             keys_of("app::OpenPalette"),
+            keys_of("app::NewNote"),
         );
         let action = |id: &'static str, label: &'static str, keys: String| {
             div()
@@ -1346,7 +1347,7 @@ impl AppView {
                             .text_color(p.graphite)
                             .child(icon("plus", 13., p.faint))
                             .child(div().flex_1().child("New note"))
-                            .child(ui::key_hint("\u{2318}N", &t))
+                            .child(ui::key_hint(k_new, &t))
                             .keyed_as("sidebar:new", 6., ring, cx, |this, window, cx| this.create_note("", None, window, cx)),
                     )
                     .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().child(list).child(

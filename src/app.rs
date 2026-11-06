@@ -46,6 +46,7 @@ gpui_kit::actions!(
         ShowAll,
         Minimize,
         Zoom,
+        FollowThread,
     ]
 );
 
@@ -689,6 +690,11 @@ impl AppView {
             Step::Quit => cx.quit(),
             Step::Import(dir) => self.import_vault(crate::script::path(dir), cx),
             Step::Size(w, h) => script_resize(window, *w, *h),
+            Step::Delete(title) => match cx.global::<Store>().notes.iter().find(|n| n.title == *title).map(|n| n.id.clone()) {
+                Some(id) => self.delete_note(id, window, cx),
+                None => log::warn!("script: no note titled {title:?}"),
+            },
+            Step::UndoDelete => self.undo_delete(window, cx),
             Step::Set(..) => {
                 self.page.update(cx, |p, cx| p.script_step(&step, window, cx));
                 // Appearance, text size and threads change the theme.
@@ -1318,7 +1324,8 @@ impl AppView {
         let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
             let id = n.id.clone();
             let on = n.id == current;
-            let open = n.open_threads();
+            // its own open threads and those from other notes that also quote it
+            let open = crate::between::open_here(&cx.global::<Store>().notes, n);
             row(SharedString::from(format!("note-{}", n.id)), on)
                 .pl(px(8. + indent))
                 .child(icon("file-text", 13., p.faint))
@@ -1795,6 +1802,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &PrevThread, window, cx| this.page.update(cx, |p, cx| p.jump_to_open(false, window, cx))))
             .on_action(cx.listener(|this, _: &DismissThread, _, cx| this.page.update(cx, |p, cx| p.dismiss_active(cx))))
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
+            .on_action(cx.listener(|this, _: &FollowThread, _, cx| this.page.update(cx, |p, cx| p.follow_active(cx))))
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_action(cx.listener(|this, _: &ImportObsidian, _, cx| this.choose_vault(cx)))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))

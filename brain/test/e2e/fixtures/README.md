@@ -19,3 +19,4 @@ from an empty notebook, which opens the first-run note ("Start here").
 Ids and timestamps are fixed so runs compare. Thread `start`/`end` are byte offsets in the
 note's blocks joined by `\n` (title included): edit a fixture's text and they must move
 with it. `design/tools/demo_notebook.py` wrote `running-plan` (its id was then fixed).
+- `between`: threads between notes. "Race calendar" (`…e1`, written 3 Sep 2026: a heading and three paragraphs, the bib pickup on Friday 13 March among them), "Race-week plan" (`…e2`, with thread `b1` on "Sunday 22 March" already joined to the calendar's "Sunday 15 March" in its `elsewhere`, not yet placed), "March budget" (`…e3`, shares only the month) and "Journal" (`…e4`, waits to be asked, and shares the bib words, so it must never be sent).

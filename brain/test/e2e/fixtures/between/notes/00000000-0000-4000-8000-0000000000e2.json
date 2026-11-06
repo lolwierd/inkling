@@ -1,0 +1,72 @@
+{
+  "id": "00000000-0000-4000-8000-0000000000e2",
+  "title": "Race-week plan",
+  "folder": null,
+  "blocks": [
+    {
+      "kind": "title",
+      "text": "Race-week plan"
+    },
+    {
+      "kind": "paragraph",
+      "text": "Race week is about sleep and nothing new."
+    },
+    {
+      "kind": "paragraph",
+      "text": "The city 10k is on Sunday 22 March, so the taper starts on the 8th."
+    }
+  ],
+  "marks": [],
+  "brief": null,
+  "mode": "thinks_with_you",
+  "mind_id": "inkling",
+  "threads": [
+    {
+      "id": "b1",
+      "start": 76,
+      "end": 91,
+      "quote": "Sunday 22 March",
+      "kind": "question",
+      "messages": [
+        {
+          "role": "mind",
+          "text": "Race calendar says the city 10k is on Sunday 15 March. Which date is right?",
+          "at": "2026-11-06T18:05:00Z"
+        }
+      ],
+      "drawing": null,
+      "status": "open",
+      "side": "right",
+      "mind_name": "Inkling",
+      "tag_offset": [
+        0.0,
+        0.0
+      ],
+      "created_at": "2026-11-06T18:05:00Z"
+    }
+  ],
+  "chat": [],
+  "read_hashes": [],
+  "left_alone": [],
+  "first_run": false,
+  "created_at": "2026-11-06T18:00:00Z",
+  "updated_at": "2026-11-06T18:05:00Z",
+  "elsewhere": [
+    {
+      "thread": "b1",
+      "note": "00000000-0000-4000-8000-0000000000e1",
+      "start": 31,
+      "end": 46,
+      "quote": "Sunday 15 March",
+      "title": "Race calendar",
+      "edited": "2026-09-03T09:00:00Z",
+      "relation": "contradicts",
+      "side": "right",
+      "tag_offset": [
+        0.0,
+        0.0
+      ],
+      "placed": false
+    }
+  ]
+}

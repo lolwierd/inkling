@@ -756,7 +756,12 @@ impl NotePage {
     pub fn flush(&mut self, cx: &mut Context<Self>) {
         self.save_task = None;
         self.sync_from_editor(cx);
-        self.note.updated_at = Utc::now();
+        // Leaving a note you only looked at keeps the day it was last edited.
+        let kept = {
+            let clean = crate::between::without_visitors(&self.note);
+            cx.global::<Store>().note(&clean.id).filter(|n| n.same_writing(&clean)).map(|n| n.updated_at)
+        };
+        self.note.updated_at = kept.unwrap_or_else(Utc::now);
         let note = self.note.clone();
         let store = cx.global_mut::<Store>();
         match store.notes.iter_mut().find(|n| n.id == note.id) {

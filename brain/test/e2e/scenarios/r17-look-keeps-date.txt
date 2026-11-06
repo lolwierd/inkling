@@ -1,0 +1,14 @@
+# Opening a note and leaving it without a change keeps the day it was last edited: switching
+# notes saves the note you leave, and that save used to stamp it "edited today". The far
+# end of a thread between notes, and the relate and reply prompts, show that date.
+# fixture: between
+wait: 1500
+switch: March budget
+settle
+switch: Race calendar
+settle
+switch: Race-week plan
+settle
+quit
+expect: note("March budget").updated_at === "2026-10-01T08:00:00Z" && note("Race calendar").updated_at === "2026-09-03T09:00:00Z"
+expect: note("Race-week plan").updated_at === "2026-11-06T18:05:00Z"

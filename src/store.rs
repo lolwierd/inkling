@@ -575,6 +575,26 @@ impl Note {
         }
     }
 
+    /// The same note apart from when it was last saved: nothing written, read, linked or
+    /// threaded since. The other notes' titles and dates kept beside its far ends do not
+    /// count either, since they change when those notes do. Saving such a note keeps its
+    /// `updated_at`, so looking at a note never makes it "edited today".
+    pub fn same_writing(&self, other: &Note) -> bool {
+        fn plain(n: &Note) -> Option<Value> {
+            let mut v = serde_json::to_value(n).ok()?;
+            let o = v.as_object_mut()?;
+            o.remove("updated_at");
+            if let Some(Value::Array(ends)) = o.get_mut("elsewhere") {
+                for e in ends.iter_mut().filter_map(Value::as_object_mut) {
+                    e.remove("title");
+                    e.remove("edited");
+                }
+            }
+            Some(v)
+        }
+        plain(self).is_some_and(|a| Some(a) == plain(other))
+    }
+
     /// The far end of `thread`, when it is a thread between notes.
     pub fn elsewhere_of(&self, thread: &str) -> Option<&Elsewhere> {
         self.elsewhere.iter().find(|e| e.thread == thread)
@@ -1841,5 +1861,33 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
         assert_eq!(back.elsewhere.len(), 1);
         assert!(!back.elsewhere[0].visiting);
         assert_eq!(back.elsewhere[0].quote, "Sunday 15 March");
+    }
+
+    #[std::prelude::v1::test]
+    fn the_same_writing_ignores_when_it_was_saved() {
+        let mut a = Note::new("A", Mode::ThinksWithYou, None);
+        a.blocks.push(block(BlockKind::Paragraph, "Words."));
+        a.threads.push(Thread {
+            id: "t".into(), start: 2, end: 7, quote: "Words".into(), kind: ThoughtKind::Question, messages: vec![], drawing: None,
+            status: ThreadStatus::Open, side: Side::Right, mind_name: "Inkling".into(), tag_offset: (0., 0.), created_at: a.created_at,
+        });
+        a.elsewhere.push(Elsewhere { thread: "t".into(), note: "b".into(), title: "B".into(), ..Default::default() });
+        let mut b = a.clone();
+        b.updated_at = a.updated_at + chrono::Duration::days(3);
+        b.elsewhere[0].title = "B, renamed".into();
+        b.elsewhere[0].edited = b.updated_at;
+        assert!(a.same_writing(&b), "only dates and the other note's title differ");
+        let changed: [fn(&mut Note); 5] = [
+            |n| n.blocks[1].text.push('!'),
+            |n| n.read_hashes.push(7),
+            |n| n.threads[0].status = ThreadStatus::Resolved,
+            |n| n.elsewhere[0].quote = "x".into(),
+            |n| n.marks.push(MarkSpan { start: 2, end: 4, mark: Mark::Bold }),
+        ];
+        for change in changed {
+            let mut c = a.clone();
+            change(&mut c);
+            assert!(!a.same_writing(&c));
+        }
     }
 }

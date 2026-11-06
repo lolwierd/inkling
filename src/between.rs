@@ -602,6 +602,13 @@ fn strip_visitors(note: &mut Note) {
     note.elsewhere.retain(|e| !e.visiting);
 }
 
+/// `note` without its visiting ends: what is saved for it.
+pub fn without_visitors(note: &Note) -> Note {
+    let mut out = note.clone();
+    strip_visitors(&mut out);
+    out
+}
+
 /// Add to `note` (a note just loaded into the page) the far ends of threads from other
 /// notes that quote it: each a clone of its home thread on this note's words, with an
 /// [`Elsewhere`] marked `visiting` that points back at the home words. A far end whose

@@ -16,8 +16,8 @@ use std::rc::Rc;
 use gpui_kit::*;
 
 use crate::app::{
-    CopyNote, DismissThread, ExportNote, FindLooseThread, JustMyWords, NewNote, NextThread, OpenPalette, OpenSettings,
-    PrevThread, Quit, ToggleChat, ToggleSidebar, UndoDismiss,
+    CopyNote, DismissThread, ExportNote, FindLooseThread, JustMyWords, LooseEnds, NewNote, NextThread, OpenPalette,
+    OpenSettings, PrevThread, Quit, ToggleChat, ToggleSidebar, UndoDismiss,
 };
 use crate::store::Store;
 
@@ -28,6 +28,7 @@ fn app_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-\\", ToggleSidebar, None),
         KeyBinding::new("cmd-n", NewNote, None),
         KeyBinding::new("cmd-k", OpenPalette, None),
+        KeyBinding::new("cmd-shift-k", LooseEnds, None),
         KeyBinding::new("cmd-j", ToggleChat, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("cmd-shift-.", JustMyWords, None),
@@ -106,6 +107,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("app::FindLooseThread", "Find a loose thread", Group::Threads, Some("In a selection. With a thread open, it ties it off.")),
     ("app::NextThread", "Next open thread", Group::Threads, None),
     ("app::PrevThread", "Previous open thread", Group::Threads, None),
+    ("app::LooseEnds", "Loose ends", Group::Threads, Some("Every open thread in the notebook, oldest first.")),
     ("app::DismissThread", "Dismiss the open thread", Group::Threads, None),
     ("app::UndoDismiss", "Undo dismiss", Group::Threads, None),
     ("app::JustMyWords", "Hide threads", Group::Threads, None),

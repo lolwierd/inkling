@@ -27,6 +27,8 @@ use crate::stitch::{self, Rope};
 use crate::theme::{SANS, TEXT_COLORS, Theme, ts};
 use crate::ui::{self, Keyed, icon};
 
+mod goto;
+
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
 /// The band of cloth along the top of the window that holds the traffic lights, ☰ and
@@ -488,6 +490,9 @@ pub struct NotePage {
     viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
     _subs: Vec<Subscription>,
+    /// A thread gone to from Loose ends, whose words are brought into view once the note
+    /// is laid out (`goto.rs`).
+    goto: Option<String>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -577,6 +582,7 @@ impl NotePage {
             viewport: size(px(1200.), px(800.)),
             last_frame: None,
             _subs: subs,
+            goto: None,
         };
         page.load_into_editor(cx);
         page
@@ -2495,6 +2501,8 @@ impl NotePage {
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
         state["paper"] = json!([l, t, r, b]);
+        // Loose ends, open or as it would open now (see loose_ends.rs)
+        state["loose_ends"] = crate::loose_ends::describe(&self.note, window, cx);
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -4215,6 +4223,7 @@ impl Render for NotePage {
         let placement = cx.global::<Store>().settings.placement;
         let viewport = window.viewport_size();
         self.viewport = viewport;
+        self.finish_goto(window, cx);
         let width = viewport.width.as_f32() - if self.chat_open { CHAT_WIDTH } else { 0. };
         // The page sits on the linen with a strip of cloth showing on each side.
         self.m = Metrics::for_width(width - 2. * (SHEET_PAD + 14.));

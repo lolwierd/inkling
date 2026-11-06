@@ -60,6 +60,17 @@ impl Palette {
         self.input.update(cx, |i, cx| i.focus(window, cx));
     }
 
+    /// What is typed, for Loose ends (⇧⌘K) to carry on with.
+    pub fn query(&self, cx: &App) -> String {
+        self.input.read(cx).value().to_string()
+    }
+
+    /// Start with these words typed (what Loose ends had, when ⌘K opens in its place).
+    pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.input.update(cx, |i, cx| i.set_value(query.to_string(), window, cx));
+        self.select(0, cx);
+    }
+
     fn select(&mut self, ix: usize, cx: &mut Context<Self>) {
         self.selected = ix;
         self.scroll.scroll_to_item(ix);
@@ -328,7 +339,9 @@ impl Render for Palette {
                             .child(if on_note { "\u{21a9} open" } else { "\u{21a9} start" })
                             .child(if query_empty { "Type to find or start a note" } else { "\u{201c}Folder / Name\u{201d} files a new note" })
                             .child(div().flex_1())
-                            .when(on_note, |d| d.child("\u{2318}\u{232b} delete")),
+                            .when(on_note, |d| d.child("\u{2318}\u{232b} delete"))
+                            // the second list in this card: every open thread
+                            .children(crate::shortcuts::keys_for("app::LooseEnds", cx).map(|k| format!("{k} loose ends"))),
                     ),
             )
     }

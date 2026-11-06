@@ -82,6 +82,9 @@ fn mind_thread(mind_name: &str, own: &str, chosen: crate::store::InkColor, t: &T
         "Investor" => Some(C::Brown),
         _ => None,
     };
+    // A known mind whose thread the note's own mind is wearing takes rose, the one colour
+    // no known mind owns, so it never lands on another known mind's colour.
+    let known = known.map(|c| if c == chosen { C::Red } else { c });
     let pick = known.filter(|c| *c != chosen).unwrap_or_else(|| {
         let others: Vec<C> = [C::Blue, C::Orange, C::Green, C::Purple, C::Brown, C::Red, C::Ink].into_iter().filter(|c| *c != chosen).collect();
         others[(stitch::seed_of(mind_name) % others.len() as u64) as usize]
@@ -4264,6 +4267,16 @@ impl Render for NotePage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[std::prelude::v1::test]
+    fn inkling_takes_rose_when_the_notes_own_mind_wears_madder() {
+        use crate::store::{Appearance, InkColor, Lettering, TextSize};
+        let t = Theme::resolve(Appearance::Light, WindowAppearance::Light, InkColor::Ink, Lettering::Own, TextSize::Default);
+        let inkling = mind_thread("Inkling", "Coach", InkColor::Ink, &t);
+        assert_eq!(inkling, crate::theme::ink_color(InkColor::Red, &t.p));
+        assert_ne!(inkling, mind_thread("Socratic tutor", "Coach", InkColor::Ink, &t));
+        assert_ne!(inkling, mind_thread("Coach", "Coach", InkColor::Ink, &t));
+    }
 
     #[std::prelude::v1::test]
     fn a_long_quote_makes_a_title_cut_at_a_word() {

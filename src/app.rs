@@ -146,6 +146,9 @@ pub struct AppView {
     toast: Option<Toast>,
     /// The note deleted last, where it sat in the list, and when: Undo puts it back.
     deleted: Option<(Note, usize, Instant)>,
+    /// The blank note made to stand in when the only note was deleted: Undo takes it
+    /// away again if nothing was written in it.
+    stand_in: Option<String>,
     speech: Entity<SpeechState>,
     talk: Talk,
     talk_timer: Option<Task<()>>,
@@ -451,6 +454,7 @@ impl AppView {
             new_folder: None,
             toast: None,
             deleted: None,
+            stand_in: None,
             speech,
             talk: Talk::Idle,
             talk_timer: None,
@@ -896,11 +900,15 @@ impl AppView {
     fn delete_note(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         // Move the page off the note first: switching notes saves the one being
         // left, so deleting before the switch would write it straight back.
+        self.stand_in = None;
         if self.page.read(cx).note_id() == id {
             let next = cx.global::<Store>().notes.iter().find(|n| n.id != id).map(|n| n.id.clone());
             match next {
                 Some(n) => self.open_note(n, window, cx),
-                None => self.create_note("", None, window, cx),
+                None => {
+                    self.create_note("", None, window, cx);
+                    self.stand_in = Some(self.page.read(cx).note_id().to_string());
+                }
             }
         }
         // ⌘⌫ in the palette is one keystroke away from clearing the search box, so a
@@ -931,6 +939,15 @@ impl AppView {
         self.toast = None;
         self.palette = None;
         self.open_note(id, window, cx);
+        // the blank stand-in goes too, unless something was written in it
+        if let Some(blank) = self.stand_in.take() {
+            let store = cx.global_mut::<Store>();
+            let untouched = store.note(&blank).is_some_and(|n| n.blocks.iter().all(|b| b.text.trim().is_empty()) && n.threads.is_empty() && n.chat.is_empty());
+            if untouched {
+                store.delete_note(&blank);
+            }
+            cx.notify();
+        }
     }
 
     fn open_settings(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {

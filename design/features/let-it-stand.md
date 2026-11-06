@@ -546,8 +546,13 @@ back. The fixture `every-ending` (one thread that ended each way) is for looking
 - Reopen drops the thread's reply box, so the reason Let stand left in it for Undo does not
   come back as the reason of the next Let stand. If the thread was the last one let stand,
   its Undo goes too, so it cannot be put back twice.
-- The snipped tail is drawn at 78% of its thread, the faintest that keeps 3:1 on the page in
-  every thread (sage in linen is the closest, at 3.3:1); a test holds it there.
+- The snipped tail is drawn at 78% of its thread, which keeps it at 3:1 or better on the page
+  in every thread (sage in linen is the closest, at 3.3:1); a test holds it there.
+- A correction's working (Show its working) shows under its message as the tag shows it, but
+  still: the sum line by line and the words it took, struck through once taken back. ⇧⌘C
+  writes it under the message, as Copy does.
+- While a reason's box is open, its Add a reason or Change the reason steps aside: Return and
+  Esc are the box's controls.
 - The Markdown's heading date is when the thread was opened, as on the entry's top row;
   every message is copied, the folded ones too.
 - Shots: `design/features/shots/turn-it-over-{light,dark}.jpg` (the fixture `every-ending`),

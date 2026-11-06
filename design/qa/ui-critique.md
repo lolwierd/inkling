@@ -1,8 +1,8 @@
 # UI critique (6 Nov 2026)
 
 A fresh look at every screen and state of Inkling, after the toasts, the keyboard ring and
-the sewn blocks landed. Branch `ui-critique`. Every surface in `design/capabilities.md`
-was driven by a script against the fake brain and looked at in screenshots, in Linen and
+the sewn blocks landed. Branch `ui-critique`. The surfaces in `design/capabilities.md`
+were driven by a script against the fake brain and looked at in screenshots, in Linen and
 Lamplight, at window widths of 760, 1000, 1320 and 1800 and at a 520 px height. The hard
 content came from a new fixture, `hard-content`: a title that wraps three times, words and
 a path with no spaces, twelve open threads from six minds (one with a long name), an
@@ -12,7 +12,7 @@ folded and empty names.
 The owner's decisions were kept: tags fold to a tab, drop open after a 120 ms rest and
 drag anywhere; threads do not sway; there is no top bar; the logo and wordmark; the sewn
 blocks; toasts in one stitched stack at the bottom centre. Madder is now only ever
-Inkling's own colour, which three of the findings below were about.
+Inkling's own colour, which four of the findings below were about (10, 12, 13, 21).
 
 **Severity.** High: broken, or seen by everyone often. Medium: plainly wrong once seen.
 Low: polish.
@@ -91,10 +91,12 @@ Ordered by what a user would notice first.
   and Marks only, the sidebar and folders, ⌘K, export, chat (with its failure line),
   sketches inline and enlarged, the ask box and Ask the room, every Settings pane
   (recording a shortcut and a clash included), Start here, toasts, a stopped brain, an
-  empty note, the reading needle, the focus ring through the Tab order.
+  empty note, the reading needle, ink from the pointer, the focus ring through the Tab
+  order.
 - Before shots were taken with master's binary (`INKLING_BIN`), after shots with this
   branch, on the same fixture and window size.
-- `scripts/dev check --e2e` and the full `scripts/dev e2e` pass. New: unit tests
+- `scripts/dev check --e2e` and the full `scripts/dev e2e` pass (42 scenarios; `real-1`
+  needs the model and was skipped). New: unit tests
   `the_gutter_marks_sit_on_the_paper` and `madder_is_never_offered_for_your_words`; the
   `hard-content` fixture and scenario u11 (twelve tags without overlaps, in reading order,
   the gutter on the paper at 760 px), which fails on master; an expect in u08 for where

@@ -23,7 +23,7 @@ use crate::store::{
     chosen_model, mind_templates, new_id,
 };
 use crate::theme::{Palette, SANS, SERIF, Theme, ink_color, note_size, thread_hex, ts};
-use crate::ui::{self, icon};
+use crate::ui::{self, Keyed, icon};
 use parts::{Cap, Glass, group, note, row, section, segment, segmented};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -605,7 +605,7 @@ impl SettingsView {
             parts::tile(id, s.default_mode == m, &t, words)
                 .p(px(14.))
                 .pr(px(30.))
-                .on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.default_mode = m)))
+                .keyed_as(format!("settings:{id}"), 10., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.default_mode = m))
         };
         let pace_line = match s.pace {
             Pace::Regular => "Reads a moment after you stop typing.",
@@ -613,7 +613,7 @@ impl SettingsView {
         };
         let mut pace = segmented(&t);
         for (i, &v) in Pace::ALL.iter().enumerate() {
-            pace = pace.child(segment(("pace", i), v.label(), s.pace == v, &t).on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.pace = v))));
+            pace = pace.child(segment(("pace", i), v.label(), s.pace == v, &t).keyed_as(format!("settings:pace-{i}"), 6., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.pace = v)));
         }
         let mut places = div().flex().gap(px(10.));
         for (i, &v) in Placement::ALL.iter().enumerate() {
@@ -629,7 +629,7 @@ impl SettingsView {
             places = places.child(
                 parts::tile(("place", i), s.placement == v, &t, card)
                     .p(px(8.))
-                    .on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.placement = v))),
+                    .keyed_as(format!("settings:place-{i}"), 10., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.placement = v)),
             );
         }
         div()
@@ -676,7 +676,7 @@ impl SettingsView {
             looks = looks.child(
                 parts::tile(("look", i), s.appearance == a, &t, card)
                     .p(px(8.))
-                    .on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.appearance = a))),
+                    .keyed_as(format!("settings:look-{i}"), 10., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.appearance = a)),
             );
         }
         let mut sizes = div().flex().gap(px(10.));
@@ -693,7 +693,7 @@ impl SettingsView {
                     .h(px(78.))
                     .px(px(14.))
                     .py(px(12.))
-                    .on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.text_size = size))),
+                    .keyed_as(format!("settings:size-{i}"), 10., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.text_size = size)),
             );
         }
         let lettering = |id: &'static str, font: &'static str, l: Lettering, cx: &mut Context<Self>| {
@@ -708,7 +708,7 @@ impl SettingsView {
                 .h(px(78.))
                 .px(px(14.))
                 .py(px(12.))
-                .on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.lettering = l)))
+                .keyed_as(format!("settings:{id}"), 10., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.lettering = l))
         };
         let mut swatches = div().flex_none().flex().gap(px(6.));
         for (i, &ink) in InkColor::ALL.iter().enumerate() {
@@ -726,7 +726,7 @@ impl SettingsView {
                     .cursor_pointer()
                     .hover(move |st| if on { st } else { st.border_color(p.rule) })
                     .child(div().size(px(16.)).rounded_full().bg(ink_color(ink, &p)))
-                    .on_click(cx.listener(move |this, _, _, cx| this.update(cx, |s| s.ink = ink))),
+                    .keyed_as(format!("settings:ink-{i}"), 12., t.voice_ink, cx, move |this, _, cx| this.update(cx, |s| s.ink = ink)),
             );
         }
         let thread_name = if s.ink == InkColor::Ink { format!("{} (Inkling's own)", s.ink.label()) } else { s.ink.label().to_string() };
@@ -745,7 +745,7 @@ impl SettingsView {
                         "Ink from the pointer",
                         Some("Now and then a drop of ink falls as you move the pointer, then dries and fades.".into()),
                         ui::switch("ink-pointer", s.ink_from_pointer, &t)
-                            .on_click(cx.listener(|this, _, _, cx| this.update(cx, |s| s.ink_from_pointer = !s.ink_from_pointer))),
+                            .keyed_as("settings:ink-pointer", 9., t.voice_ink, cx, |this, _, cx| this.update(cx, |s| s.ink_from_pointer = !s.ink_from_pointer)),
                         &t,
                     )
                     .into_any_element(),
@@ -768,7 +768,9 @@ impl SettingsView {
                 row(
                     m.name.clone(),
                     detail,
-                    parts::push_button(("edit-mind", i), "Edit", &t).on_click(cx.listener(move |this, _, window, cx| this.start_mind(Some(mind.clone()), window, cx))),
+                    parts::push_button(("edit-mind", i), "Edit", &t).keyed_as(format!("settings:edit-mind-{i}"), 7., t.voice_ink, cx, move |this, window, cx| {
+                        this.start_mind(Some(mind.clone()), window, cx)
+                    }),
                     &t,
                 )
                 .into_any_element(),
@@ -787,11 +789,11 @@ impl SettingsView {
             .when(empty, |d| {
                 let mut chips = div().mt(px(10.)).flex().flex_wrap().gap(px(6.));
                 for (i, tm) in mind_templates().into_iter().enumerate() {
-                    chips = chips.child(ui::pill(("start-from", i), tm.name.clone(), false, &t).on_click(cx.listener(move |this, _, window, cx| {
+                    chips = chips.child(ui::pill(("start-from", i), tm.name.clone(), false, &t).keyed_as(format!("settings:start-from-{i}"), 12., t.voice_ink, cx, move |this, window, cx| {
                         this.start_mind(None, window, cx);
                         this.template = Some(i);
                         this.fill(&tm, window, cx);
-                    })));
+                    }));
                 }
                 d.child(group(
                     vec![div()
@@ -814,11 +816,11 @@ impl SettingsView {
         let mut chips = div().flex().flex_wrap().gap(px(6.));
         for (i, tm) in templates.iter().enumerate() {
             let tm = tm.clone();
-            chips = chips.child(ui::pill(("tmpl", i), tm.name.clone(), self.template == Some(i), &t).on_click(cx.listener(move |this, _, window, cx| {
+            chips = chips.child(ui::pill(("tmpl", i), tm.name.clone(), self.template == Some(i), &t).keyed_as(format!("settings:tmpl-{i}"), 12., t.voice_ink, cx, move |this, window, cx| {
                 this.template = Some(i);
                 let m = tm.clone();
                 this.fill(&m, window, cx);
-            })));
+            }));
         }
         // The box pads its words 12 px, as a text area pads its own: a one-line field is
         // given no padding of its own (`px_0`), a text area none from the box.
@@ -839,17 +841,17 @@ impl SettingsView {
         };
         let mut voices = segmented(&t);
         for (i, &v) in Voice::ALL.iter().enumerate() {
-            voices = voices.child(segment(("voice", i), v.label(), self.voice == v, &t).on_click(cx.listener(move |this, _, _, cx| {
+            voices = voices.child(segment(("voice", i), v.label(), self.voice == v, &t).keyed_as(format!("settings:voice-{i}"), 6., t.voice_ink, cx, move |this, _, cx| {
                 this.voice = v;
                 cx.notify();
-            })));
+            }));
         }
         let mut freqs = segmented(&t);
         for (i, &f) in Frequency::ALL.iter().enumerate() {
-            freqs = freqs.child(segment(("freq", i), f.label(), self.frequency == f, &t).on_click(cx.listener(move |this, _, _, cx| {
+            freqs = freqs.child(segment(("freq", i), f.label(), self.frequency == f, &t).keyed_as(format!("settings:freq-{i}"), 6., t.voice_ink, cx, move |this, _, cx| {
                 this.frequency = f;
                 cx.notify();
-            })));
+            }));
         }
         let editing = self.editing.is_some();
         let named = !self.name.read(cx).value().trim().is_empty();
@@ -875,16 +877,18 @@ impl SettingsView {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .when(editing, |d| d.child(parts::push_button("delete-mind", "Delete", &t).on_click(cx.listener(|this, _, _, cx| this.delete_mind(cx)))))
+                    .when(editing, |d| {
+                        d.child(parts::push_button("delete-mind", "Delete", &t).keyed_as("settings:delete-mind", 7., t.voice_ink, cx, |this, _, cx| this.delete_mind(cx)))
+                    })
                     .child(div().flex_1())
-                    .child(parts::push_button("cancel-mind", "Cancel", &t).on_click(cx.listener(|this, _, _, cx| {
+                    .child(parts::push_button("cancel-mind", "Cancel", &t).keyed_as("settings:cancel-mind", 7., t.voice_ink, cx, |this, _, cx| {
                         this.tab = Tab::Minds;
                         this.editing = None;
                         cx.notify();
-                    })))
+                    }))
                     .child(
                         parts::default_button("save-mind", if editing { "Save" } else { "Create mind" }, named, &t)
-                            .on_click(cx.listener(|this, _, _, cx| this.save_mind(cx))),
+                            .keyed_as("settings:save-mind", 7., t.voice_ink, cx, |this, _, cx| this.save_mind(cx)),
                     ),
             )
     }
@@ -898,7 +902,7 @@ impl SettingsView {
                     vec![row(
                         "Inkling learns about you",
                         Some("When you say something lasting about yourself, like what you study or how you like feedback, it can be worked in here.".into()),
-                        ui::switch("learns", s.learns_about_me, &t).on_click(cx.listener(|this, _, _, cx| this.update(cx, |s| s.learns_about_me = !s.learns_about_me))),
+                        ui::switch("learns", s.learns_about_me, &t).keyed_as("settings:learns", 9., t.voice_ink, cx, |this, _, cx| this.update(cx, |s| s.learns_about_me = !s.learns_about_me)),
                         &t,
                     )
                     .into_any_element()],
@@ -949,9 +953,9 @@ impl SettingsView {
         let claude = row(
             div().flex().items_center().gap(px(7.)).child(ui::small_dot(t.voice_ink, 6.)).child("Claude"),
             Some(account_detail.into()),
-            parts::push_button("check-status", "Check again", &t).on_click(cx.listener(|_, _, _, cx| {
+            parts::push_button("check-status", "Check again", &t).keyed_as("settings:check-status", 7., t.voice_ink, cx, |_, _, cx| {
                 Brain::global(cx).update(cx, |b, cx| b.check_status(cx));
-            })),
+            }),
             &t,
         );
 
@@ -994,11 +998,11 @@ impl SettingsView {
                         )
                         .when(on, |d| d.font_weight(FontWeight::MEDIUM)),
                     )
-                    .on_click(cx.listener(move |this, _, window, cx| {
+                    .keyed_as(format!("settings:model-{i}"), 0., t.voice_ink, cx, move |this, window, cx| {
                         let v = value.clone();
                         this.model.update(cx, |m, cx| m.set_value(v.clone(), window, cx));
                         this.update(cx, |s| s.model = v);
-                    }))
+                    })
                     .into_any_element(),
             );
         }
@@ -1036,10 +1040,16 @@ impl SettingsView {
                     let mut seg = segmented(&t);
                     for (i, e) in levels.iter().enumerate() {
                         let e = e.clone();
-                        seg = seg.child(segment((if read { "eff-r" } else { "eff-a" }, i), e.clone(), sent == e, &t).on_click(cx.listener(move |this, _, _, cx| {
-                            let v = e.clone();
-                            this.update(cx, |s| if read { s.effort_read = v } else { s.effort = v });
-                        })));
+                        seg = seg.child(segment((if read { "eff-r" } else { "eff-a" }, i), e.clone(), sent == e, &t).keyed_as(
+                            format!("settings:{}-{i}", if read { "eff-r" } else { "eff-a" }),
+                            6.,
+                            t.voice_ink,
+                            cx,
+                            move |this, _, cx| {
+                                let v = e.clone();
+                                this.update(cx, |s| if read { s.effort_read = v } else { s.effort = v });
+                            },
+                        ));
                     }
                     seg.into_any_element()
                 }
@@ -1085,10 +1095,10 @@ impl SettingsView {
             .hover(move |s| s.text_color(p.ink))
             .child(icon(if open { "chevron-down" } else { "chevron-right" }, 13., p.graphite))
             .child(format!("Specific versions ({count})"))
-            .on_click(cx.listener(|this, _, _, cx| {
+            .keyed_as("settings:model-versions", 0., t.voice_ink, cx, |this, _, cx| {
                 this.show_versions = !this.show_versions;
                 cx.notify();
-            }))
+            })
             .into_any_element()
     }
 
@@ -1368,7 +1378,7 @@ impl SettingsView {
                     .when(!on, |d| d.border_1().border_color(transparent_black()).hover(move |s| s.bg(g.hover)).active(move |s| s.bg(g.hover)))
                     .child(icon(tab.icon(), 15., if on { t.voice_ink } else { p.graphite }))
                     .child(tab.label())
-                    .on_click(cx.listener(move |this, _, window, cx| this.show(tab, window, cx))),
+                    .keyed_as(format!("settings:pane-{i}"), 8., t.voice_ink, cx, move |this, window, cx| this.show(tab, window, cx)),
             );
         }
         div().flex_none().w(px(220.)).h_full().pl(px(10.)).py(px(10.)).child(
@@ -1397,7 +1407,11 @@ impl SettingsView {
         let t = Theme::get(cx).clone();
         let p = t.p;
         match self.tab {
-            Tab::Minds => Some(parts::default_button("new-mind", "New mind", true, &t).on_click(cx.listener(|this, _, window, cx| this.start_mind(None, window, cx))).into_any_element()),
+            Tab::Minds => Some(
+                parts::default_button("new-mind", "New mind", true, &t)
+                    .keyed_as("settings:new-mind", 7., t.voice_ink, cx, |this, window, cx| this.start_mind(None, window, cx))
+                    .into_any_element(),
+            ),
             Tab::Shortcuts => {
                 let any_custom = !cx.global::<Store>().settings.shortcuts.is_empty();
                 Some(

@@ -1633,7 +1633,8 @@ impl NotePage {
 
     fn start_ask(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(range) = self.selection_range(cx) else { return };
-        let placeholder = format!("Ask {} about this\u{2026}", self.mind.name);
+        // a mind's long name would run out of the box: then the box just asks
+        let placeholder = if self.mind.name.chars().count() <= 20 { format!("Ask {} about this\u{2026}", self.mind.name) } else { "Ask about this\u{2026}".to_string() };
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
         let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {
             if let InputEvent::PressEnter { .. } = ev {
@@ -2568,7 +2569,8 @@ impl NotePage {
                                 .text_color(p.ink)
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(ui::small_dot(t.voice_ink, 7.))
-                                .child(mind_name)
+                                // a mind with a long name gives way, so the row still fits the column
+                                .child(div().max_w(px(220.)).truncate().child(mind_name))
                                 .child(icon("chevron-down", 12., p.faint))
                                 .keyed_as("header:mind", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mind, window, cx)),
                         )
@@ -3675,7 +3677,8 @@ impl NotePage {
                 .cursor_pointer()
                 .hover(move |s| s.bg(p.hover))
                 .active(|s| s.opacity(0.8))
-                .child(div().flex_none().text_size(px(ts::UI)).text_color(p.ink).child(title))
+                // ("Ask" and a mind's long name is cut short, and the hint after it)
+                .child(div().flex_none().max_w(px(150.)).truncate().text_size(px(ts::UI)).text_color(p.ink).child(title))
                 .child(div().min_w(px(0.)).truncate().text_size(px(ts::META)).text_color(p.faint).child(hint))
         };
         let ask = SharedString::from(format!("Ask {}", self.mind.name));
@@ -3803,7 +3806,9 @@ impl NotePage {
                             .keyed_as(format!("ask:room-{name}"), 12., color, cx, move |this, _, cx| this.toggle_room(mind.clone(), cx))
                     })
                     .child(ui::small_dot(color, 6.))
-                    .child(name),
+                    // a mind with a long name keeps its chip inside the box
+                    .max_w_full()
+                    .child(div().min_w(px(0.)).truncate().child(name)),
             );
         }
         let n = room.len();

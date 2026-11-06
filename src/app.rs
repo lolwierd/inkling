@@ -1234,7 +1234,6 @@ impl AppView {
                             .invisible()
                             .group_hover(group, |s| s.visible())
                             .child(div().p(px(2.)).rounded(px(4.)).hover(move |s| s.bg(p.hover)).child(icon("x", 11., p.faint)))
-                            .hover(move |s| s.bg(p.hover))
                             .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove folder (its notes stay)").build(window, cx))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();

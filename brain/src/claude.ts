@@ -170,6 +170,13 @@ async function drain(
       case "result": {
         const r = m as any;
         const usage: Usage = { ms: Date.now() - started, model, costUsd: r.total_cost_usd, ...tokens(r.usage), ...(searches ? { searches } : {}) };
+        // Where a call that looked things up spent its tokens, per model, for the log.
+        if (searches && r.modelUsage) {
+          const per = Object.entries(r.modelUsage as Record<string, any>).map(
+            ([name, u]) => `${name}: in ${u.inputTokens}, out ${u.outputTokens}, cache read ${u.cacheReadInputTokens}, cache write ${u.cacheCreationInputTokens}, $${Number(u.costUSD ?? 0).toFixed(4)}`,
+          );
+          process.stderr.write(`[brain] web call: ${searches} search(es); ${per.join("; ")}` + "\n");
+        }
         if (r.subtype !== "success" || r.is_error) {
           const errors = Array.isArray(r.errors) ? r.errors.filter(Boolean).join("; ") : "";
           const msg = String(errors || r.result || r.subtype || "the model returned an error");

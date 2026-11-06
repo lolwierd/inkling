@@ -44,6 +44,14 @@
 //                         [[passage:N]] (1-based) picks another, [[other:TEXT]] the words
 //                         quoted there (snapped onto the passage; default its first three
 //                         words), [[quote:TEXT]] the words here, [[depends]] the relation
+//   Sources from the web (only with "Look things up on the web" on, as the request's
+//   settings say), checked by the real brain's rules (src/web.ts), with no network:
+//   [[found:URL|TITLE|PAGE TEXT]]  a search in this call returned URL; PAGE TEXT is what
+//                                  the brain finds when it opens it (repeatable)
+//   [[source:URL|PASSAGE]]         the page the correction cites, and the words it quotes:
+//                                  a search hit with the words on its page is shown; a URL
+//                                  no [[found]] returned (made up), or a page without the
+//                                  words (a miss), falls back to the rest of the check
 //
 // Prefix a directive with a task to scope it: [[draw>badsvg]], [[reply>resolved]],
 // [[chat>error:overloaded]]. Directives are only read from the request's own
@@ -65,6 +73,7 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { withWorking } from "../../src/working.ts";
+import { verifySource } from "../../src/web.ts";
 
 type Any = Record<string, any>;
 
@@ -166,17 +175,19 @@ function firstWords(s: string, n: number): string {
   return m ? m[0].trim() : s;
 }
 
-function plan(id: string, input: Any) {
+function plan(id: string, input: Any, settings: Any = {}) {
   const task: string = input.task;
   const ds = directives(ownText(input)).filter((d) => d.task === null || d.task === task);
   const has = (name: string) => ds.some((d) => d.name === name);
   const arg = (name: string) => ds.find((d) => d.name === name)?.arg ?? null;
   const delayDirective = arg("delay");
   const delay = delayDirective !== null ? num(delayDirective, DEFAULT_DELAY) : num(env[`FAKE_DELAY_${task.toUpperCase()}_MS`], DEFAULT_DELAY);
-  return { task, ds, has, arg, delay };
+  return { task, ds, has, arg, delay, web: settings?.web === true };
 }
 
-function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): { data?: unknown; stream?: string; error?: [string, string] } {
+type Answer = { data?: unknown; stream?: string; error?: [string, string] };
+
+function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer & { pending?: Promise<Answer> } {
   const { task, has, arg } = p;
   const errKind = arg("error");
   if (errKind !== null) return { error: [errKind || "other", arg("errmsg") ?? `fake ${errKind || "other"} error`] };
@@ -197,7 +208,7 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): { data?:
       const text = has("empty") ? "" : `[${id}] ${task === "read" ? "Read" : "Probe"}: what about “${clean(quote)}”?`;
       if (task === "read" && !text.trim()) return { data: { speak: false } };
       const thought = { speak: true as const, kind: has("correction") ? ("correction" as const) : ("question" as const), quote, text, sketch: has("sketch") };
-      const checked = ["sum", "given", "words", "question", "nocheck"].some(has);
+      const checked = ["sum", "given", "words", "question", "nocheck", "source"].some(has);
       if (thought.kind !== "correction" || !checked) return { data: thought };
       // The check goes through the real brain's rules, against the text without directives.
       const all = (name: string) => p.ds.filter((d) => d.name === name).map((d) => d.arg ?? "");
@@ -212,9 +223,19 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): { data?:
       const bare = (v: unknown) => (typeof v === "string" ? v.replace(/\[\[[^\]]*\]\]/g, "") : "");
       const ctx = input.ctx ?? {};
       const writer = { title: bare(ctx.noteTitle), note: bare(ctx.noteText), brief: ctx.brief ? bare(ctx.brief) : null, target: bare(target), quote: bare(quote) };
-      const settled = withWorking(thought, { check: has("nocheck") ? undefined : check, question: arg("question") ?? "" }, writer, (why) => log(why));
-      if (settled) return { data: settled };
-      return task === "read" ? { data: { speak: false } } : { error: ["bad_output", "a correction came without a check or a question"] };
+      const settle = (cited: Parameters<typeof withWorking>[4]): Answer => {
+        const settled = withWorking(thought, { check: has("nocheck") ? undefined : check, question: arg("question") ?? "" }, writer, (why) => log(why), cited);
+        if (settled) return { data: settled };
+        return task === "read" ? { data: { speak: false } } : { error: ["bad_output", "a correction came without a check or a question"] };
+      };
+      const source = arg("source");
+      if (source === null) return settle(null);
+      // What this call's searches returned (nothing with the web off), and the pages behind them.
+      const hits = p.web ? all("found").map((f) => f.split("|")) : [];
+      const found = hits.map(([url, title]) => ({ url: url.trim(), title: (title ?? "").trim() }));
+      const pages = new Map(hits.map(([url, , ...page]) => [url.trim(), page.join("|")]));
+      const [url, ...passage] = source.split("|");
+      return { pending: verifySource({ url: url.trim(), passage: passage.join("|").trim() }, found, async (u) => pages.get(u) ?? null).then(settle) };
     }
     case "sketch": {
       const raw = arg("rawquote");
@@ -279,11 +300,33 @@ function chunks(text: string, n: number): string[] {
   return out;
 }
 
-function run(id: string, input: Any) {
+function run(id: string, input: Any, settings: Any = {}) {
   runs += 1;
-  const p = plan(id, input);
+  const p = plan(id, input, settings);
   const state = { timers: [] as ReturnType<typeof setTimeout>[], done: false };
   live.set(id, state);
+
+  if (p.has("exit") || (EXIT_AFTER > 0 && runs >= EXIT_AFTER)) {
+    log(`exiting on request ${id} (${p.task})`);
+    process.exit(3);
+  }
+  if (p.has("hang")) {
+    log(`hanging on ${id} (${p.task})`);
+    return;
+  }
+  const first = answerFor(id, input, p);
+  if (first.pending) {
+    // a source is being checked (no network: the directives serve the pages)
+    first.pending.then((a) => respond(id, p, a));
+    return;
+  }
+  respond(id, p, first);
+}
+
+/** Answer request `id` after its delay (a cancel in the meantime ends it instead). */
+function respond(id: string, p: ReturnType<typeof plan>, answer: Answer) {
+  const state = live.get(id);
+  if (!state) return;
   const later = (ms: number, f: () => void) => state.timers.push(setTimeout(f, ms));
   const finish = (e: Any) => {
     if (state.done) return;
@@ -295,16 +338,6 @@ function run(id: string, input: Any) {
       process.exit(5);
     }
   };
-
-  if (p.has("exit") || (EXIT_AFTER > 0 && runs >= EXIT_AFTER)) {
-    log(`exiting on request ${id} (${p.task})`);
-    process.exit(3);
-  }
-  if (p.has("hang")) {
-    log(`hanging on ${id} (${p.task})`);
-    return;
-  }
-  const answer = answerFor(id, input, p);
   if (answer.error) {
     later(p.delay, () => finish({ ev: "error", id, kind: answer.error![0], message: answer.error![1] }));
     return;
@@ -366,7 +399,7 @@ function start() {
     log("recv", req);
     switch (req.op) {
       case "run":
-        run(req.id, req.input ?? {});
+        run(req.id, req.input ?? {}, req.settings ?? {});
         break;
       case "cancel":
         cancel(req.id);

@@ -28,6 +28,35 @@ fn width_of(s: &str) -> f32 {
         + 4.
 }
 
+/// A page a correction cites, as the tag shows it: its title, its site and a way to open
+/// it in the browser. The brain made sure a search returned it and the words are on it.
+fn source_link(key: &str, src: &crate::store::Source, ink: Hsla, t: &Theme, cx: &mut Context<NotePage>) -> AnyElement {
+    let p = t.p;
+    let url = src.url.clone();
+    let tip = src.url.clone();
+    div()
+        .id(SharedString::from(format!("source-{key}")))
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_x(px(4.))
+        .text_size(px(ts::SMALL))
+        .line_height(px(17.))
+        .cursor_pointer()
+        .text_color(ink)
+        .hover(move |s| s.text_color(p.ink))
+        .child(div().child(src.title.clone()))
+        .child(div().text_color(p.faint).child("\u{b7}"))
+        .child(div().text_color(p.faint).child(src.domain.clone()))
+        .child(icon("external-link", 11., p.faint))
+        .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+        .on_click(cx.listener(move |_, _, _, cx| {
+            cx.stop_propagation();
+            cx.open_url(&url);
+        }))
+        .into_any_element()
+}
+
 fn tabular() -> FontFeatures {
     FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)]))
 }
@@ -62,7 +91,13 @@ impl NotePage {
         let text = self.editor.read(cx).text().to_string();
         let brief = self.note.brief.clone();
 
-        let label = if c.sum.is_empty() { "In your note" } else { "Working" };
+        let label = if !c.sum.is_empty() {
+            "Working"
+        } else if !c.words.is_empty() {
+            "In your note"
+        } else {
+            "Source"
+        };
         let mut head = div()
             .flex()
             .items_center()
@@ -140,6 +175,13 @@ impl NotePage {
         for (j, w) in c.words.iter().enumerate() {
             let link = self.word_link(&key, c.givens.len() + j, &w.words, w.note.clone(), &text, brief.as_deref(), ink, cx);
             block = block.child(div().when(back, |d| d.line_through()).child(link));
+        }
+        if let Some(src) = &c.source {
+            if label != "Source" {
+                block = block.child(div().mt(px(2.)).text_size(px(ts::META)).text_color(p.faint).child("Source"));
+            }
+            block = block.child(div().text_color(ink).when(back, |d| d.line_through()).child(format!("\u{201c}{}\u{201d}", src.passage)));
+            block = block.child(source_link(&key, src, ink, &t, cx));
         }
         Some(block.into_any_element())
     }

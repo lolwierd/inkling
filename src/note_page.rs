@@ -2632,6 +2632,7 @@ impl NotePage {
                         s.lettering = if v.contains("note") { crate::store::Lettering::LikeNotes } else { crate::store::Lettering::Own }
                     }
                     ("pointer", v) => s.ink_from_pointer = v == "on",
+                    ("web", v) => s.look_up = v == "on",
                     _ => log::warn!("script: unknown setting {key}={value}"),
                 }
                 cx.global::<Store>().save_settings();

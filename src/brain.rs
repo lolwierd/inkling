@@ -293,10 +293,12 @@ impl Brain {
         self.next_id += 1;
         // A level the model does not take would fail the call; send the nearest one.
         let effort = effort_for(&self.model_choices(cx).0, model, effort);
+        // Settings › Model › Look things up on the web; the brain decides which tasks may.
+        let web = cx.try_global::<crate::store::Store>().is_some_and(|s| s.settings.look_up);
         let req = json!({
             "op": "run",
             "id": id,
-            "settings": { "model": model, "effort": effort },
+            "settings": { "model": model, "effort": effort, "web": web },
             "input": input,
         });
         let mut callback: Callback = Box::new(callback);

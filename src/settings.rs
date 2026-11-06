@@ -118,6 +118,9 @@ fn over_limit(text: &str) -> Option<String> {
 }
 
 /// Effort levels offered when Claude Code has not said which a model takes.
+/// Under Look things up on the web: what leaves the Mac, and roughly what it costs.
+const LOOK_UP_NOTE: &str = "Searches built from your note go out through Claude, and Inkling opens a page it cites to check the quote. A read that searches costs about twice one that doesn\u{2019}t; most reads don\u{2019}t search.";
+
 const USUAL_EFFORTS: [&str; 3] = ["low", "medium", "high"];
 
 /// The open settings window, if any: ⌘, again brings it forward instead of opening another.
@@ -1104,6 +1107,17 @@ impl SettingsView {
                 } else {
                     "Reading along runs after every paragraph, so it defaults to low effort.".to_string()
                 },
+                &t,
+            ))
+            .child(section("The web", None, &t))
+            .child(group(
+                vec![row(
+                    "Look things up on the web",
+                    Some(LOOK_UP_NOTE.into()),
+                    ui::switch("look-up", s.look_up, &t).keyed_as("settings:look-up", 9., t.voice_ink, cx, |this, _, cx| this.update(cx, |s| s.look_up = !s.look_up)),
+                    &t,
+                )
+                .into_any_element()],
                 &t,
             ))
             .child(section("Coming next", None, &t))

@@ -84,7 +84,8 @@
 //! import: ../fixtures/vault # File > Import from Obsidian… with this folder; a relative
 //!                           # path starts at the script's own folder
 //! set: pace=slow            # pace=regular|slow, placement=both|right|marks,
-//!                           # learn=on|off, mode=thinks|ask (new notes)
+//!                           # learn=on|off, mode=thinks|ask (new notes),
+//!                           # web=on|off (Look things up on the web)
 //! width: 900                # resize the window to this width
 //! size: 900x620             # resize the window to this width and height
 //! dump: label               # log the page's state as one JSON line

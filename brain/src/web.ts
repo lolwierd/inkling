@@ -83,12 +83,20 @@ export function pageText(html: string): string {
     .trim();
 }
 
+/** A page as it came: HTML or text. `null` when it cannot be opened. */
 export type FetchPage = (url: string) => Promise<string | null>;
+
+/** The page's own title (og:title, else <title>), tidied; "" when it has none. */
+export function titleOf(page: string): string {
+  const og = /<meta[^>]+property=["']og:title["'][^>]*content=["']([^"']+)["']/i.exec(page) ?? /<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:title["']/i.exec(page);
+  const t = og?.[1] ?? /<title[^>]*>([\s\S]*?)<\/title>/i.exec(page)?.[1] ?? "";
+  return pageText(t).replace(/\s+/g, " ").trim().slice(0, 160);
+}
 
 const PAGE_TIMEOUT_MS = 10_000;
 const PAGE_MAX_BYTES = 4 * 1024 * 1024;
 
-/** The page's words, or `null` when it cannot be opened (a timeout, an error status, not text). */
+/** The page as it came, or `null` when it cannot be opened (a timeout, an error status, not text). */
 async function fetchPageForReal(url: string): Promise<string | null> {
   const signal = AbortSignal.timeout(PAGE_TIMEOUT_MS);
   try {
@@ -96,8 +104,7 @@ async function fetchPageForReal(url: string): Promise<string | null> {
     if (!res.ok) return null;
     const type = res.headers.get("content-type") ?? "";
     if (!/text\/|html|xml|json/i.test(type)) return null;
-    const body = (await res.text()).slice(0, PAGE_MAX_BYTES);
-    return /html|xml/i.test(type) || /<html|<body|<p[\s>]/i.test(body.slice(0, 2000)) ? pageText(body) : body;
+    return (await res.text()).slice(0, PAGE_MAX_BYTES);
   } catch {
     return null;
   }
@@ -123,9 +130,11 @@ export async function verifySource(raw: unknown, found: Found[], open: FetchPage
   if (words < 5 || words > 40) return { why: `the passage it quotes from ${domainOf(hit.url)} has ${words} words` };
   const page = await open(hit.url);
   if (page === null) return { why: `${hit.url} could not be opened` };
-  const onPage = findQuote(passage, page);
+  const onPage = findQuote(passage, pageText(page));
   if (!onPage) return { why: `the passage is not on ${hit.url}` };
-  return { source: { url: hit.url, title: hit.title || (typeof (raw as any).title === "string" ? (raw as any).title.trim() : "") || domainOf(hit.url), domain: domainOf(hit.url), passage: onPage.replace(/\s+/gu, " ").trim() } };
+  // the page's own title reads better than a search's (which can be a section's name)
+  const title = titleOf(page) || hit.title || domainOf(hit.url);
+  return { source: { url: hit.url, title, domain: domainOf(hit.url), passage: onPage.replace(/\s+/gu, " ").trim() } };
 }
 
 const URL_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|<?(https?:\/\/[^\s<>()"]+[^\s<>()".,;:!?'’”])>?/giu;

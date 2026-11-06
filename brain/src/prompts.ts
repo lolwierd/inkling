@@ -85,7 +85,9 @@ const checkRules = (web: boolean) => [
   "  givens: each number you took from the writer, {\"value\": \"5:30\", \"words\": \"hold 5:30\"}, words being their exact words that contain it (1 to 6 words);",
   "  or words: 1 or 2 passages copied exactly from elsewhere in the note that this paragraph contradicts.",
   ...(web ? [SOURCE_RULE] : []),
-  "  Every number in text is the writer's or is in your sum: a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}.",
+  web
+    ? "  Every number in text is the writer's, in your sum, or in your source's passage: leave out any other figure, and a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}."
+    : "  Every number in text is the writer's or is in your sum: a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}.",
   "- question (corrections only): what to ask instead if your check does not hold up, at most 45 words.",
 ];
 
@@ -96,10 +98,10 @@ const NO_SOURCES =
 // cite a page; the brain keeps the citation only if a search in this call returned its URL
 // and the passage is on the page (web.ts).
 const SOURCE_RULE =
-  "  or source: a page that settles it, {\"url\": \"…\", \"passage\": \"…\"}: the url exactly as your WebSearch returned it in this answer, and 5 to 30 words copied word for word from that page (read it with WebFetch first). Inkling opens the page to find the passage, and drops a source it cannot find.";
+  "  or source: a page that settles it, {\"url\": \"…\", \"passage\": \"…\"}: the url exactly as your WebSearch returned it in this answer, and 5 to 30 words copied word for word from that page. To get them, WebFetch the page with a prompt like \"Quote word for word the sentence that gives the height\". Inkling opens the page to find the passage, and drops a source it cannot find.";
 
 const WEB_SOURCES =
-  "You can search the web (WebSearch) and read a page (WebFetch). Search only when a factual claim cannot be settled from the note itself; never search for what the note already decides, and never just to find something to say. Most paragraphs need no search. A fact that rests only on what you remember, with no page to cite, is a question, not a correction; say what you remember inside the question.";
+  "You can search the web (WebSearch) and read a page (WebFetch). Before you correct or doubt a fact that the note itself cannot settle, search for it and read the best page, so the correction can cite it as its source. Do not search when the note settles the point, or when you have nothing to say about the paragraph. A fact you could not find a page for is a question, not a correction; say what you remember inside the question.";
 
 /** For answers in prose: when to search, and links only to pages a search returned. */
 const WEB_PROSE =

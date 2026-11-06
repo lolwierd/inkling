@@ -1,0 +1,36 @@
+# Sources from the web, only when real. With Look things up on the web on (the default),
+# a correction citing a page a search returned, with the quoted words on it, shows that
+# page under it; a made-up URL, or a page without the words, falls back to the question;
+# with the setting off nothing is searched, so no page counts. Copy and Export carry it.
+# tags: working
+note: Paris
+type: [[correction]][[quote:450 metres tall]][[found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall, about the same height as an 81-storey building.]][[source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[question:Where did 450 metres come from?]] The Eiffel Tower is 450 metres tall.
+settle
+dump: sourced
+expect: d.threads.length === 1 && d.threads[0].kind === "Correction" && d.threads[0].check === "source:1"
+type: [[correction]][[quote:built in 1899]][[found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|It was built from 1887 to 1889 as the entrance arch to the World's Fair.]][[source:https://eiffel-facts.example/history|It was built from 1887 to 1889 as the entrance arch]][[question:When was it finished?]] It was built in 1899.
+settle
+dump: made-up
+expect: d.threads.length === 2 && d.threads[1].kind === "Question" && d.threads[1].check === null
+type: [[correction]][[quote:330 tonnes]][[found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The whole tower weighs about 10,100 tonnes.]][[source:https://en.wikipedia.org/wiki/Eiffel_Tower|The iron structure alone weighs 7,300 tonnes]][[question:Where does 330 tonnes come from?]] Its iron weighs 330 tonnes.
+settle
+dump: miss
+expect: d.threads.length === 3 && d.threads[2].kind === "Question"
+set: appearance=light
+hover: 1
+wait: 900
+shot: source
+hover: 0
+set: web=off
+type: [[correction]][[quote:450 metres tall]][[found:https://en.wikipedia.org/wiki/Eiffel_Tower|Eiffel Tower - Wikipedia|The tower is 330 metres (1,083 ft) tall.]][[source:https://en.wikipedia.org/wiki/Eiffel_Tower|The tower is 330 metres (1,083 ft) tall]][[question:How tall is it really?]] Again, the Eiffel Tower is 450 metres tall.
+settle
+dump: web-off
+expect: d.threads.length === 4 && d.threads[3].kind === "Question"
+copy: 1
+export: md
+quit
+expect: requests.filter(r => r.input.task === "read").slice(0, 3).every(r => r.settings.web === true) && requests.filter(r => r.input.task === "read").at(-1).settings.web === false
+expect: note("Paris").threads[0].messages[0].check.source.domain === "en.wikipedia.org" && note("Paris").threads[0].messages[0].check.source.title === "Eiffel Tower - Wikipedia"
+expect: log.some(r => r.msg.startsWith("script copy:") && r.msg.includes("Source: “The tower is 330 metres (1,083 ft) tall” (Eiffel Tower - Wikipedia, en.wikipedia.org: https://en.wikipedia.org/wiki/Eiffel_Tower)"))
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> *Source:* “The tower is 330 metres (1,083 ft) tall”"))
+expect: settings.look_up === false

@@ -2,7 +2,7 @@
 // call returned its URL and the quoted passage is on the page. No network: pages come from
 // a fake fetch. Run: bun test test/web.test.ts
 import { describe, expect, test } from "bun:test";
-import { domainOf, foundIn, keepFoundLinks, pageText, sameUrl, verifySource, WEB_TASKS, type Found } from "../src/web.ts";
+import { domainOf, foundIn, keepFoundLinks, pageText, sameUrl, titleOf, verifySource, WEB_TASKS, type Found } from "../src/web.ts";
 import { backCorrection, withWorking, type Thought, type Writer } from "../src/working.ts";
 
 const TOWER = "https://en.wikipedia.org/wiki/Eiffel_Tower";
@@ -28,6 +28,16 @@ describe("search results", () => {
     const words = pageText(PAGE);
     expect(words).toContain("The tower is 330 metres (1,083 ft) tall");
     expect(words).not.toContain("450");
+  });
+});
+
+describe("a page's own title", () => {
+  test("og:title first, then <title>, tidied; a search's title when it has none", async () => {
+    expect(titleOf('<head><meta property="og:title" content="The Eiffel Tower just got 20 feet taller"><title>NewsNational News</title></head>')).toBe("The Eiffel Tower just got 20 feet taller");
+    expect(titleOf("<title>\n  Eiffel Tower &amp; its lifts\n</title>")).toBe("Eiffel Tower & its lifts");
+    expect(titleOf("plain text")).toBe("");
+    const r = await verifySource({ url: TOWER, passage: PASSAGE }, found, async () => '<title>Eiffel Tower – the official site</title><p>The tower is 330 metres (1,083 ft) tall.</p>');
+    expect("source" in r && r.source.title).toBe("Eiffel Tower – the official site");
   });
 });
 

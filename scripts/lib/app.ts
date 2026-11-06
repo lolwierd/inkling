@@ -217,12 +217,14 @@ function run(argv) {
   return JSON.stringify(out);
 }`;
 
-/** The main window of process `pid`: the largest normal-layer window. */
-export async function windowOf(pid: number): Promise<number | null> {
+/** The main window of process `pid`: the largest normal-layer window, or the one whose
+ *  title contains `named` (case aside), such as "settings". */
+export async function windowOf(pid: number, named?: string): Promise<number | null> {
   const r = await sh(["osascript", "-l", "JavaScript", "-e", WINDOWS_JXA, String(pid)], { timeoutMs: 10000 });
   if (r.code !== 0) return null;
   try {
-    const wins = (JSON.parse(r.out) as { id: number; layer: number; w: number; h: number }[]).filter((w) => w.layer === 0);
+    let wins = (JSON.parse(r.out) as { id: number; name: string | null; layer: number; w: number; h: number }[]).filter((w) => w.layer === 0);
+    if (named) wins = wins.filter((w) => (w.name ?? "").toLowerCase().includes(named.toLowerCase()));
     wins.sort((a, b) => b.w * b.h - a.w * a.h);
     return wins[0]?.id ?? null;
   } catch {
@@ -252,6 +254,8 @@ export interface LaunchOptions {
   /** Window nudge interval in ms, so a covered window keeps drawing; 0 turns it off. */
   jiggle?: number;
   open?: string;
+  /** Shots capture the window whose title contains this (e.g. "settings"), not the note's. */
+  window?: string;
 }
 
 export interface LaunchResult {
@@ -317,9 +321,9 @@ export async function launch(o: LaunchOptions): Promise<LaunchResult> {
         const m = /^script: Shot\("(.*)"\)$/.exec(msg);
         if (!m) continue;
         const name = m[1].replace(/[^\w.-]+/g, "-") || "shot";
-        windowId ??= await windowOf(proc.pid);
+        windowId ??= await windowOf(proc.pid, o.window);
         if (windowId === null) {
-          result.shots.push({ name, path: null, error: "could not find the app's window" });
+          result.shots.push({ name, path: null, error: o.window ? `no window titled like "${o.window}"` : "could not find the app's window" });
           continue;
         }
         const path = join(o.dir, "shots", `${name}.png`);

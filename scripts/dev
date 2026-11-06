@@ -33,6 +33,9 @@ const HELP = `scripts/dev <command> [options]
       --open chat,sidebar      panels to open at launch (INKLING_OPEN)
       --width PX               window width before the dump
       --appearance light|dark  (shot; default light) --out FILE (shot) --slowmo N (shot)
+      --window NAME            (shot) the window whose title contains NAME, e.g. settings
+      --env KEY=VALUE          an INKLING_* knob for this run (repeatable), e.g.
+                               INKLING_SETTINGS_TAB=appearance with --open settings
       --timeout S              stop the app after S seconds (default 120)
   show DIR [notes|dumps|brain|log|all] [--json]
                                what a run left: notes and threads, dumps, brain traffic, log
@@ -154,7 +157,13 @@ async function look(kind: "state" | "shot"): Promise<number> {
 
   const env: Record<string, string> = {};
   if (flag("--slowmo")) env.INKLING_SLOWMO = flag("--slowmo")!;
-  const run = await launch({ script, dir, env, timeoutMs: Number(flag("--timeout") ?? 120) * 1000, open: flag("--open") });
+  for (const kv of flags.get("--env") ?? []) {
+    const [k, v] = kv.split(/=(.*)/s);
+    // Only the app's own knobs: never another notebook, script or brain (launch() sets those).
+    if (!k.startsWith("INKLING_") || ["INKLING_DATA_DIR", "INKLING_SCRIPT", "INKLING_BRAIN_ENTRY", "INKLING_BACKGROUND", "INKLING_WINDOW_TITLE"].includes(k)) die(`--env takes INKLING_* knobs, not ${k}`);
+    env[k] = v ?? "";
+  }
+  const run = await launch({ script, dir, env, timeoutMs: Number(flag("--timeout") ?? 120) * 1000, open: flag("--open"), window: flag("--window") });
   const log = readLog(join(dir, "app.log"));
   const dumps = dumpsOf(log);
   const p = problems(log);

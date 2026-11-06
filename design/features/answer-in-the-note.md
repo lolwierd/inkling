@@ -4,11 +4,12 @@ Manifesto items 1 and 6 (`design/manifesto.md`, section 2), designed 7 Nov 2026 
 `feat-answer`. Both move what you worked out into the note itself, and both end the same way:
 a thread whose knot points at your words in the note.
 
-**State (7 Nov 2026):** rebased onto master with Let it stand, Show its working, Loose ends,
-Turn it over, Threads between notes, Read it through and web sources (`settle`, like every
-read, is a background check and never looks things up); the shared part and Answer in the note are built on `feat-answer`
-(scenarios t40 to t44; six live checks against the real model, below). Write it in
-is being built by a second agent on top of the shared part. Screenshots, light and dark:
+**State (7 Nov 2026):** built on `feat-answer`, rebased onto master with Let it stand,
+Show its working, Loose ends, Turn it over, Threads between notes, Read it through, web
+sources and Threads of your own (`settle`, like every read, never looks things up; a thread
+of your own is never answered). The shared part and Answer in the note are done (scenarios
+t40 to t45; six live checks against the real model, below). Write it in is being built by a
+second agent on top of the shared part. Screenshots, light and dark:
 `design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, and the back of
 the note, `answer-in-the-note-back-light.jpg`.
 
@@ -396,7 +397,7 @@ dominates a cold call, on any task).
 |---|---|---|
 | **Let it stand** (a reason when you dismiss; minds told) | A thread let stand is not open, so it is never answered. Its "never ask again" and `not_answers` are the same idea (remember a no) at different scales; both reach the minds through `ThreadSummary`. | `Thread` (they add the reason; I add `answer`, `tied_by`, `not_answers` at the end), `ThreadSummary` (each adds optional fields), `threadsBlock` (theirs; I do not touch it). |
 | **Turn it over** (every thread on the back of the note) | Landed first. Its endings come from the status (`Thread::ending`), and still read the same: "Tied off · 7 Nov" with the mind's last word under it, which for an answer is its `settle` line. A thread tied off by an answer also shows "Answered in your note:" and the words, on the back and in its Markdown (`back.rs`, `Entry.answer`). | `Thread`, `TiedBy`, `back::Entry`. |
-| **Threads of your own** | Your own question is answered the natural way, by writing the answer: such threads are answerable like any other, judged by the note's mind, with `settle` told the writer asked it. | `ThoughtKind` (they may add a kind; `answers::answerable` treats every open kind as answerable). |
+| **Threads of your own** | Landed first. A thread of your own is never tied off by an answer: only you tie it off (`answers::answerable` is false for `Thread.own`; it goes to the minds with `open: false`, and the brain's `isOpen` and `pickAnswers` skip `own` too; scenario t45). | `Thread.own`, `ThreadSummary.own`. |
 | **Show its working** (a correction carries a check) | A correction's check helps `settle` judge whether your answer is right. Both change the read's schema: they add to `THOUGHT_SCHEMA`; mine is built from theirs. | `THOUGHT_SCHEMA` in `prompts.ts`. |
 | **Loose ends** (every open thread in one list) | A thread tied off by an answer leaves the list at once. Nothing else is shared. | None. |
 | **Threads between notes** | Landed first. A thread between notes lives in its home note; the note at its other end shows a visiting copy and sends its state home on save. Only words in the home note tie such a thread off: the visiting end goes to the minds with `open: false`, the app never ties it by an answer there, and its `answer` (the home note's words) is left as it is, so saving sends it home unchanged and no knot is drawn in the wrong note (`visiting_ids`, `answerable_here`; scenario t44). A later version could keep an answer in either note with `note: Option<String>` on `Answer`. | `ThreadSummary` (their `elsewhere`, my `open`); `Thread` (copied home whole by `send_home`). |
@@ -498,8 +499,10 @@ quit
 - `t44-answer-between.txt`: a thread between notes is not answered by words in the note it
   visits (it goes to the minds as not open there, and no `settle` runs), and is by words in
   its home note, with the knot there.
+- `t45-answer-own.txt`: a thread of your own is never answered (not open to the minds, no
+  `settle`), while a mind's thread named by the same paragraph ties off.
 
-`t45-write-it-in.txt` (for the Write it in build; the number is the next free one when it lands):
+`t46-write-it-in.txt` (for the Write it in build; the number is the next free one when it lands):
 
 ```text
 # fixture: running-plan
@@ -563,7 +566,7 @@ date fixed, all six pass.
 | `brain/test/e2e/fake-brain.ts`, `unit.test.ts`, `protocol.test.ts`, `live.ts` | as in Tests |
 | `src/note_page/answers.rs` | `take_answers` (from a read), `read_for_answers` (waiting notes), `listens_for_answers`, `settle_answer`, `tie_by_answer` |
 | `src/note_page.rs` (hooks) | `read_line`'s `done` calls `take_answers`; `consider` sends a waiting note's paragraphs to `read_for_answers`; `context_with` adds the thread fields; `NotePage.answer_checks` |
-| scenarios `t40` to `t44`; `design/capabilities.md` | one row under Reading along |
+| scenarios `t40` to `t45`; `design/capabilities.md` | one row under Reading along |
 
 ### Write it in (the second agent, on top of the shared part)
 
@@ -574,7 +577,7 @@ date fixed, all six pass.
 | `src/note_page.rs` (hooks) | `mod write_in;`; `tag_panel` adds `write_in_offer` |
 | `src/toast.rs`, `src/app.rs` | `Kind::WrittenIn` (8 s, Undo) and its arm in the stack's Undo |
 | `src/script.rs` | `writein`, `undo-writein` |
-| scenario `t45` (or the next free number); `design/capabilities.md` | one row under Threads |
+| scenario `t46` (or the next free number); `design/capabilities.md` | one row under Threads |
 
 The two meet only in `tag_panel` (one line each, on different lines) and in
 `capabilities.md` (one row each). Write it in reads `tied_by` and writes `answer` through

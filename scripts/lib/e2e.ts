@@ -16,13 +16,15 @@
 // An `expect:` sees `d`, the state from the nearest `dump:` above it, and the run's
 // results: dumps (by label), notes / settings / minds / folders (the notebook files after
 // the app quit), note(title), requests (what the app sent the brain), tasks (their task
-// names), events (what the brain sent back), log (app log records), warnings, exit.
+// names), events (what the brain sent back), log (app log records), warnings, exit; and
+// helpers: textOf(note), rangeText(note, thread), blockOf(note, thread or quote),
+// overlaps(d). `requests` and the files are the final state, not the state at the dump.
 //
 // A run fails when an expectation is false or throws, a dump or shot is missing, the app
 // panics, logs an error, exits non-zero or times out, or a script step only warned
 // (unknown step, phrase not found, no such thread): a typo must not pass silently.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   SCENARIOS,
@@ -164,9 +166,32 @@ export function compactDump(state: any): string {
   return lines.join("\n");
 }
 
+/** Helpers an `expect:` can call. Offsets in notes are UTF-8 byte offsets into the
+ *  blocks joined by "\n" (title included), as the app stores them. */
+const helpers = {
+  /** A note's text as the app indexes it. */
+  textOf: (n: any): string => (n?.blocks ?? []).map((b: any) => b.text).join("\n"),
+  /** The text a thread's stored byte range covers. */
+  rangeText: (n: any, t: any): string => Buffer.from(helpers.textOf(n)).subarray(t.start, t.end).toString(),
+  /** The block (0 = title) a thread starts in; `t` may be a thread or its quote. */
+  blockOf: (n: any, t: any): number => {
+    const th = typeof t === "string" ? n.threads.find((x: any) => x.quote === t) : t;
+    return Buffer.from(helpers.textOf(n)).subarray(0, th.start).toString().split("\n").length - 1;
+  },
+  /** Margin tags in a dump that overlap a neighbour on the same side. */
+  overlaps: (d: any): number => {
+    let n = 0;
+    for (const side of ["Left", "Right"]) {
+      const s = (d.slots ?? []).filter((x: any) => x.side === side).sort((a: any, b: any) => a.top - b.top);
+      for (let i = 1; i < s.length; i++) if (s[i].top < s[i - 1].top + s[i - 1].h - 0.5) n++;
+    }
+    return n;
+  },
+};
+
 function evaluate(expr: string, scope: Record<string, unknown>): { ok: boolean; error?: string } {
   try {
-    const f = new Function(...Object.keys(scope), `"use strict"; return (${expr});`);
+    const f = new Function(...Object.keys(scope), `"use strict"; return (\n${expr}\n);`);
     const v = f(...Object.values(scope));
     return v === true ? { ok: true } : { ok: false, error: `was ${JSON.stringify(v)}` };
   } catch (e) {
@@ -198,6 +223,7 @@ export function check(s: Scenario, dir: string, run: { exit: number | null; time
   const byLabel: Record<string, any> = {};
   for (const d of dumps) byLabel[d.label] = d.state;
   const scope = {
+    ...helpers,
     dumps: byLabel,
     notes: store.notes,
     settings: store.settings,
@@ -252,7 +278,9 @@ async function withLock<T>(enabled: boolean, say: (s: string) => void, f: () => 
       } catch {
         // being written right now
       }
-      const alive = owner?.pid ? (() => { try { process.kill(owner.pid, 0); return true; } catch { return false; } })() : true;
+      // A dead owner, or a lock left half-made (no owner file after 10 s), is stale.
+      const age = (() => { try { return Date.now() - statSync(lock).mtimeMs; } catch { return 0; } })();
+      const alive = owner?.pid ? (() => { try { process.kill(owner.pid, 0); return true; } catch { return false; } })() : age < 10_000;
       if (!alive) {
         unlock(lock);
         continue;
@@ -265,6 +293,7 @@ async function withLock<T>(enabled: boolean, say: (s: string) => void, f: () => 
   }
   const release = () => unlock(lock);
   process.on("exit", release);
+  for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => process.exit(130));
   try {
     return await f();
   } finally {

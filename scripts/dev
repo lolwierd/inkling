@@ -23,7 +23,8 @@ const HELP = `scripts/dev <command> [options]
       --real                   also run scenarios marked "# brain: real" (model calls!)
       --no-lock                do not wait for another e2e run on this machine
       --json                   machine-readable summary on stdout
-  state [notebook] [steps]     launch the app, play steps, print the page state as JSON
+  state [notebook] [steps]     launch the app, play steps, let the page settle (reads and
+                               replies done), print the page state as JSON
   shot  [notebook] [steps]     same, and screenshot the window; prints the PNG path
       --fixture NAME           start from brain/test/e2e/fixtures/NAME (scripts/dev fixtures)
       --from DIR               start from a copy of another notebook folder (never in place)
@@ -142,7 +143,9 @@ async function look(kind: "state" | "shot"): Promise<number> {
   if (flag("--script")) steps.push(...readFileSync(flag("--script")!, "utf8").split("\n"));
   steps.push(...(flags.get("--step") ?? []));
   if (flag("--width")) steps.push(`width: ${flag("--width")}`);
-  steps.push("wait: 900");
+  // Until the page has nothing scheduled or in flight (a pause, a read, a reply), then
+  // a few frames so layout catches up.
+  steps.push("settle", "wait: 400");
   if (kind === "shot") steps.push("shot: shot");
   steps.push("dump: state", "quit");
   const script = join(dir, "script.txt");

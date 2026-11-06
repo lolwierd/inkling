@@ -1,13 +1,20 @@
+# The page at four window widths, with and without chat: the margins fold to one side first,
+# and when even that does not fit, the sheet starts at the left edge.
 dump: w1320
+expect: d.metrics.both && d.metrics.fits
 width: 800
 wait: 500
 dump: w800
+expect: !d.metrics.both && d.metrics.fits   // one margin, on the right
 width: 1100
 wait: 300
 chat: hello
 wait: 800
 dump: w1100-chat
+expect: d.metrics.available < d.metrics.viewport && !d.metrics.both && d.metrics.fits   // the chat panel takes its width from the page
 width: 720
 wait: 500
 dump: w720-chat
+expect: !d.metrics.both && !d.metrics.fits && d.metrics.column < dumps["w800"].metrics.column   // too narrow beside the chat: the sheet starts at the left so the column stays in view
+expect: d.chat === 2
 quit

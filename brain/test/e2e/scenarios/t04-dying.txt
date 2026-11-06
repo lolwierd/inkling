@@ -1,3 +1,4 @@
+# The brain dies mid-answer and right after one: waiters fail once, the next request starts a new brain.
 note: Dying
 mode: ask
 type: Ask about this sentence here please.
@@ -6,21 +7,26 @@ select: this sentence
 ask: What is it? [[exitmid]]
 wait: 1500
 dump: after-exit
+expect: d.error.includes("the brain stopped") && d.pending.length === 0
 keys: \nInkling, are you back now?
 wait: 2700
 dump: after-restart
+expect: d.threads.some(t => t.kind === "Answer" && t.msgs === 1)
 select: here please
-riddle
+probe
 wait: 800
-dump: riddled
+dump: probed
+expect: d.threads.some(t => t.quote === "here please" && t.msgs === 1)
 type: Visualize this then die [[exitafter]] right away.
 wait: 300
 select: Visualize this then die [[exitafter]]
-visualize
+sketch
 wait: 2500
 dump: after-exitafter
+expect: d.threads.some(t => t.kind === "Sketch" && !t.drawing)   // its drawing went to a brain that had just quit
 select: right away
-riddle
+probe
 wait: 1000
 dump: final
+expect: d.threads.some(t => t.quote === "right away" && t.msgs === 1) && d.pending.length === 0
 quit

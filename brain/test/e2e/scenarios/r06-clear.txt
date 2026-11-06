@@ -1,7 +1,10 @@
+# Clear while a chat reply is on its way cancels it; nothing arrives afterwards.
 note: Clearer
 chat: What have we figured out so far? [[delay:1500]]
 wait: 300
 clear
 wait: 3000
 dump: after
+expect: d.chat === 0 && d.chat_pending === null && note("Clearer").chat.length === 0
+expect: events.some(e => e.ev === "error" && e.kind === "cancelled")
 quit

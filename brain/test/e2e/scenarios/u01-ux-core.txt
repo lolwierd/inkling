@@ -1,23 +1,33 @@
 # UX core on the running-plan note (design/tools/demo_notebook.py): jump, undo dismiss,
 # ask the room, and fix the words (the fake brain resolves when the message says [[resolved]])
 # fixture: running-plan
+# tags: smoke
 wait: 1500
 jump: next
 dump: jumped-1
+expect: d.active === "t1"
 jump: next
 dump: jumped-2
+expect: d.active === "t2"
 dismiss: 2
 dump: dismissed
+expect: d.undo === "t2" && d.statuses.includes("t2:Dismissed:Inkling")
 undo-dismiss
 dump: undone
+expect: d.undo === null && d.statuses.includes("t2:Open:Inkling")
 escape
 select: four days a week
 room: Inkling, Skeptic, Tutor
 ask: Is four days enough?
 wait: 2500
 dump: room
+expect: d.threads.filter(t => t.kind === "Ask" && t.quote === "four days a week").length === 3
+expect: new Set(d.statuses.slice(2).map(s => s.split(":")[2])).size === 3   // three minds, one thread each
 edit: 5:30 for the whole race => 4:55 for the whole race [[resolved]]
 caret: end
 wait: 5000
 dump: fixed
+expect: d.statuses.includes("t1:Resolved:Inkling") && d.threads.find(t => t.id === "t1").msgs === 2
+expect: note("Sub-50 10k by March").threads.find(t => t.id === "t1").quote.includes("4:55")   // the quote follows the fixed words
+expect: tasks.join() === "ask,ask,ask,reply"
 quit

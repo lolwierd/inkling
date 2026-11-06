@@ -1,3 +1,4 @@
+# A read in flight while Enter moves its paragraph down still anchors on that paragraph.
 note: Shifter
 type: We know the cache is cold at boot time today.
 wait: 3000
@@ -7,4 +8,7 @@ caret: start
 enter
 wait: 3000
 dump: after
+expect: d.threads.length === 2
+expect: blockOf(note("Shifter"), "the cache") === 3   // "the cache" is in both paragraphs; this answer was about the second
+expect: note("Shifter").threads.every(t => rangeText(note("Shifter"), t) === t.quote)
 quit

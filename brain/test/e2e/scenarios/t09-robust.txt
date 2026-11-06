@@ -1,3 +1,6 @@
+# Steps aimed at things that are not there, multibyte text, answers of null, a read that fails.
+# allow-warn: no thread 99
+# allow-warn: no note titled
 note: Robust
 mode: ask
 activate: 99
@@ -11,19 +14,21 @@ switch: No such note
 type: Café crème 🍰 brûlée is déjà vu for the naïve coöperator [[rawquote:not in this paragraph]].
 wait: 300
 select: 🍰 brûlée
-riddle
+probe
 wait: 600
 select: Café crème 🍰 brûlée is déjà vu for the naïve coöperator [[rawquote:not in this paragraph]]
-riddle
+probe
 wait: 600
 dump: multibyte
+expect: d.threads.length === 2 && d.threads.some(t => t.quote === "🍰 brûlée")
+expect: d.anchors.every(a => a.range[0] <= a.range[1])
 type: Null answers here [[null]] for every task.
 wait: 300
 select: Null answers here [[null]]
-riddle
+probe
 wait: 500
 select: answers here [[null]]
-visualize
+sketch
 wait: 800
 select: here [[null]] for
 ask: why? [[null]]
@@ -31,15 +36,19 @@ wait: 600
 chat: and the chat? [[null]]
 wait: 600
 dump: nulls
+expect: d.error === "Inkling came back with nothing to say. Try again." && d.pending.length === 0 && d.chat_pending === null
 activate: 1
 reply: reply null [[null]]
 wait: 600
 dump: reply-null
+expect: d.pending.length === 0
 mode: thinks
 keys: \nThis paragraph fails to be read the first time [[error:overloaded]].
 wait: 2700
 dump: read-failed
+expect: d.error.includes("overloaded")
 enter
 wait: 2700
 dump: after-enter
+expect: requests.filter(r => r.input.task === "read" && r.input.target.startsWith("This paragraph fails")).length === 2   // a failed read is tried again
 quit

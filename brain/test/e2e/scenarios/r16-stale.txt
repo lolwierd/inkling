@@ -1,7 +1,11 @@
 # A stored quote that appears twice anchors nearest where it was.
 # fixture: stale
 dump: loaded
+expect: d.anchors.find(a => a.id === d.threads[0].id).range.join() === "24,34"   // stored 26..36: snapped to the nearest "alpha beta"
+expect: (a => a.range[0] === a.range[1])(d.anchors.find(a => a.id === d.threads[1].id))   // its words are gone: an empty anchor
 keys: \sx
 wait: 800
 dump: typed
+expect: d.threads.length === 2 && d.anchors.find(a => a.id === d.threads[0].id).range.join() === "24,34"
+expect: rangeText(note("Stale"), note("Stale").threads[0]) === "alpha beta"
 quit

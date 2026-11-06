@@ -1,29 +1,37 @@
+# Every error kind from the brain becomes its own plain sentence; a failed probe leaves no thread.
 note: Errors
 mode: ask
 type: Auth fails [[error:auth]][[errmsg:401 Unauthorized: OAuth token has expired]] then rate [[error:rate_limit]] then busy [[error:overloaded]][[errmsg:overloaded, see the logs in brain.log]] then cancel [[error:cancelled]] then bad [[error:bad_output]] then other [[error:other]].
 wait: 300
 select: Auth fails [[error:auth]][[errmsg:401 Unauthorized: OAuth token has expired]]
-riddle
+probe
 wait: 600
 dump: auth
+expect: d.error.startsWith("Sign in to Claude Code")
 select: rate [[error:rate_limit]]
-riddle
+probe
 wait: 600
 dump: rate
+expect: d.error.includes("usage limit")
 select: busy [[error:overloaded]][[errmsg:overloaded, see the logs in brain.log]]
-riddle
+probe
 wait: 600
 dump: overloaded
+expect: d.error.includes("overloaded")
 select: cancel [[error:cancelled]]
-riddle
+probe
 wait: 600
 dump: cancelled
+expect: d.error === dumps.overloaded.error   // a cancelled request says nothing new
 select: bad [[error:bad_output]]
-riddle
+probe
 wait: 600
 dump: bad_output
+expect: d.error.includes("shape Inkling can't use")
 select: other [[error:other]]
-riddle
+probe
 wait: 600
 dump: other
+expect: d.error.startsWith("Couldn't reach the model: fake other error")
+expect: d.threads.length === 0 && tasks.length === 6 && tasks.every(t => t === "probe")
 quit

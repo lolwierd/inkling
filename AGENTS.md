@@ -36,12 +36,14 @@ failure, and those that report take `--json`.
 |---|---|---|
 | Check everything before a commit | `scripts/dev check` | ~20 s |
 | ... plus the smoke scenarios in the app | `scripts/dev check --e2e` | ~1 min |
-| Run scenarios (all, by name, prefix or tag) | `scripts/dev e2e`, `scripts/dev e2e u01 t02`, `scripts/dev e2e smoke` | all: ~6 min |
+| Run scenarios (all, by name, prefix or tag) | `scripts/dev e2e`, `scripts/dev e2e u01 t02`, `scripts/dev e2e smoke` | all: ~7.5 min |
 | List scenarios, their fixtures and expects | `scripts/dev e2e --list` | |
-| Page state as JSON after some steps | `scripts/dev state --fixture running-plan --step "jump: next"` | ~5 s |
+| Page state as JSON after some steps (it waits for reads and replies to finish) | `scripts/dev state --fixture running-plan --step "jump: next"` | ~5 s |
 | Screenshot of that state | `scripts/dev shot --fixture running-plan --step "activate: 1"` → prints a PNG path; read it | ~6 s |
 | What a run left (notes, threads, dumps, brain traffic, log) | `scripts/dev show <notebook dir>` | |
-| Banned words | `scripts/dev lint` | |
+| Banned words, map drift, scenario typos | `scripts/dev lint` | 1 s |
+| A new worktree, ready to build and test | `scripts/dev worktree NAME` (clones `target/` and `brain/node_modules`) | ~5 s |
+| What is missing or running | `scripts/dev doctor` | |
 | One Rust test / one brain test file | `cargo test <name>` / `cd brain && bun test test/<file>` | |
 | Build the bundle (for the owner, not for checks) | `./scripts/bundle.sh` | |
 
@@ -78,10 +80,10 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | File | Owns | Look here for |
 |---|---|---|
 | `src/main.rs` | logging, the notebook guard, the one window | `INKLING_LOG_JSON`, window options |
-| `src/app.rs` | top bar, sidebar, ⌘K palette, settings and export overlays, key bindings, hold-⌥ dictation, script runner (`run_script`) and app-level steps | actions and keys (`init`), `INKLING_OPEN`, `INKLING_JIGGLE` |
-| `src/note_page.rs` | one note: header, editor, margin cards, threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
+| `src/app.rs` | the window: no title bar (traffic lights, sidebar toggle and Chat sit on the cloth above the sheet and fade while you type), the sidebar with the wordmark, ⌘K palette, settings and export overlays, key bindings, hold-⌥ dictation, the script runner (`run_script`) and window-level steps | actions and keys (`init`), `chrome_layer`, `INKLING_OPEN`, `INKLING_JIGGLE` |
+| `src/note_page.rs` | one note: header row, editor, the margin's tags (folded to a tab until pointed at or opened; draggable, `Thread.tag_offset`), threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
 | `src/editor.rs` | the document as one string with `\n` between blocks; block kinds, marks, undo, IME, layout, painting; `Anchor`s (thread ranges) that follow edits; gutter marks | `State` (pure, tested headless), `map_anchor`, `NoteEditor` API |
-| `src/margin.rs` | where cards go without overlapping (`place`) | |
+| `src/margin.rs` | where tags go without overlapping (`place`), and the `Measured` wrapper that reports their heights | |
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
 | `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
@@ -109,8 +111,9 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
    (`claude.ts runStructured`), snaps the quote onto the paragraph (`output.ts`), and
    answers with exactly one `done` or `error`.
 5. The page anchors the quote in the paragraph (`add_thought` / `locate_thought`), opens
-   a `Thread`, tells the editor (`Anchor`), and the margin places a card (`margin.rs`).
-   A question that lands while you type waits, folded, until a 2 s pause.
+   a `Thread`, tells the editor (`Anchor`), and the margin places its tag (`margin.rs`),
+   tied to the words by a thread (`stitch.rs`). A question that lands while you type
+   waits, folded, until a 2 s pause.
 
 ## Invariants
 

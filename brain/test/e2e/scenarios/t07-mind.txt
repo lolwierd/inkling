@@ -5,6 +5,7 @@ mind: Skeptic
 keys: Skeptic, is this claim true?
 wait: 2600
 dump: skeptic-call
+expect: d.note.mind === "Skeptic" && d.threads.length === 1 && d.threads[0].kind === "Answer"
 keys: \nThis is long but what do you think @skeptic about it
 enter
 wait: 2600
@@ -15,6 +16,7 @@ keys: Mail me at me@skeptic.dev about this claim later
 enter
 wait: 2600
 dump: after
+expect: d.threads.map(t => t.kind).join() === "Answer,Answer,Answer,Question"   // "@skeptic" and "Hey Inkling" call; an email address does not
 mode: ask
 keys: Skeptic: in ask mode too?
 wait: 2600
@@ -22,4 +24,7 @@ keys: \nA normal paragraph in ask mode stays quiet.
 enter
 wait: 2600
 dump: ask-mode
+expect: d.threads.length === 5 && d.threads[4].kind === "Answer"   // a call answers in Waits to be asked; a plain paragraph stays quiet
+expect: tasks.join() === "answer,answer,answer,read,answer"
+expect: note("Minds").threads.every(t => t.mind_name === "Skeptic")
 quit

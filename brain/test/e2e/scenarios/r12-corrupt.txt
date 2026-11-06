@@ -1,4 +1,6 @@
 # A note with an impossible thread range still opens.
 # fixture: corrupt
 dump: loaded
+expect: d.note.title === "Corrupt" && d.threads.length === 1 && d.threads[0].msgs === 1
+expect: d.anchors.every(a => a.range[0] <= a.range[1])   // start after end in the file, sane on the page
 quit

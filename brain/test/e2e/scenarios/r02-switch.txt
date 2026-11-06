@@ -5,4 +5,7 @@ type: Alpha paragraph is finished and long enough here.
 switch: Beta
 wait: 3500
 dump: on-beta
+expect: d.note.title === "Beta" && d.threads.length === 0
+expect: note("Beta").threads.length === 0   // nothing meant for Alpha lands on Beta
+expect: note("Alpha").blocks[1].text === "Alpha paragraph is finished and long enough here."
 quit

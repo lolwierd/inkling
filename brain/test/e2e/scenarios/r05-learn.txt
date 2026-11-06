@@ -4,4 +4,7 @@ note: Learner
 chat: I am a staff engineer at a payments company.
 switch: Beta
 wait: 3500
+expect: tasks.includes("learn") && settings.about_me.includes("staff engineer at a payments company")
+expect: note("Learner").chat.length === 1 && note("Learner").chat[0].role === "you"
+expect: events.some(e => e.ev === "error" && e.kind === "cancelled")   // the chat reply belonged to Learner: cancelled by the switch
 quit

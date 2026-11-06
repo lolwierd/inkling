@@ -1,15 +1,17 @@
+# A drawing with an absurd shape (10 x 2000) is drawn at a sane size and does not bury the next tag.
 note: Tall
 mode: ask
 type: A first idea to sketch tall [[draw>tallsvg]]. A second idea below it.
 wait: 300
 select: A first idea to sketch tall [[draw>tallsvg]]
-visualize
+sketch
 wait: 1500
 escape
 select: A second idea below it
-riddle
+probe
 wait: 1500
 escape
 wait: 800
 dump: tall
+expect: d.threads.length === 2 && d.threads[0].drawing && overlaps(d) === 0
 quit

@@ -1,0 +1,15 @@
+# The tools' own steps: `settle` waits for the read instead of guessing a wait, and `shot`
+# keeps a picture of the result (shots/read.png in the notebook folder).
+# tags: smoke
+note: Settle
+type: We reset the rate limiter's counter every minute, so a burst at the boundary gets twice the limit through.
+settle
+dump: read
+expect: d.threads.length === 1 && d.reading === null && d.pending.length === 0 && !d.typing
+expect: log.some(r => r.msg.startsWith("script: settled after"))
+activate: 1
+settle
+shot: read
+dump: open
+expect: d.active !== null && d.slots.length === 1
+quit

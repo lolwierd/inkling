@@ -1,3 +1,5 @@
+# Words typed just before quitting are saved: saves wait 600 ms, and quitting flushes them.
 note: Quitter
 type: These words were typed just before quitting.
+expect: note("Quitter").blocks.some(b => b.text === "These words were typed just before quitting.")
 quit

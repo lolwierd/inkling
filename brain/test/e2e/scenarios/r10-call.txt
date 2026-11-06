@@ -1,3 +1,4 @@
+# Calling Inkling by name waits for the whole question before answering (Waits to be asked).
 note: Caller
 mode: ask
 keys: Inkling, what about
@@ -5,4 +6,6 @@ wait: 3000
 keys: \sthe cache under load?
 wait: 3000
 dump: after
+expect: tasks.join() === "answer" && requests[0].input.target === "Inkling, what about the cache under load?"   // not the half-typed call
+expect: d.threads.length === 1 && d.threads[0].kind === "Answer" && d.threads[0].msgs === 1
 quit

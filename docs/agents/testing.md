@@ -26,6 +26,8 @@ note for screenshots and the video).
 # tags: smoke                                    `scripts/dev e2e smoke`
 wait: 1500                                       the app waits 1.2 s before the first step
 jump: next                                       steps: the doc comment in src/script.rs
+type: We reset the counter every minute.         a finished paragraph: read after the pause
+settle                                           until nothing is scheduled or in flight
 dump: jumped                                     the page state, named
 expect: d.active !== null                        JS, true or the run fails; d = the dump above
 expect: d.threads.filter(t => t.status === "Open").length === 2
@@ -43,10 +45,16 @@ What an `expect:` can see:
 | `requests`, `tasks` | what the app sent the brain (`{id, settings, input}`) and the task names, in order |
 | `events` | what the brain sent back (`done`, `error`, `status`, ...; streamed deltas are not logged) |
 | `log`, `warnings`, `exit` | app log records, script warnings, the exit code |
+| `textOf(note)`, `rangeText(note, thread)`, `blockOf(note, thread or quote)` | a note's text as the app indexes it (blocks joined by `\n`), the text a thread's byte range covers, the block a thread starts in (0 is the title) |
+| `overlaps(d)` | how many margin tags in the dump overlap a neighbour on their side |
+
+`requests`, `events` and the files are the state at the end of the run, not at the dump.
 
 Thread fields in a dump use Rust's names: `kind` is `Question`, `Correction`, `Sketch`,
 `Ask` or `Answer`; `status` is `Open`, `Resolved` or `Dismissed`; `side` is `Left` or
-`Right`. Ids are random per run: assert on quotes, kinds and counts, not ids.
+`Right`. Threads made during a run get random ids, so assert on quotes, kinds and counts;
+fixture threads keep theirs (`running-plan` has `t1` and `t2`). Dumps show ids cut to 8
+characters.
 
 A run also fails, with no `expect:` at all, when the app panics, logs an error, exits
 non-zero or times out, a dump or shot never happens, or a step only warned (an unknown
@@ -65,16 +73,24 @@ which makes them easy to find in a dump. It logs every request and answer to
 
 ## Timing
 
-Scenarios wait on the wall clock (`wait: ms`). The app runs each step 250 ms after the
-last; a paragraph is read 2.2 s after the last keystroke; the fake brain answers after
-200 ms (`FAKE_DELAY_MS`, `FAKE_DELAY_<TASK>_MS`, or `[[delay:MS]]`). So "type a finished
-paragraph, then `wait: 3500`" leaves about a second to spare.
+Two ways to wait. `settle` waits until the page has nothing scheduled or in flight: no
+pause pending, nothing reading, no reply, sketch or chat on its way, not typing (it logs
+how long that took, and fails the run if it gives up). Use it whenever the point is
+"after this has finished". `wait: ms` waits on the clock; use it only to catch a state on
+purpose while something is still happening, such as a reply mid-stream.
 
-That spare second is the weak point when the machine is busy: several agents building at
-once slow the app's timers down. `scripts/dev e2e` therefore runs one suite at a time on
-the machine (a lock under `$TMPDIR/inkling-agent`; `--no-lock` skips it) and one scenario
-at a time by default. A scenario that fails only under load is a timing margin, not a
-bug: rerun it alone before changing code.
+The numbers behind clock waits: the app runs each step 250 ms after the last; a paragraph
+is read 2.2 s after the last keystroke (4.6 s on the slow pace); the fake brain answers
+after 200 ms (`FAKE_DELAY_MS`, `FAKE_DELAY_<TASK>_MS`, or `[[delay:MS]]`). To see a state
+that is in flight, make it last: slow the fake brain down (`# env: FAKE_DELAY_DRAW_MS=2000`)
+rather than shortening the wait.
+
+The older scenarios were written with clock waits, which leave about a second to spare,
+and a busy machine eats into that: several agents building at once slow the app's timers
+down. `scripts/dev e2e` therefore runs one suite at a time on the machine (a lock under
+`$TMPDIR/inkling-agent`; `--no-lock` skips it) and one scenario at a time by default. A
+scenario that fails only under load is a timing margin, not a bug: rerun it alone before
+changing code, and prefer `settle` when you touch it.
 
 ## When a scenario fails
 

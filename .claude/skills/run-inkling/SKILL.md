@@ -11,8 +11,8 @@ description: Launch, drive and look at the Inkling app safely, in a scratch note
 `$TMPDIR/inkling-agent/`, runs the fake brain, opens the window in the background titled
 `Inkling Agents`, keeps it drawing, and quits it when done.
 
-- The page's state as JSON after some steps:
-  `scripts/dev state [--fixture NAME] --step "type: We reset it every minute." --step "wait: 3000"`
+- The page's state as JSON after some steps (it waits until reads and replies are done):
+  `scripts/dev state [--fixture NAME] --step "type: We reset the counter every minute."`
 - A screenshot (prints the PNG path; Read it):
   `scripts/dev shot [--fixture NAME] [--step ...] [--appearance dark] [--width 900] [--open chat]`
 - A scripted flow with checks: write a scenario in `brain/test/e2e/scenarios/` and

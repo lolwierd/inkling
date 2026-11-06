@@ -1,9 +1,13 @@
+# A paragraph finished while another is being read waits, then is read when that answer lands.
 note: Inflight
 type: The first paragraph takes a while to read [[delay:4000]].
 wait: 2600
 keys: \nThe second paragraph is finished during the first read.
 wait: 2600
 dump: mid
+expect: d.reading.line === 1 && d.waiting.includes(2)
 wait: 4000
 dump: after
+expect: d.reading === null && d.threads.length === 2
+expect: tasks.join() === "read,read" && requests[1].input.target === "The second paragraph is finished during the first read."
 quit

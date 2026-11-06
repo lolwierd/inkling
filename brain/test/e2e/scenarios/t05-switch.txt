@@ -4,17 +4,22 @@ note: Source
 type: A paragraph read slowly by the brain here [[delay:3000]].
 wait: 2500
 select: read slowly
-riddle
+probe
 select: by the brain
-visualize
+sketch
 keys: \nInkling, answer slowly please?
 chat: Slow chat answer please [[delay:3000]]
 wait: 2600
 dump: before-switch
+expect: d.pending.length === 1 && d.chat_pending !== null   // an answer and a chat reply in flight
 switch: Beta
 wait: 4000
 dump: on-beta
+expect: d.note.title === "Beta" && d.threads.length === 0 && d.pending.length === 0 && d.chat_pending === null
 switch: Source
 wait: 800
 dump: back-on-source
+expect: d.note.title === "Source" && d.threads.length >= 3 && d.threads.every(t => t.msgs >= 1)   // the answer that never came left no empty thread
+expect: note("Beta").threads.length === 0 && note("Beta").chat.length === 0
+expect: events.filter(e => e.ev === "error" && e.kind === "cancelled").length === 2
 quit

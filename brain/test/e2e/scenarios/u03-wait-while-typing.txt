@@ -1,6 +1,6 @@
 # A question that lands while you are typing waits, folded, until you pause.
-# The read is slowed (FAKE_DELAY_READ_MS) so it comes back mid-typing.
-# env: FAKE_DELAY_READ_MS=2500
+# The first sentence of a new notebook is a probe; it is slowed so it comes back mid-typing.
+# env: FAKE_DELAY_PROBE_MS=2500 FAKE_DELAY_READ_MS=2500
 wait: 1200
 keys: The first claim needs checking right now.
 caret: end
@@ -11,6 +11,8 @@ wait: 1200
 keys: \sand keeps going
 wait: 1300
 dump: while-typing
+expect: d.typing && d.waiting_tags.length === 1 && d.threads.length === 1   // it arrived mid-sentence: it waits, folded
 wait: 2600
 dump: paused
+expect: !d.typing && d.waiting_tags.length === 0
 quit

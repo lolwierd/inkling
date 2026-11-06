@@ -4,4 +4,6 @@ caret: end
 enter
 wait: 3500
 dump: after-enter
+expect: tasks.length === 0   // the paragraph read in r04a is not read again
+expect: d.note.title === "Silent" && d.threads.length === 0
 quit

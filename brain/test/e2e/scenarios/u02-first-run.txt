@@ -1,8 +1,11 @@
 # A new notebook: the first sentence is always asked about
 wait: 1500
 dump: fresh
+expect: d.first_run && d.note.title === "Start here" && d.threads.length === 0
 keys: We should drop the old cache next week because nobody reads from it anymore.
 caret: end
 wait: 4500
 dump: asked
+expect: !d.first_run && d.threads.length === 1 && d.threads[0].kind === "Question"
+expect: tasks.join() === "probe"   // the first sentence is always asked about, never read silently
 quit

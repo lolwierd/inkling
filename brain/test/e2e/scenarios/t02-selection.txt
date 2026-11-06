@@ -1,46 +1,61 @@
+# The selection actions: trimmed selections, empty ones, Ask (streamed), Sketch it, and
+# drawings that come back broken, missing or empty. Drawings are slowed to see them work.
+# env: FAKE_DELAY_DRAW_MS=2000
 note: Selections
 mode: ask
 type: The   queue drains   at night when nobody   is watching it.
 wait: 300
 select: \squeue drains\s
-riddle
+probe
 wait: 600
-dump: riddle-trimmed
+dump: probe-trimmed
+expect: d.threads.length === 1 && d.threads[0].quote === "queue drains"   // the spaces around the selection were dropped
 select: \s\s
-riddle
+probe
 dump: ws-only
+expect: d.threads.length === 1   // a selection of only spaces asks nothing
 escape
 caret: end
-riddle
-visualize
+probe
+sketch
 ask: Nothing selected?
 dump: empty-selection
+expect: d.threads.length === 1 && d.asking === false   // no selection: the actions do nothing
 select: nobody
-ask: Who is nobody? [[delay:600]]
+ask: Who is nobody? [[delay:1200]]
 wait: 600
 dump: ask-streaming
+expect: d.pending.length === 1 && d.threads.some(t => t.kind === "Ask" && t.quote === "nobody")
 wait: 1500
 dump: asked
+expect: d.pending.length === 0 && d.threads.find(t => t.kind === "Ask").msgs === 2
 select: at night
-visualize
+sketch
 wait: 300
-dump: visualizing
+dump: asked-to-sketch
+expect: d.threads.some(t => t.kind === "Sketch" && t.quote === "at night")
 wait: 600
 dump: sketching
+expect: d.pending.some(p => p.state === "sketching")
 wait: 2000
-dump: visualized
+dump: sketched
+expect: d.pending.length === 0 && d.threads.find(t => t.quote === "at night").drawing
 type: Broken sketch here [[draw>badsvg]]. Missing sketch here [[draw>nosvg]]. Empty idea here [[sketch>empty]][[draw>nosvg]].
 wait: 300
 select: Broken sketch here [[draw>badsvg]]
-visualize
+sketch
 wait: 3000
 dump: bad-svg
+expect: d.error.includes("sketch came back") && !d.threads.find(t => t.quote.startsWith("Broken sketch")).drawing
 select: Missing sketch here [[draw>nosvg]]
-visualize
+sketch
 wait: 3000
 dump: no-svg
+expect: d.error.includes("shape Inkling can't use") && !d.threads.find(t => t.quote.startsWith("Missing sketch")).drawing
 select: Empty idea here [[sketch>empty]][[draw>nosvg]]
-visualize
+sketch
 wait: 3000
-dump: empty-visualize
+dump: empty-sketch
+expect: !d.threads.some(t => t.quote.startsWith("Empty idea"))   // an empty idea leaves no thread
+expect: tasks.filter(t => t === "probe").length === 1   // the spaces-only and empty selections sent nothing
 quit

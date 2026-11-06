@@ -1,3 +1,4 @@
+# Five threads in the margins: both sides, one active, Right margin only, Marks only.
 note: Margins
 type: Alpha line is long enough to read.
 wait: 2500
@@ -10,21 +11,27 @@ wait: 2500
 type: Echo line is long enough to read.
 wait: 2500
 dump: both
+expect: d.slots.length === 5 && new Set(d.slots.map(s => s.side)).size === 2 && overlaps(d) === 0
 activate: 4
 wait: 800
 dump: active4
+expect: d.active !== null && overlaps(d) === 0
 set: placement=right
 wait: 800
 dump: right
+expect: d.slots.length === 5 && d.slots.every(s => s.side === "Right") && overlaps(d) === 0
 set: placement=marks
 escape
 wait: 800
 dump: marks-none
+expect: d.slots.length === 0   // Marks only: no tags until a mark is opened
 mark: 2
 wait: 800
 dump: marks-2
+expect: d.slots.length === 1 && d.active !== null
 mark: 2
 wait: 500
 dump: marks-closed
+expect: d.slots.length === 0
 set: placement=both
 quit

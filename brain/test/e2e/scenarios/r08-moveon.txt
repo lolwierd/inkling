@@ -1,5 +1,9 @@
+# Writing on into a new paragraph finishes the one left behind: it is read; the new one waits.
 note: Mover
 keys: The first paragraph is complete enough to read\nThe second one is still being typed
 wait: 3500
 dump: after
+expect: tasks.join() === "read" && requests[0].input.target === "The first paragraph is complete enough to read"
+expect: d.threads.length === 1 && d.threads[0].quote === "The first paragraph"
+expect: d.waiting.includes(2)   // the line under the caret is still being written
 quit

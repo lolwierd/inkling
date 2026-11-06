@@ -1,16 +1,21 @@
+# Reading pace: slow waits about 4.6 s after the last keystroke, regular about 2.2 s.
 note: Pace
 set: pace=slow
 log: typed
 type: This finished paragraph waits for the slow pace.
 wait: 3800
 dump: at-4s
+expect: d.threads.length === 0
 wait: 1500
 dump: at-5.5s
+expect: d.threads.length === 1
 set: pace=regular
 log: typed-regular
 type: This one uses the regular pace again now.
 wait: 1700
 dump: at-2s
+expect: d.threads.length === 1
 wait: 1000
 dump: at-3s
+expect: d.threads.length === 2
 quit

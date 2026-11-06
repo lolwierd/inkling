@@ -1,5 +1,8 @@
+# A read that stays silent leaves no thread but marks the paragraph read (r04b relaunches on it).
 note: Silent
 type: A finished paragraph that the mind reads silently [[silent]].
 wait: 3500
 dump: after-read
+expect: tasks.join() === "read" && d.threads.length === 0 && d.reading === null
+expect: note("Silent").read_hashes.length === 1
 quit

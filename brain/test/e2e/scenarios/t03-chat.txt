@@ -1,16 +1,22 @@
+# Chat: a streamed reply, history and the paragraph near the caret sent along, About you
+# learned only while learning is on, and Clear.
+# tags: smoke
 note: Chatty
 mode: ask
 type: First paragraph about queues and backpressure.
 wait: 300
 caret: backpressure
-chat: What am I missing? [[delay:400]]
+chat: What am I missing? [[delay:1500]]
 wait: 700
 dump: chat-streaming
+expect: d.chat_pending !== null && d.chat === 1
 wait: 1500
 dump: chat-1
+expect: d.chat === 2 && d.chat_pending === null
 chat: And what next?
 wait: 1800
 dump: chat-2
+expect: d.chat === 4
 set: learn=off
 chat: I am a teacher and I prefer short answers.
 wait: 1800
@@ -18,6 +24,10 @@ set: learn=on
 chat: I am a teacher and I prefer short answers.
 wait: 1800
 dump: chat-4
+expect: d.chat === 8
 clear
 dump: cleared
+expect: d.chat === 0 && note("Chatty").chat.length === 0
+expect: tasks.join() === "learn,chat,chat,chat,learn,chat"   // no learn while learning is off
+expect: requests.filter(r => r.input.task === "chat").every(r => r.input.near === "First paragraph about queues and backpressure.")
 quit

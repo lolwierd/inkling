@@ -1,7 +1,10 @@
+# A read that never answers holds the read-along slot; the next finished paragraph waits.
 note: Hanger
 type: The first paragraph hangs forever in the brain [[hang]].
 wait: 3500
 type: The second paragraph is finished and waits its turn.
 wait: 3500
 dump: after
+expect: d.reading !== null && d.reading.line === 1 && d.waiting.includes(2)
+expect: tasks.join() === "read"   // one read at a time
 quit

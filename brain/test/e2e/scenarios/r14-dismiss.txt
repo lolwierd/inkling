@@ -1,11 +1,15 @@
+# Dismissing a thread while its probe is in flight cancels the request; nothing lands later.
 note: Dismisser
 mode: ask
 type: Riddle this slow sentence about queues [[delay:1500]].
 wait: 300
 select: slow sentence about queues [[delay:1500]]
-riddle
+probe
 wait: 200
 dismiss: 1
 wait: 2500
 dump: after
+expect: d.threads.length === 1 && d.threads[0].status === "Dismissed" && d.threads[0].msgs === 0
+expect: d.pending.length === 0 && d.undo !== null
+expect: events.some(e => e.ev === "error" && e.kind === "cancelled")
 quit

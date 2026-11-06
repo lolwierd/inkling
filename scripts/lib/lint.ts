@@ -170,7 +170,7 @@ export function lintScenarios(files?: string[]): string[] {
         if (!known.has(cmd)) out.push(`${where}: unknown step "${cmd}" (steps: src/script.rs)`);
         if (cmd === "expect") {
           try {
-            new Function("d", `return (${l.slice(colon + 1).trim()});`);
+            new Function("d", `return (\n${l.slice(colon + 1).trim()}\n);`);
           } catch (e) {
             out.push(`${where}: expect does not parse: ${e instanceof Error ? e.message : e}`);
           }

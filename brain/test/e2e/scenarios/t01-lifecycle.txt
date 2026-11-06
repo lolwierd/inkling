@@ -1,38 +1,56 @@
+# One thread's whole life: read with a sketch, reply, resolve by reply, reopen, redraw, copy,
+# make a note of it, dismiss. Drawings are slowed so the sketching states can be seen.
+# env: FAKE_DELAY_DRAW_MS=2000
+# tags: smoke
 note: Lifecycle
 type: A rate limiter keeps one counter per user and resets every minute [[sketch]].
 wait: 2700
 dump: sketching
+expect: d.threads.length === 1 && d.pending.some(p => p.state === "sketching") && !d.threads[0].drawing
 wait: 2000
 dump: drawn
+expect: d.threads[0].drawing && d.pending.length === 0
 activate: 1
 reply: Why does the reset matter? [[delay:800]]
 wait: 300
 dump: replying
+expect: d.pending.some(p => p.state === "thinking") && d.threads[0].msgs === 2
 wait: 1000
 dump: replied
+expect: d.threads[0].msgs === 3 && d.pending.length === 0
 reply: Then I get it, it is about bursts [[resolved]]
 wait: 700
 dump: resolved
+expect: d.threads[0].status === "Resolved"   // the reply said it was settled
 reopen: 1
 dump: reopened
+expect: d.threads[0].status === "Open"
 activate: 1
 reply: Draw the burst please [[redraw]]
 wait: 600
 dump: redrawing
+expect: d.pending.some(p => p.state === "sketching")
 wait: 2200
 dump: redrawn
+expect: d.pending.length === 0 && d.threads[0].drawing
 copy: 1
 resolve: 1
 dump: manual-resolved
+expect: d.threads[0].status === "Resolved"
 reopen: 1
 escape
 dump: escaped
+expect: d.active === null && d.threads[0].status === "Open"
 makenote: 1
 wait: 800
 dump: new-note
+expect: d.note.title === "A rate limiter"   // Make a note: the thread became a note of its own
 switch: Lifecycle
 wait: 500
 activate: 1
 dismiss: 1
 dump: dismissed
+expect: d.threads[0].status === "Dismissed" && d.undo !== null
+expect: tasks.filter(t => t === "draw").length === 2
+expect: log.some(r => r.msg.startsWith("script copy: \"> A rate limiter"))
 quit

@@ -65,7 +65,7 @@ The example is a made-up `title` task: "suggest a title for this note". Swap in 
    note: Untitled
    type: Rate limits keep one counter per user and reset it every minute.
    title
-   wait: 800
+   settle
    dump: titled
    expect: d.note.title.startsWith("[r")   // the fake brain's answers start with [r<id>]
    expect: tasks.includes("title")
@@ -76,7 +76,7 @@ The example is a made-up `title` task: "suggest a title for this note". Swap in 
    `[[error:rate_limit]]`, `[[delay:2000]]`, `[[empty]]` (its header lists them all).
 
 10. **Look at it.** `scripts/dev shot --step "note: Untitled" --step "type: ..." --step
-    "title" --step "wait: 800"`; Read the PNG. Then `--appearance dark`.
+    "title"` (it settles before the picture); Read the PNG. Then `--appearance dark`.
 
 11. **Finish.** `scripts/dev check --e2e`, then commit.
 
@@ -117,8 +117,8 @@ or `scripts/dev state --fixture <name>`.
 4. Timing: dumps and log lines carry `ms` since launch; the brain log carries seconds
    since the brain started. Fake delays default to 200 ms; the pause is 2.2 s.
 5. Flaky only when the machine is busy (other agents building)? Rerun it alone
-   (`scripts/dev e2e <name>`); if it fails again, it is real. Lengthen a `wait:` only
-   with a reason in a comment.
+   (`scripts/dev e2e <name>`); if it fails again, it is real. A clock `wait:` that is
+   only there to let work finish should become `settle`.
 
 ## Look at the app without a scenario
 

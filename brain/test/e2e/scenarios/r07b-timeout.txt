@@ -6,6 +6,10 @@ wait: 3500
 type: The second paragraph is finished and waits its turn.
 wait: 3500
 dump: queued
+expect: d.reading.line === 1 && d.waiting.includes(2)
 wait: 118000
 dump: after-timeout
+expect: d.reading === null && d.error.includes("took too long")
+expect: d.threads.length === 1 && d.threads[0].quote === "The second paragraph"
+expect: tasks.join() === "read,read" && events.some(e => e.ev === "error" && e.kind === "cancelled" && e.id === requests[0].id)
 quit

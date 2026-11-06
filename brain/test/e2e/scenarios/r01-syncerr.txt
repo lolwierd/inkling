@@ -1,5 +1,11 @@
+# A finished paragraph is read after the pause; its question lands on the page and on disk.
+# tags: smoke
 note: Sync error
 type: This paragraph is finished and should be read now.
 wait: 3500
 dump: after
+expect: d.threads.length === 1 && d.threads[0].kind === "Question" && d.threads[0].status === "Open"
+expect: d.threads[0].quote === "This paragraph is" && d.reading === null && d.pending.length === 0
+expect: tasks.join() === "read"
+expect: note("Sync error").threads.length === 1 && note("Sync error").read_hashes.length === 1
 quit

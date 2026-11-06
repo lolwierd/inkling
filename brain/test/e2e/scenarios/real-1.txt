@@ -5,8 +5,10 @@ note: Real check
 type: The Moon has no gravity at all, so astronauts there just float around the whole time.
 wait: 30000
 dump: after-read
+expect: d.threads.length >= 1 && d.error === null   // a plainly wrong fact gets a note
 select: astronauts there just float around
-riddle
+probe
 wait: 30000
 dump: after-riddle
+expect: d.threads.some(t => t.quote.includes("float")) && d.error === null
 quit

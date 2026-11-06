@@ -204,6 +204,8 @@ impl Render for Palette {
         let selected = clamp_selection(self.selected, rows.len());
         let current = self.current.clone();
         let query_empty = self.input.read(cx).value().trim().is_empty();
+        // the footer names what Return and ⌘⌫ do to the row that is chosen
+        let on_note = rows.get(selected).is_some_and(|r| matches!(r.kind, RowKind::Note(_)));
         let mut list = vec![];
         for (i, row) in rows.iter().enumerate() {
             let on = i == selected;
@@ -239,7 +241,19 @@ impl Render for Palette {
                                     .gap(px(6.))
                                     .text_size(px(ts::UI))
                                     .text_color(p.ink)
-                                    .when_some(row.folder.clone(), |d, f| d.child(div().flex_none().max_w(px(140.)).truncate().text_color(p.faint).child(format!("{f} /"))))
+                                    // a long folder name gives way before its slash, which stays
+                                    .when_some(row.folder.clone(), |d, f| {
+                                        d.child(
+                                            div()
+                                                .flex_none()
+                                                .max_w(px(150.))
+                                                .flex()
+                                                .gap(px(4.))
+                                                .text_color(p.faint)
+                                                .child(div().min_w(px(0.)).truncate().child(f))
+                                                .child(div().flex_none().child("/")),
+                                        )
+                                    })
                                     .child(div().min_w(px(0.)).truncate().child(label)),
                             )
                             .when_some(row.snippet.clone(), |d, s| {
@@ -311,10 +325,10 @@ impl Render for Palette {
                             .border_color(p.rule)
                             .text_size(px(ts::META))
                             .text_color(p.faint)
-                            .child("\u{21a9} open")
+                            .child(if on_note { "\u{21a9} open" } else { "\u{21a9} start" })
                             .child(if query_empty { "Type to find or start a note" } else { "\u{201c}Folder / Name\u{201d} files a new note" })
                             .child(div().flex_1())
-                            .child("\u{2318}\u{232b} delete"),
+                            .when(on_note, |d| d.child("\u{2318}\u{232b} delete")),
                     ),
             )
     }

@@ -1394,7 +1394,7 @@ impl AppView {
                                 this.toggle_jmw(cx);
                                 this.sidebar_open = false;
                             }))
-                            .child(action("sb-custom", "Customize Inkling", k_settings).keyed_as("sidebar:settings", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Customize, window, cx)))
+                            .child(action("sb-custom", "Settings", k_settings).keyed_as("sidebar:settings", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Customize, window, cx)))
                             .child(action("sb-minds", "Minds", String::new()).keyed_as("sidebar:minds", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Minds, window, cx)))
                             .child(action("sb-model", "Model", String::new()).keyed_as("sidebar:model", 6., ring, cx, |this, window, cx| this.open_settings(Tab::Model, window, cx))),
                     ),

@@ -350,6 +350,14 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
+    fn export_names_a_format() {
+        assert_eq!(
+            parse("export: HTML\nexport: docx\nexport: word\nexport\nexport: md\n"),
+            vec![Step::Export("html".into()), Step::Export("word".into()), Step::Export("word".into()), Step::Export("md".into()), Step::Export("md".into())]
+        );
+    }
+
+    #[std::prelude::v1::test]
     fn import_names_a_folder_beside_the_script() {
         assert_eq!(parse("import: ../fixtures/my vault\n"), vec![Step::Import("../fixtures/my vault".into())]);
         let script = std::path::Path::new("brain/test/e2e/scenarios/u04.txt");

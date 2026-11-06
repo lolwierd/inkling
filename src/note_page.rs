@@ -28,15 +28,13 @@ use crate::theme::{SANS, TEXT_COLORS, Theme, ts};
 use crate::ui::{self, icon};
 
 const CARD_GAP: f32 = 14.;
-const CHAT_WIDTH: f32 = 310.;
+pub(crate) const CHAT_WIDTH: f32 = 310.;
 /// The cloth shows around the page: this much page beyond the margins on each side.
 const SHEET_PAD: f32 = 28.;
 /// A tied-off tag stays this long, so you can watch the thread pull taut and knot.
 const TIE_SHOW: Duration = Duration::from_millis(1700);
 /// A snipped thread falls and fades over this long.
 const SNIP_FADE: Duration = Duration::from_millis(900);
-/// How long "Thread dismissed · Undo" stays.
-const UNDO_FOR: Duration = Duration::from_secs(8);
 /// A question that arrives while you type waits, folded, until you pause this long.
 const QUIET_WHILE_TYPING: Duration = Duration::from_millis(2000);
 /// The most minds that can answer one question side by side.
@@ -384,7 +382,6 @@ pub struct NotePage {
     /// and brings them back when the pointer moves. The page's header row follows it.
     pub chrome: Rc<std::cell::Cell<f32>>,
     enlarged: Option<String>,
-    error: Option<(String, std::time::Instant)>,
     marks_open: HashSet<String>,
     m: Metrics,
     /// Each visible thread's rope, kept between frames so it can sway and settle.
@@ -489,7 +486,6 @@ impl NotePage {
             chat_pending: None,
             just_my_words: false,
             enlarged: None,
-            error: None,
             marks_open: HashSet::new(),
             m: Metrics::for_width(1320.),
             ropes: HashMap::new(),
@@ -584,7 +580,6 @@ impl NotePage {
         self.pause_task = None;
         self.last_edited = None;
         self.waiting.clear();
-        self.error = None;
         self.chat_error = None;
         self.mind = cx.global::<Store>().mind(&note.mind_id);
         self.note = note;
@@ -1247,8 +1242,9 @@ impl NotePage {
         }
     }
 
+    /// A problem, in the window's toasts (ochre, with a close control).
     fn notice(&mut self, text: String, cx: &mut Context<Self>) {
-        self.error = Some((text, std::time::Instant::now()));
+        crate::toast::show(cx, crate::toast::Kind::Problem, text);
         cx.notify();
     }
 
@@ -1653,12 +1649,13 @@ impl NotePage {
         }
     }
 
-    /// Put the last dismissed thread back (⌥⌘Z, or Undo), within a few seconds.
+    /// Put the last dismissed thread back (⌥⌘Z, or Undo), while its toast shows.
     pub fn undo_dismiss(&mut self, cx: &mut Context<Self>) {
-        let Some((id, range, at)) = self.last_dismissed.take() else { return };
-        if at.elapsed() > UNDO_FOR {
+        let Some((id, range, _)) = self.last_dismissed.take() else { return };
+        if !crate::toast::live(cx, crate::toast::Kind::ThreadDismissed) {
             return;
         }
+        crate::toast::close(cx, crate::toast::Kind::ThreadDismissed);
         if let Some(t) = self.thread_mut(&id) {
             t.status = ThreadStatus::Open;
         }
@@ -1831,11 +1828,7 @@ impl NotePage {
                 let range = self.editor.read(cx).anchors().iter().find(|a| a.id == id).map(|a| a.range.clone());
                 if let Some(range) = range {
                     self.last_dismissed = Some((id.to_string(), range, std::time::Instant::now()));
-                    cx.spawn(async move |this, cx| {
-                        cx.background_executor().timer(UNDO_FOR + Duration::from_millis(60)).await;
-                        let _ = this.update(cx, |_, cx| cx.notify());
-                    })
-                    .detach();
+                    crate::toast::show(cx, crate::toast::Kind::ThreadDismissed, "Thread dismissed");
                 }
                 if let Some(mut r) = self.ropes.remove(id) {
                     r.cut();
@@ -2316,7 +2309,7 @@ impl NotePage {
         let fits = m.page() + 2. * SHEET_PAD <= available - 16.;
         let (_, slots, _) = self.margin_layout(placement, m, cx);
         let ed = self.editor.read(cx);
-        let error = self.error.as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(12)).map(|(m, _)| m.clone());
+        let error = crate::toast::text_of(cx, crate::toast::Kind::Problem);
         json!({
             "note": {"title": ed.title(), "mode": format!("{:?}", self.note.mode), "mind": self.mind.name},
             "reading": self.reading.as_ref().map(|r| json!({"req": r.req, "line": r.line})),
@@ -2357,7 +2350,9 @@ impl NotePage {
             "waiting_tags": if self.typing_recently() { self.arrived.keys().map(|id| short(id)).collect::<Vec<_>>() } else { vec![] },
             "typing": self.typing_recently(),
             "rechecking": self.rechecking.iter().map(|id| short(id)).collect::<Vec<_>>(),
-            "undo": self.last_dismissed.as_ref().filter(|(_, _, at)| at.elapsed() < UNDO_FOR).map(|(id, _, _)| short(id)),
+            "undo": self.last_dismissed.as_ref().filter(|_| crate::toast::live(cx, crate::toast::Kind::ThreadDismissed)).map(|(id, _, _)| short(id)),
+            // the window's toasts, oldest first, with where each was drawn
+            "toasts": crate::toast::describe(cx),
             "first_run": self.note.first_run,
             "statuses": self.note.threads.iter().map(|t| format!("{}:{:?}:{}", short(&t.id), t.status, t.mind_name)).collect::<Vec<_>>(),
             // tags more than half unfolded, and tags moved from where the margin puts them
@@ -4195,39 +4190,6 @@ impl Render for NotePage {
         let ask = self.ask_box(cx);
         let enlarged = self.enlarged_drawing(cx);
         let chat = self.chat_open.then(|| self.chat_panel(cx));
-        let error = self.error.as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(12)).map(|(m, _)| m.clone());
-        // "Thread dismissed · Undo" for a few seconds after a dismiss.
-        let undo = self.last_dismissed.as_ref().filter(|(_, _, at)| at.elapsed() < UNDO_FOR).map(|_| {
-            div()
-                .absolute()
-                .bottom(px(18.))
-                .left(px(18.))
-                .flex()
-                .items_center()
-                .gap(px(12.))
-                .px(px(14.))
-                .py(px(9.))
-                .rounded(px(10.))
-                .bg(p.card)
-                .border_1()
-                .border_color(p.rule)
-                .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(0.), px(4.)), blur_radius: px(14.), spread_radius: px(0.), inset: false }])
-                .font_family(SANS)
-                .text_size(px(13.))
-                .text_color(p.graphite)
-                .child("Thread dismissed")
-                .child(
-                    div()
-                        .id("undo-dismiss")
-                        .cursor_pointer()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(p.ink)
-                        .child("Undo")
-                        .on_click(cx.listener(|this, _, _, cx| this.undo_dismiss(cx))),
-                )
-                .children(crate::shortcuts::keys_for("app::UndoDismiss", cx).map(|k| div().text_color(p.faint).child(k)))
-        });
-
         let body = div()
             .relative()
             .w(px(m.page()))
@@ -4305,23 +4267,6 @@ impl Render for NotePage {
                                     .child(sheet),
                             ),
                     )
-                    .children(error.map(|m| {
-                        div()
-                            .absolute()
-                            .bottom(px(16.))
-                            .left(px(16.))
-                            .max_w(px(420.))
-                            .px(px(12.))
-                            .py(px(8.))
-                            .rounded(px(8.))
-                            .bg(p.card)
-                            .border_1()
-                            .border_color(p.rule)
-                            .text_size(px(13.))
-                            .text_color(p.graphite)
-                            .child(m)
-                    }))
-                    .children(undo)
                     .children(enlarged),
             )
             .children(chat)

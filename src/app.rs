@@ -14,6 +14,7 @@ use crate::settings::{SettingsEvent, SettingsView, Tab};
 use crate::store::{Folder, Note, Store, new_id};
 use crate::store::ThreadStatus;
 use crate::theme::{SANS, Theme, ts};
+use crate::toast::Kind;
 use crate::ui::{self, icon};
 
 gpui_kit::actions!(
@@ -129,9 +130,9 @@ pub struct AppView {
     settings: Option<Entity<SettingsView>>,
     export: Option<(ExportStage, Format, bool)>,
     new_folder: Option<Entity<gpui_kit::component::input::InputState>>,
-    toast: Option<Toast>,
-    /// The note deleted last, where it sat in the list, and when: Undo puts it back.
-    deleted: Option<(Note, usize, Instant)>,
+    /// The note deleted last and where it sat in the list: Undo puts it back while its
+    /// toast shows.
+    deleted: Option<(Note, usize)>,
     /// The blank note made to stand in when the only note was deleted: Undo takes it
     /// away again if nothing was written in it.
     stand_in: Option<String>,
@@ -302,23 +303,6 @@ fn same_folder_name(a: &str, b: &str) -> bool {
     a.trim().to_lowercase() == b.trim().to_lowercase()
 }
 
-/// A short message at the bottom of the window. One that offers Undo stays as long as
-/// a dismissed thread's does.
-struct Toast {
-    text: String,
-    shown: Instant,
-    undo: bool,
-}
-
-impl Toast {
-    fn life(&self) -> Duration {
-        if self.undo { UNDO_DELETE } else { Duration::from_secs(3) }
-    }
-}
-
-/// How long "Note deleted · Undo" stays.
-const UNDO_DELETE: Duration = Duration::from_secs(8);
-
 /// A drop of ink left by the pointer ("Ink from the pointer").
 struct Blot {
     at: Point<Pixels>,
@@ -423,7 +407,7 @@ impl AppView {
                 this.listening = false;
                 this.talk.ended();
                 this.partial.clear();
-                this.toast(&format!("Couldn't listen: {e}"), cx);
+                crate::toast::show(cx, Kind::Problem, format!("Couldn't listen: {e}"));
             }
             _ => {}
         }));
@@ -438,7 +422,6 @@ impl AppView {
             settings: None,
             export: None,
             new_folder: None,
-            toast: None,
             deleted: None,
             stand_in: None,
             speech,
@@ -908,18 +891,18 @@ impl AppView {
         // deleted note can come back for a few seconds.
         let kept = {
             let store = cx.global::<Store>();
-            store.notes.iter().position(|n| n.id == id).map(|at| (store.notes[at].clone(), at, Instant::now()))
+            store.notes.iter().position(|n| n.id == id).map(|at| (store.notes[at].clone(), at))
         };
         cx.global_mut::<Store>().delete_note(&id);
         self.deleted = kept;
-        self.show_toast("Note deleted", true, cx);
+        crate::toast::show(cx, Kind::NoteDeleted, "Note deleted");
         cx.notify();
     }
 
     /// Put the note deleted last back where it was, and open it.
     fn undo_delete(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((note, at, when)) = self.deleted.take() else { return };
-        if when.elapsed() > UNDO_DELETE {
+        let Some((note, at)) = self.deleted.take() else { return };
+        if !crate::toast::live(cx, Kind::NoteDeleted) {
             return;
         }
         let id = note.id.clone();
@@ -929,7 +912,7 @@ impl AppView {
             let at = at.min(store.notes.len());
             store.notes.insert(at, note);
         }
-        self.toast = None;
+        crate::toast::close(cx, Kind::NoteDeleted);
         self.palette = None;
         self.open_note(id, window, cx);
         // the blank stand-in goes too, unless something was written in it
@@ -964,27 +947,9 @@ impl AppView {
         cx.notify();
     }
 
+    /// Something done, said in passing (the toasts are one stack: see toast.rs).
     fn toast(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.show_toast(text, false, cx);
-    }
-
-    fn show_toast(&mut self, text: &str, undo: bool, cx: &mut Context<Self>) {
-        let shown = Instant::now();
-        let toast = Toast { text: text.to_string(), shown, undo };
-        let life = toast.life();
-        self.toast = Some(toast);
-        cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(life).await;
-            let _ = this.update(cx, |this, cx| {
-                // Only this toast: a newer one keeps its own time.
-                if this.toast.as_ref().is_some_and(|t| t.shown == shown) {
-                    this.toast = None;
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-        cx.notify();
+        crate::toast::show(cx, Kind::Done, text);
     }
 
     /// File > Import from Obsidian…: pick a vault folder and bring its notes in.
@@ -1041,7 +1006,7 @@ impl AppView {
                 .await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok(()) => this.toast(&format!("Saved {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("note")), cx),
-                Err(e) => this.toast(&format!("Export failed: {e:#}"), cx),
+                Err(e) => crate::toast::show(cx, Kind::Problem, format!("Export failed: {e:#}")),
             });
         })
         .detach();
@@ -1577,7 +1542,6 @@ impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
-        let toast = self.toast.as_ref().filter(|t| t.shown.elapsed() < t.life()).map(|t| (t.text.clone(), t.undo));
         let sidebar = self.sidebar_open.then(|| self.sidebar(cx));
         let export = self.export_dialog(cx);
         let badge = self.listening_badge(cx);
@@ -1624,41 +1588,15 @@ impl Render for AppView {
             .children(self.palette.clone())
             .children(self.settings.clone())
             .children(export)
-            .children(toast.map(|(m, undo)| {
-                div()
-                    .absolute()
-                    .bottom(px(18.))
-                    .left_0()
-                    .w_full()
-                    .flex()
-                    .justify_center()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(14.))
-                            .px(px(16.))
-                            .py(px(8.))
-                            .rounded_full()
-                            .bg(p.ink)
-                            .shadow(ui::popover_shadow(&p))
-                            .text_color(p.paper)
-                            .text_size(px(ts::SMALL))
-                            .child(m)
-                            .when(undo, |d| {
-                                d.child(
-                                    div()
-                                        .id("toast-undo")
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .cursor_pointer()
-                                        .hover(|s| s.opacity(0.8))
-                                        .active(|s| s.opacity(0.6))
-                                        .child("Undo")
-                                        .on_click(cx.listener(|this, _, window, cx| this.undo_delete(window, cx))),
-                                )
-                            }),
-                    )
-            }))
+            // every toast, the page's included, in one stack centred under the page
+            .children({
+                let chat = if self.page.read(cx).chat_open { crate::note_page::CHAT_WIDTH } else { 0. };
+                crate::toast::stack(px(chat), window, cx, |this, kind, window, cx| match kind {
+                    Kind::NoteDeleted => this.undo_delete(window, cx),
+                    Kind::ThreadDismissed => this.page.update(cx, |p, cx| p.undo_dismiss(cx)),
+                    _ => {}
+                })
+            })
             .child(badge)
             .children(blots)
     }

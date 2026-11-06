@@ -15,6 +15,7 @@ mod shortcuts;
 mod stitch;
 mod store;
 mod theme;
+mod toast;
 mod ui;
 mod welcome;
 

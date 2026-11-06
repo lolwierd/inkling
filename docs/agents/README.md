@@ -198,7 +198,8 @@ reach for `cargo run`, which takes the owner's focus and opens their real notebo
 | `cargo test` (117 tests) | 7.4 s |
 | `bun test test/` (100 tests) | 5 s |
 | `scripts/dev check` (build after an edit, cargo test, brain tests, types, lint) | 13 s |
-| `scripts/dev e2e` (32 scenarios, one at a time) | about 7.5 min, 2.1 of them in `r07b-timeout` |
+| `scripts/dev e2e` (33 scenarios, 139 expectations, one at a time) | 7.7 min, 2.1 of them in `r07b-timeout` |
+| `scripts/dev check --e2e` (checks plus the 5 smoke scenarios) | 73 s |
 | `scripts/dev state` / `shot` | 5 to 6 s |
 
 ## Follow-ups worth doing

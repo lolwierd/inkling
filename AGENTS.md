@@ -37,7 +37,7 @@ failure, and those that report take `--json`.
 |---|---|---|
 | Check everything before a commit | `scripts/dev check` | ~15 s |
 | ... plus the smoke scenarios in the app | `scripts/dev check --e2e` | ~1 min |
-| Run scenarios (all, by name, prefix or tag) | `scripts/dev e2e`, `scripts/dev e2e u01 t02`, `scripts/dev e2e smoke` | all: ~7.5 min |
+| Run scenarios (all, by name, prefix or tag) | `scripts/dev e2e`, `scripts/dev e2e u01 t02`, `scripts/dev e2e smoke` | all: ~8 min |
 | List scenarios, their fixtures and expects | `scripts/dev e2e --list` | |
 | Page state as JSON after some steps (it waits for reads and replies to finish) | `scripts/dev state --fixture running-plan --step "jump: next"` | ~5 s |
 | Screenshot of that state | `scripts/dev shot --fixture running-plan --step "activate: 1"` → prints a PNG path; read it | ~6 s |
@@ -62,6 +62,7 @@ build, check expectations or take screenshots.
 | Anything drawn | `scripts/dev shot ...` and look at the PNG; light and dark (`--appearance dark`) |
 | Store fields (`src/store.rs`) | `cargo test store`; open an old fixture with `scripts/dev state --fixture beta` |
 | Words on screen or in prompts | `scripts/dev lint` |
+| A user-facing capability, or the welcome tour (`src/welcome.rs`) | `design/capabilities.md` stays true; `scripts/dev e2e u02 u03` (they start on the tour) |
 
 A new behaviour gets a scenario with `expect:` lines (`docs/agents/testing.md`), and
 unit tests where the logic is pure.
@@ -96,7 +97,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
-| `design/` | the brand, the three directions, the video; `design/directions/DESIGN.md` is the design record | |
+| `design/` | the brand, the three directions, the video; `design/directions/DESIGN.md` is the design record; `design/capabilities.md` lists every user-facing capability, which the welcome tour and the film must cover | |
 
 ## How a question gets to the margin
 

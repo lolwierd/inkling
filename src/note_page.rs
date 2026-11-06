@@ -245,6 +245,18 @@ const TASK_TIMEOUT: Duration = Duration::from_secs(600);
 /// Lines kept for a second look (left behind by the caret, or finished while a
 /// read was in flight).
 const MAX_WAITING: usize = 16;
+/// How long after the last keystroke a paragraph is looked at, on each pace.
+const PAUSE_REGULAR: Duration = Duration::from_millis(2200);
+const PAUSE_SLOW: Duration = Duration::from_millis(4600);
+/// Edits wait this long before they are written (quitting and switching notes flush).
+const SAVE_DEBOUNCE: Duration = Duration::from_millis(600);
+/// A press on a menu's own button this soon after a press outside closed it does not
+/// open it again.
+const MENU_RECLOSE: Duration = Duration::from_millis(400);
+/// A press on a tag that moves less than this is a click, not a drag.
+const DRAG_START: f32 = 4.;
+/// A click this soon after a drag ended is the drag's own release, not a click.
+const CLICK_AFTER_DRAG: Duration = Duration::from_millis(150);
 
 /// Page geometry for the current window width: the writing column in the
 /// middle and a margin on each side, sized about 4:2 column to
@@ -441,7 +453,6 @@ impl EventEmitter<PageEvent> for NotePage {}
 enum Menu {
     Mind,
     Mode,
-    Thread,
 }
 
 #[derive(Clone, Debug)]
@@ -496,7 +507,6 @@ pub struct NotePage {
     menu_focus: FocusHandle,
     menu_pick: usize,
     menu_return: Option<FocusHandle>,
-    thread_menu_for: Option<String>,
     brief_input: Option<(Entity<InputState>, Subscription)>,
     pub chat_open: bool,
     chat_input: Entity<InputState>,
@@ -602,6 +612,11 @@ fn role_wire(r: Role) -> &'static str {
     }
 }
 
+/// A thread's messages as the brain reads them (`own::message_json` says how one goes).
+fn messages_wire(messages: &[Message]) -> Vec<Value> {
+    messages.iter().map(own::message_json).collect()
+}
+
 impl NotePage {
     pub fn new(note: Note, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor = cx.new(NoteEditor::new);
@@ -644,7 +659,6 @@ impl NotePage {
             menu_focus: cx.focus_handle(),
             menu_pick: 0,
             menu_return: None,
-            thread_menu_for: None,
             brief_input: None,
             chat_open: false,
             chat_input,
@@ -789,6 +803,31 @@ impl NotePage {
         self.heights.borrow_mut().clear();
         self.marks_open.clear();
         self.panel_sides.clear();
+        // Nothing of the old note's threads stays behind: looks-again that were due, the
+        // needle, questions waiting for a pause, the dismissal Undo could put back (its
+        // anchor would land in the new note), a drag, the pointer's rest, the springs,
+        // the threads and their motion, the measured tags and the room a script seats.
+        self.rechecks.clear();
+        self.rechecking.clear();
+        self.arrived.clear();
+        self.last_dismissed = None;
+        self.drag = None;
+        self.last_drag_end = None;
+        self.hover_tag.clear();
+        self.hover_at.clear();
+        self.hover_left.clear();
+        self.unfold.clear();
+        self.unfold_v.clear();
+        self.tying.clear();
+        self.ropes.clear();
+        self.snipped.clear();
+        self.copied = None;
+        self.numbers.clear();
+        self.panel_heights.borrow_mut().clear();
+        self.tab_bounds.borrow_mut().clear();
+        self.panel_bounds.borrow_mut().clear();
+        self.menu_closed = None;
+        self.pending_room.clear();
         self.load_into_editor(cx);
         self.scroll.set_offset(point(px(0.), px(0.)));
         self.focus_editor_at_end(window, cx);
@@ -840,19 +879,23 @@ impl NotePage {
         self.note.updated_at = kept.unwrap_or_else(Utc::now);
         let note = crate::between::save_visitors_home(&self.note, cx.global_mut::<Store>());
         let store = cx.global_mut::<Store>();
-        match store.notes.iter_mut().find(|n| n.id == note.id) {
-            Some(n) => *n = note.clone(),
-            None => store.notes.insert(0, note.clone()),
-        }
-        store.save_note(&note);
+        let saved = store.try_save_note(&note);
         store.settings.last_note = Some(note.id.clone());
+        match store.notes.iter_mut().find(|n| n.id == note.id) {
+            Some(n) => *n = note,
+            None => store.notes.insert(0, note),
+        }
         store.save_settings();
+        if let Err(e) = saved {
+            // The words are still on the page; say that they are not on the disk.
+            self.notice(format!("Couldn't save this note: {e:#}"), cx);
+        }
         cx.emit(PageEvent::NotesChanged);
     }
 
     fn schedule_save(&mut self, cx: &mut Context<Self>) {
         self.save_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(600)).await;
+            cx.background_executor().timer(SAVE_DEBOUNCE).await;
             let _ = this.update(cx, |page, cx| page.flush(cx));
         }));
     }
@@ -1071,8 +1114,8 @@ impl NotePage {
 
     fn schedule_pause(&mut self, cx: &mut Context<Self>) {
         let delay = match cx.global::<Store>().settings.pace {
-            Pace::Regular => Duration::from_millis(2200),
-            Pace::Slow => Duration::from_millis(4600),
+            Pace::Regular => PAUSE_REGULAR,
+            Pace::Slow => PAUSE_SLOW,
         };
         self.pause_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(delay).await;
@@ -1175,7 +1218,7 @@ impl NotePage {
             return;
         }
         let lr = ed.line_range(line);
-        let text = ed.text().to_string();
+        let text = ed.text();
         let touched: Vec<(String, Range<usize>)> = ed
             .anchors()
             .iter()
@@ -1217,7 +1260,7 @@ impl NotePage {
             "task": "reply",
             "ctx": self.context(cx),
             "quote": before,
-            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+            "messages": messages_wire(&t.messages),
             "message": message,
         });
         let input = self.between_reply(&t, input, cx);
@@ -1351,7 +1394,7 @@ impl NotePage {
                     "notAnswers": t.not_answers,
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
-                    "messages": t.messages.iter().map(own::message_json).collect::<Vec<_>>(),
+                    "messages": messages_wire(&t.messages),
                     "elsewhere": crate::between::summary_wire(&self.note, &t.id),
                     "own": t.own,
                 })
@@ -1461,9 +1504,11 @@ impl NotePage {
                 return;
             }
             let _ = this.update(cx, |page, cx| {
+                // The brain stops working on it either way; the page hears about it only
+                // for a request it still shows (learning about the writer shows nothing).
+                log::warn!("request {req_id} timed out after {}s", timeout.as_secs());
+                page.cancel_request(&req_id, cx);
                 if page.tracks(&req_id) {
-                    log::warn!("request {req_id} timed out after {}s", timeout.as_secs());
-                    page.cancel_request(&req_id, cx);
                     let deliver = deliver.clone();
                     cx.defer(move |cx| {
                         deliver(BrainMsg::Error { kind: "timeout".into(), message: "the model took too long to answer".into() }, cx)
@@ -1576,7 +1621,8 @@ impl NotePage {
         let reads = task == "read";
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
-                page.reading = None;
+                // the line it was sent as, moved with the lines added or taken away since
+                let line = page.reading.take().map_or(line, |r| r.line);
                 if let Some(n) = v["repeats"].as_u64() {
                     log::info!("read held back: it makes let-stand point {n} again");
                 }
@@ -2164,7 +2210,7 @@ impl NotePage {
             "task": "reply",
             "ctx": self.context(cx),
             "quote": t.quote,
-            "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+            "messages": messages_wire(&t.messages),
             "message": dispute.unwrap_or(text.clone()),
         });
         let input = self.between_reply(&t, input, cx);
@@ -3076,7 +3122,7 @@ impl NotePage {
     /// the press outside the menu has just closed it, and must not open it again. An open
     /// menu takes the keyboard, on the item chosen now, so the arrow keys work at once.
     fn toggle_menu(&mut self, menu: Menu, window: &mut Window, cx: &mut Context<Self>) {
-        let just_closed = self.menu_closed.is_some_and(|(m, at)| m == menu && at.elapsed() < Duration::from_millis(400));
+        let just_closed = self.menu_closed.is_some_and(|(m, at)| m == menu && at.elapsed() < MENU_RECLOSE);
         self.menu_closed = None;
         self.menu = if self.menu == Some(menu) || just_closed { None } else { Some(menu) };
         if self.menu.is_some() {
@@ -3295,12 +3341,6 @@ impl NotePage {
         )
     }
 
-    /// The header's menus hang under their own buttons (see [`Self::drop_down`]), so
-    /// nothing is drawn for them at the page level any more.
-    fn menus(&mut self, _cx: &mut Context<Self>) -> Option<AnyElement> {
-        None
-    }
-
     /// The card for a header menu: the minds, each in its own thread colour, or the modes.
     fn menu_card(&mut self, menu: Menu, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
@@ -3368,7 +3408,7 @@ impl NotePage {
                     )
                     .into_any_element()
             }
-            Menu::Mode | Menu::Thread => {
+            Menu::Mode => {
                 let current = self.note.mode;
                 let pick = self.menu_pick;
                 let focus = self.menu_focus.clone();
@@ -4075,7 +4115,7 @@ impl NotePage {
     /// 8 px in from its edges. A press that moves less than 4 px is still a click.
     fn drag_tag_by(&mut self, delta: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(d) = self.drag.as_mut() else { return };
-        if !d.moved && (delta.x.abs() + delta.y.abs()) < px(4.) {
+        if !d.moved && (delta.x.abs() + delta.y.abs()) < px(DRAG_START) {
             return;
         }
         d.moved = true;
@@ -4148,7 +4188,7 @@ impl NotePage {
     }
 
     fn drag_moved_recently(&self) -> bool {
-        self.drag.as_ref().is_some_and(|d| d.moved) || self.last_drag_end.is_some_and(|t| t.elapsed() < Duration::from_millis(150))
+        self.drag.as_ref().is_some_and(|d| d.moved) || self.last_drag_end.is_some_and(|t| t.elapsed() < CLICK_AFTER_DRAG)
     }
 
     /// How far each tag should be unfolded: open while pointed at (and a moment after),
@@ -5102,7 +5142,6 @@ impl Render for NotePage {
 
         let header = self.header(cx);
         let brief = self.brief_line(cx);
-        let menus = self.menus(cx);
         let toolbar = self.toolbar(cx);
         let ask = self.ask_box(cx);
         let enlarged = self.enlarged_drawing(cx);
@@ -5128,7 +5167,6 @@ impl Render for NotePage {
             .flex()
             .flex_col()
             .child(div().relative().ml(px(m.column_left())).w(px(m.column)).tab_group().tab_index(ui::tab::HEADER).child(header).when(!jmw, |d| d.children(brief)))
-            .children(menus)
             .child(div().h(px(18.)))
             .child(body)
             .child(div().h(px(220.)));

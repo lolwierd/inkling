@@ -1127,15 +1127,16 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Save `value` as pretty JSON; failures are logged, since a save runs from the UI
-/// and there is nobody to return the error to.
-fn save_json<T: Serialize + ?Sized>(path: &Path, value: &T) {
+/// Save `value` as pretty JSON; failures are logged, since most saves run from the UI
+/// with nobody to return the error to, and returned, for the one that can say so.
+fn save_json<T: Serialize + ?Sized>(path: &Path, value: &T) -> Result<()> {
     let result = serde_json::to_vec_pretty(value)
         .context("serializing")
         .and_then(|bytes| write_atomic(path, &bytes));
-    if let Err(e) = result {
+    if let Err(e) = &result {
         log::error!("could not save {}: {e:#}", path.display());
     }
+    result
 }
 
 fn read_json<T: DeserializeOwned>(path: &Path) -> Option<T> {
@@ -1293,7 +1294,12 @@ impl Store {
     }
 
     pub fn save_note(&self, note: &Note) {
-        save_json(&self.dir.join("notes").join(format!("{}.json", note.id)), note);
+        let _ = self.try_save_note(note);
+    }
+
+    /// Save a note and say whether it is on disk: the page tells the writer when it is not.
+    pub fn try_save_note(&self, note: &Note) -> Result<()> {
+        save_json(&self.dir.join("notes").join(format!("{}.json", note.id)), note)
     }
 
     pub fn delete_note(&mut self, id: &str) {
@@ -1323,16 +1329,16 @@ impl Store {
     }
 
     pub fn save_folders(&self) {
-        save_json(&self.dir.join("folders.json"), &self.folders);
+        let _ = save_json(&self.dir.join("folders.json"), &self.folders);
     }
 
     pub fn save_minds(&self) {
         let custom: Vec<&Mind> = self.minds.iter().filter(|m| m.id != DEFAULT_MIND).collect();
-        save_json(&self.dir.join("minds.json"), &custom);
+        let _ = save_json(&self.dir.join("minds.json"), &custom);
     }
 
     pub fn save_settings(&self) {
-        save_json(&self.dir.join("settings.json"), &self.settings);
+        let _ = save_json(&self.dir.join("settings.json"), &self.settings);
     }
 
     pub fn dir(&self) -> &Path {

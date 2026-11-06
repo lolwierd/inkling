@@ -4,8 +4,9 @@ Manifesto items 1 and 6 (`design/manifesto.md`, section 2), designed 7 Nov 2026 
 `feat-answer`. Both move what you worked out into the note itself, and both end the same way:
 a thread whose knot points at your words in the note.
 
-**State (7 Nov 2026):** the shared part and Answer in the note are built on `feat-answer`
-(scenarios t14, t15, t16, t18; six live checks against the real model, below). Write it in
+**State (7 Nov 2026):** rebased onto master with Let it stand, Show its working, Loose ends
+and Turn it over; the shared part and Answer in the note are built on `feat-answer`
+(scenarios t40 to t43; six live checks against the real model, below). Write it in
 is being built by a second agent on top of the shared part. Screenshots, light and dark:
 `design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`.
 
@@ -217,8 +218,9 @@ In a note file:
 Rules:
 
 - **`tied_by`** is set wherever a thread ties off: `send_reply` (Reply), `recheck` (Edit),
-  the answer check (Answer), and `set_status(Resolved)` (Hand, only if nothing set it
-  first). Reopen clears it. A dismissed thread keeps whatever it had. A value this build
+  the answer check (Answer), and `Thread::set_status(Resolved)` (Hand, only if nothing set
+  it first, so every path that ties a thread off says how). `Thread::set_status(Open)`
+  clears it, with the answer, as it clears Let it stand's `reason` and `ended_at`. A dismissed thread keeps whatever it had. A value this build
   does not know (a newer build's) reads as `None`, so it costs that field, not the note.
 - **`answer` follows edits** as an editor `Anchor` with the id `"<thread id>#answer"`
   (`crate::answers::anchor_id`). It has no stitch style, so the editor draws nothing for it and a
@@ -390,7 +392,7 @@ dominates a cold call, on any task).
 | Feature | How it meets these | Shared types |
 |---|---|---|
 | **Let it stand** (a reason when you dismiss; minds told) | A thread let stand is not open, so it is never answered. Its "never ask again" and `not_answers` are the same idea (remember a no) at different scales; both reach the minds through `ThreadSummary`. | `Thread` (they add the reason; I add `answer`, `tied_by`, `not_answers` at the end), `ThreadSummary` (each adds optional fields), `threadsBlock` (theirs; I do not touch it). |
-| **Turn it over** (every thread on the back of the note) | `tied_by` and `answer` say how each thread ended and where it was answered: "Tied off by your answer: «…»". If Turn it over lands its own record of how threads end first, `tied_by` and `answer` move into it unchanged. | `Thread`, `TiedBy`. |
+| **Turn it over** (every thread on the back of the note) | Landed first. Its endings come from the status (`Thread::ending`), and still read the same: "Tied off · 7 Nov" with the mind's last word under it, which for an answer is its `settle` line. A thread tied off by an answer also shows "Answered in your note:" and the words, on the back and in its Markdown (`back.rs`, `Entry.answer`). | `Thread`, `TiedBy`, `back::Entry`. |
 | **Threads of your own** | Your own question is answered the natural way, by writing the answer: such threads are answerable like any other, judged by the note's mind, with `settle` told the writer asked it. | `ThoughtKind` (they may add a kind; `answers::answerable` treats every open kind as answerable). |
 | **Show its working** (a correction carries a check) | A correction's check helps `settle` judge whether your answer is right. Both change the read's schema: they add to `THOUGHT_SCHEMA`; mine is built from theirs. | `THOUGHT_SCHEMA` in `prompts.ts`. |
 | **Loose ends** (every open thread in one list) | A thread tied off by an answer leaves the list at once. Nothing else is shared. | None. |
@@ -454,7 +456,7 @@ Built, in `brain/test/e2e/scenarios/`; the dump has `answers` (thread, words, ra
 `tied_by`), `knots` (threads whose knot is drawn), `tied_by` and `washed`, and the script
 has `knot: N` (click thread N's knot) and `hover-knot: N` (rest the pointer on it).
 
-`t14-answer-in-note.txt`:
+`t40-answer-in-note.txt`:
 
 ```text
 # fixture: running-plan
@@ -482,16 +484,16 @@ expect: log.some(l => l.msg.includes("Answered in the note:* \u201cThe long run 
 quit
 ```
 
-- `t15-answer-not-settled.txt`: `[[answers:2]] [[settle>unsettled]]`; thread 2 stays open
+- `t41-answer-not-settled.txt`: `[[answers:2]] [[settle>unsettled]]`; thread 2 stays open
   with its one message, no answers, no knots, no problem toast, tasks `read,settle`.
-- `t16-answer-waiting.txt`: a note set to `mode: ask` reads nothing while no thread is open;
+- `t42-answer-waiting.txt`: a note set to `mode: ask` reads nothing while no thread is open;
   after `ask:`, a paragraph with `[[answers:1]]` ties the ask thread off; every read it sent
   was `answersOnly`, and the `settle` ran as Inkling.
-- `t18-answer-room.txt`: three minds asked the same thing (Ask the room); one paragraph
+- `t43-answer-room.txt`: three minds asked the same thing (Ask the room); one paragraph
   answers all three; three knots, three tie-offs, and each `settle` ran as its own mind
   (Inkling, Skeptic, Socratic tutor).
 
-`t17-write-it-in.txt` (for the Write it in build):
+`t44-write-it-in.txt` (for the Write it in build; the number is the next free one when it lands):
 
 ```text
 # fixture: running-plan
@@ -555,7 +557,7 @@ date fixed, all six pass.
 | `brain/test/e2e/fake-brain.ts`, `unit.test.ts`, `protocol.test.ts`, `live.ts` | as in Tests |
 | `src/note_page/answers.rs` | `take_answers` (from a read), `read_for_answers` (waiting notes), `listens_for_answers`, `settle_answer`, `tie_by_answer` |
 | `src/note_page.rs` (hooks) | `read_line`'s `done` calls `take_answers`; `consider` sends a waiting note's paragraphs to `read_for_answers`; `context_with` adds the thread fields; `NotePage.answer_checks` |
-| scenarios `t14`, `t15`, `t16`, `t18`; `design/capabilities.md` | one row under Reading along |
+| scenarios `t40` to `t43`; `design/capabilities.md` | one row under Reading along |
 
 ### Write it in (the second agent, on top of the shared part)
 
@@ -566,7 +568,7 @@ date fixed, all six pass.
 | `src/note_page.rs` (hooks) | `mod write_in;`; `tag_panel` adds `write_in_offer` |
 | `src/toast.rs`, `src/app.rs` | `Kind::WrittenIn` (8 s, Undo) and its arm in the stack's Undo |
 | `src/script.rs` | `writein`, `undo-writein` |
-| scenario `t17`; `design/capabilities.md` | one row under Threads |
+| scenario `t44` (or the next free number); `design/capabilities.md` | one row under Threads |
 
 The two meet only in `tag_panel` (one line each, on different lines) and in
 `capabilities.md` (one row each). Write it in reads `tied_by` and writes `answer` through

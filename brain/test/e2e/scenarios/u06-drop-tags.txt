@@ -12,7 +12,9 @@
 wait: 1500
 hover: 1
 dump: just-pointed
-expect: d.unfolded.length === 0
+# (t1, not "nothing": the owner's own pointer resting over another tab's spot on the
+# covered window opens that one, which GPUI tracks)
+expect: !d.unfolded.includes("t1")
 wait: 900
 dump: rested
 expect: d.unfolded.length === 1 && d.unfolded[0] === "t1"

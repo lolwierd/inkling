@@ -1,4 +1,4 @@
-# t20-between-gone: with the other note deleted, the thread stays at home with the other words
+# t22-between-gone: with the other note deleted, the thread stays at home with the other words
 # kept, says the note is deleted and offers no Go there; Undo brings the note back with the link.
 # With the home note deleted, the far end is gone from the other note the next time it opens.
 # fixture: between

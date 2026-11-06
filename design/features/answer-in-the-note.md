@@ -8,7 +8,8 @@ a thread whose knot points at your words in the note.
 and Turn it over; the shared part and Answer in the note are built on `feat-answer`
 (scenarios t40 to t43; six live checks against the real model, below). Write it in
 is being built by a second agent on top of the shared part. Screenshots, light and dark:
-`design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`.
+`design/features/shots/answer-in-the-note-{knot,hover,tag}-{light,dark}.jpg`, and the back of
+the note, `answer-in-the-note-back-light.jpg`.
 
 They are built by two agents at once. This doc is the contract between them: the
 **shared part** (the answer link and its knot) is built first, on `feat-answer`; then

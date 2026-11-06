@@ -1,0 +1,53 @@
+# Read it through: a note that waits to be asked reads nothing as you write; one command
+# reads every finished paragraph once, top to bottom, threads arriving as it goes, and the
+# end says so. Again, it has nothing new. The mode menu's last item starts it from the
+# keyboard. A read that fails ends the pass, saying where it stopped and why.
+# tags: read-through
+note: Draft
+mode: ask
+type: The importer ships on Friday once the review is done. [[silent]]
+type: We keep one Redis counter per user and reset it every minute. [[quote:reset it every minute]]
+type: Short one.
+type: Everything else stays as it is, including the old export path. [[silent]]
+settle
+dump: before
+expect: d.read_hashes === 0 && d.threads.length === 0 && d.read_through === null   // waiting: nothing read as you write
+read-through
+dump: started
+expect: d.read_through !== null && d.read_through.total === 3 && d.reading !== null   // "Short one." is under four words
+settle: 30000
+dump: after
+expect: d.read_through === null && d.reading === null && d.read_hashes === 3
+expect: d.threads.length === 1 && d.threads[0].quote === "reset it every minute" && d.threads[0].kind === "Question"
+expect: d.toasts.some(t => t.text === "Inkling read it through. New threads are in the margin.")
+# again: every paragraph has been read
+key: cmd-shift-r
+dump: again
+expect: d.read_through === null && d.toasts.some(t => t.text === "Nothing new to read.")
+# a new paragraph, read through from the mode menu, by the keyboard
+type: The cache is warmed from the nightly build, so the first run is never cold. [[silent]]
+settle
+caret: end
+key: shift-tab shift-tab shift-tab
+dump: on-mode
+expect: d.focus === "header:mode"
+key: enter
+key: down
+dump: menu
+expect: d.menu === "Mode" && d.focus === "menu:2"   // the third item: Read it through
+shot: read-through-menu
+key: enter
+settle: 30000
+dump: by-menu
+expect: d.menu === null && d.read_through === null && d.read_hashes === 4
+expect: d.toasts.some(t => t.text === "Inkling read it through. Nothing to ask.")
+# a read that fails ends the pass; the paragraph being written is left for later
+type: Rollback runs on its own when the error rate passes two percent. [[error:rate_limit]]
+type: This paragraph is still being written when the pass starts [[silent]]
+read-through
+settle: 30000
+dump: failed
+expect: d.read_through === null && d.error.startsWith("Couldn’t read it through. You've reached your Claude usage limit")
+expect: d.read_hashes === 4   // the failed paragraph stays unread, for the next pass
+expect: requests.filter(r => r.input.task === "read").length === 5 && requests.every(r => r.input.task !== "read" || r.input.through === true)
+quit

@@ -1097,7 +1097,7 @@ impl SettingsView {
             ))
             .child(section("Coming next", None, &t))
             .child(group(
-                vec![row("Codex", Some("Sign in with your ChatGPT account using the device code flow, and pick Codex per note.".into()), div(), &t).into_any_element()],
+                vec![row("Codex", Some("Sign in with your ChatGPT account, and pick Codex for any note.".into()), div(), &t).into_any_element()],
                 &t,
             ))
     }

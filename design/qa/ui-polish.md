@@ -29,8 +29,8 @@ Low: polish.
 
 | | Count |
 |---|---|
-| Findings | 33 |
-| Fixed | 25 |
+| Findings | 34 |
+| Fixed | 26 |
 | Left, with the reason | 8 (2 of them for the owner) |
 | High | 2, both fixed |
 
@@ -85,19 +85,20 @@ Ordered by what a user would notice first. Commits are on `ui-polish-2`.
 | 23 | Export | It sat on the page's paper; ⌘K and the sketch dialog sit on the card. | Low | On the card. | export-card |
 | 24 | Settings › Model | Coming next said "using the device code flow". | Low | "Sign in with your ChatGPT account, and pick Codex for any note." | |
 | 25 | Window menu | "Minimize", where Inkling spells Colour and kilometre. | Low | "Minimise", as macOS spells it in British English. | |
+| 26 | Settings › Shortcuts | Esc in the search field, with words typed in it, closed the whole Settings window. | Low | Esc clears the search first, as a Mac search field does; with nothing to clear it closes Settings, as before. | by reading the code: no knob focuses the search |
 
 ## Left
 
 | # | Surface | What is not right | Severity | Why it was left |
 |---|---|---|---|---|
-| 26 | Hairlines | Every rule, divider and card edge is 1 pt, 2 device pixels on a Retina screen, not one. Measured on ⌘K, the sidebar, the chat, Settings' groups and the tags: all crisp, all the same. | Low | **Owner's call.** Recommendation: keep 1 pt. The page's other lines are thread, drawn heavier than a hairline, and 0.5 pt lines would also blur on a 1x display. |
-| 27 | Menu bar | No Edit menu (Undo, Redo, Cut, Copy, Paste, Select All, Emoji & Symbols). | Low | **Owner's call**, and a change of its own: a menu item's keys would compete with the component library's inputs (the reply box, the chat, ⌘K, Settings' fields). Recommendation: add it with macOS's own actions (OsAction) and check ⌘Z and ⌘V in each input. |
-| 28 | View menu | Hide Threads keeps its name while threads are hidden (the sidebar's row does change). | Low | GPUI's menus do not change their titles as state changes. |
-| 29 | Settings | The version (v0.1.0) sits about 1.75 px above the wordmark's baseline. | Low | The wordmark is being replaced on master. |
-| 30 | Open tag | In the narrowest windows with the chat open, an open tag hangs over the chat's edge. | Low | The never-cover rule's order: over the window's cloth before narrowing. It is a popover, and the chat stays usable once it closes. |
-| 31 | Page | "Just start writing." shows on the empty last line of a note that has words. | Low | By design (`placeholder_rules`). |
-| 32 | Tags | The thread meets a folded tab at its lower edge, not at its loop. | Low | The rope runs under the tab to the loop; drawing it over the tab would cross its words. |
-| 33 | Hover and tooltips | Not seen in a shot: background windows get no hover. | Low | 11, 12 and 13 were checked by reading the code. |
+| 27 | Hairlines | Every rule, divider and card edge is 1 pt, 2 device pixels on a Retina screen, not one. Measured on ⌘K, the sidebar, the chat, Settings' groups and the tags: all crisp, all the same. | Low | **Owner's call.** Recommendation: keep 1 pt. The page's other lines are thread, drawn heavier than a hairline, and 0.5 pt lines would also blur on a 1x display. |
+| 28 | Menu bar | No Edit menu (Undo, Redo, Cut, Copy, Paste, Select All, Emoji & Symbols). | Low | **Owner's call**, and a change of its own: a menu item's keys would compete with the component library's inputs (the reply box, the chat, ⌘K, Settings' fields). Recommendation: add it with macOS's own actions (OsAction) and check ⌘Z and ⌘V in each input. |
+| 29 | View menu | Hide Threads keeps its name while threads are hidden (the sidebar's row does change). | Low | GPUI's menus do not change their titles as state changes. |
+| 30 | Settings | The version (v0.1.0) sits about 1.75 px above the wordmark's baseline. | Low | The wordmark is being replaced on master. |
+| 31 | Open tag | In the narrowest windows with the chat open, an open tag hangs over the chat's edge. | Low | The never-cover rule's order: over the window's cloth before narrowing. It is a popover, and the chat stays usable once it closes. |
+| 32 | Page | "Just start writing." shows on the empty last line of a note that has words. | Low | By design (`placeholder_rules`). |
+| 33 | Tags | The thread meets a folded tab at its lower edge, not at its loop. | Low | The rope runs under the tab to the loop; drawing it over the tab would cross its words. |
+| 34 | Hover and tooltips | Not seen in a shot: background windows get no hover. | Low | 11, 12, 13 and 26 were checked by reading the code. |
 
 ## Start here (`src/welcome.rs`, not changed)
 

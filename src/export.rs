@@ -684,4 +684,74 @@ A paragraph after the list.\n\n\
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// A note with each new block: a checklist, two callouts, code with a thread on it.
+    fn sewn() -> Note {
+        let mut note = Note::new("Race week", Mode::ThinksWithYou, None);
+        let rust = BlockKind::Code(crate::store::Lang::new("rust"));
+        note.blocks = vec![
+            b(BlockKind::Title, "Race week"),
+            b(BlockKind::Check(true), "Pick up the bib"),
+            b(BlockKind::Check(false), "Easy <5 km>"),
+            b(BlockKind::Bullet, "a plain item"),
+            b(BlockKind::Callout(Callout::Note), "One hill, at 6 km."),
+            b(BlockKind::Callout(Callout::Warning), "Nothing new on race day."),
+            b(rust, "fn finish(p: Pace) -> u64 {"),
+            b(rust, "    p.secs * 10 // a < b && c"),
+            b(rust, "}"),
+            b(BlockKind::Paragraph, "After the code."),
+        ];
+        let on_code = thread(&note, "p.secs * 10", ThreadStatus::Open, &[(Role::Mind, "Seconds or minutes?")]);
+        note.threads = vec![on_code];
+        note
+    }
+
+    #[std::prelude::v1::test]
+    fn markdown_has_tasks_callouts_and_fenced_code() {
+        let md = to_markdown(&sewn(), true);
+        let expected = "# Race week\n\n\
+- [x] Pick up the bib\n- [ ] Easy <5 km>\n- a plain item\n\n\
+> [!note]\n> One hill, at 6 km.\n\n\
+> [!warning]\n> Nothing new on race day.\n\n\
+```rust\nfn finish(p: Pace) -> u64 {\n    p.secs * 10 // a < b && c\n}\n```\n\n\
+> **Editor** on “p.secs * 10”\n>\n> *Editor:* Seconds or minutes?\n\n\
+After the code.\n";
+        assert_eq!(md, expected);
+        // marks are not written inside code
+        let mut note = sewn();
+        let at = note.joined_text().find("p.secs").unwrap();
+        note.marks = vec![MarkSpan { start: at, end: at + 6, mark: Mark::Bold }];
+        assert!(to_markdown(&note, false).contains("\n    p.secs * 10 //"));
+    }
+
+    #[std::prelude::v1::test]
+    fn html_has_checkboxes_callout_boxes_and_pre() {
+        let html = to_html(&sewn(), true);
+        assert!(html.contains(
+            "<ul class=\"checklist\">\n<li class=\"done\"><input type=\"checkbox\" disabled checked> Pick up the bib</li>\n\
+<li><input type=\"checkbox\" disabled> Easy &lt;5 km&gt;</li>\n</ul>\n<ul>\n<li>a plain item</li>\n</ul>\n"
+        ), "{html}");
+        assert!(html.contains("<div class=\"callout note\"><p class=\"kind\">Note</p>\n<p>One hill, at 6 km.</p>\n</div>\n<div class=\"callout warning\">"), "{html}");
+        assert!(html.contains(
+            "<pre><code class=\"language-rust\">fn finish(p: Pace) -&gt; u64 {\n    p.secs * 10 // a &lt; b &amp;&amp; c\n}</code></pre>\n<div class=\"thread\">"
+        ), "{html}");
+        // Word gets lines it can draw: ☑ and ☐, and a quote headed by the callout's kind
+        let word = to_word_html(&sewn(), false);
+        assert!(word.contains("<p>\u{2611} Pick up the bib</p>\n<p>\u{2610} Easy &lt;5 km&gt;</p>\n<ul>\n<li>a plain item</li>"), "{word}");
+        assert!(word.contains("<blockquote><p><b><span style=\"color:#2e3f7a\">Note</span></b></p>\n<p>One hill, at 6 km.</p>\n</blockquote>"), "{word}");
+        assert!(!word.contains("<input"));
+        if std::path::Path::new("/usr/bin/textutil").exists() {
+            let dir = std::env::temp_dir().join(format!("inkling-export-sewn-{}", crate::store::new_id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            write(&sewn(), true, Format::Word, &dir.join("w.docx")).unwrap();
+            let txt = dir.join("w.txt");
+            let ok = std::process::Command::new("/usr/bin/textutil").args(["-convert", "txt", "-output"]).arg(&txt).arg(dir.join("w.docx")).status().unwrap();
+            assert!(ok.success());
+            let text = std::fs::read_to_string(&txt).unwrap();
+            for words in ["\u{2611} Pick up the bib", "\u{2610} Easy <5 km>", "Note", "One hill, at 6 km.", "Warning", "fn finish(p: Pace) -> u64 {", "    p.secs * 10 // a < b && c", "Seconds or minutes?"] {
+                assert!(text.contains(words), "{words:?} missing from {text}");
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
 }

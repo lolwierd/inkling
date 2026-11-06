@@ -4773,4 +4773,294 @@ mod tests {
             }
         }
     }
+
+    // ----- checklists, callouts, code ---------------------------------------------
+
+    fn rust() -> BlockKind {
+        K::Code(Lang::new("rust"))
+    }
+
+    #[std::prelude::v1::test]
+    fn checklist_items_from_typing_and_return() {
+        for (typed, kind) in [("[ ] ", K::Check(false)), ("[] ", K::Check(false)), ("[x] ", K::Check(true)), ("- [ ] ", K::Check(false)), ("* [X] ", K::Check(true))] {
+            let mut s = st("T\n");
+            typ(&mut s, typed);
+            assert_eq!((s.text.as_str(), s.kinds[1]), ("T\n", kind), "{typed:?}");
+            check(&s);
+        }
+        // Return continues with an unchecked item, even after a done one; on an empty
+        // item it leaves the list, as bullets do
+        let mut s = st_kinds(&[(K::Title, "T"), (K::Check(true), "Pick up the bib")]);
+        s.newline();
+        typ(&mut s, "Easy 5 km");
+        assert_eq!(s.kinds, [K::Title, K::Check(true), K::Check(false)]);
+        s.newline();
+        assert_eq!(s.kinds, [K::Title, K::Check(true), K::Check(false), K::Check(false)]);
+        s.newline();
+        assert_eq!((s.text.as_str(), s.kinds.clone()), ("T\nPick up the bib\nEasy 5 km\n", vec![K::Title, K::Check(true), K::Check(false), K::Paragraph]));
+        // split at the start, the words keep their state and the item left above is a new one
+        let mut s = st_kinds(&[(K::Title, "T"), (K::Check(true), "done")]);
+        s.set_caret(2, false);
+        s.newline();
+        assert_eq!(s.kinds, [K::Title, K::Check(false), K::Check(true)]);
+        // mid-line, the boxes need their space; Backspace at the start drops the box
+        let mut s = st("T\nword ");
+        typ(&mut s, "[ ] ");
+        assert_eq!((s.text.as_str(), s.kinds[1]), ("T\nword [ ] ", K::Paragraph));
+        let mut s = st_kinds(&[(K::Title, "T"), (K::Check(true), "x")]);
+        s.set_caret(2, false);
+        s.backspace();
+        assert_eq!((s.text.as_str(), s.kinds[1]), ("T\nx", K::Paragraph));
+        check(&s);
+    }
+
+    #[std::prelude::v1::test]
+    fn the_shortcut_checks_unchecks_and_makes_items() {
+        let mut s = st("T\nPick up the bib");
+        let (_, changed) = s.toggle_check();
+        assert_eq!((s.kinds[1], changed), (K::Check(false), vec![]), "a plain line becomes an item");
+        let (_, changed) = s.toggle_check();
+        assert_eq!((s.kinds[1], changed), (K::Check(true), vec![1]));
+        let (_, changed) = s.toggle_check();
+        assert_eq!((s.kinds[1], changed), (K::Check(false), vec![1]));
+        s.undo();
+        assert_eq!(s.kinds[1], K::Check(true), "one undo step each");
+        // over several items: all done unless they all are; only the ones that change move
+        let mut s = st_kinds(&[(K::Title, "T"), (K::Check(true), "a"), (K::Check(false), "b"), (K::Paragraph, "c")]);
+        s.select(2..s.text.len(), false);
+        let (_, changed) = s.toggle_check();
+        assert_eq!((s.kinds.clone(), changed), (vec![K::Title, K::Check(true), K::Check(true), K::Paragraph], vec![2]));
+        let (_, changed) = s.toggle_check();
+        assert_eq!((s.kinds.clone(), changed), (vec![K::Title, K::Check(false), K::Check(false), K::Paragraph], vec![1, 2]));
+        // a click on one box
+        assert_eq!(s.toggle_item(2), Fx::edited(2));
+        assert_eq!(s.kinds[2], K::Check(true));
+        assert_eq!(s.toggle_item(3), Fx::default(), "not an item");
+        // in the title, nothing
+        let mut s = st("T\nx");
+        s.set_caret(0, false);
+        assert!(s.toggle_check().1.is_empty());
+        assert_eq!(s.kinds, [K::Title, K::Paragraph]);
+    }
+
+    #[std::prelude::v1::test]
+    fn callouts_from_a_quote_and_the_menu() {
+        for (typed, kind) in [("> [!note] ", Callout::Note), ("> [!warning] ", Callout::Warning), ("> [!tip] ", Callout::Tip), ("> [!TIP] ", Callout::Tip), ("> [!caution] ", Callout::Warning)] {
+            let mut s = st("T\n");
+            typ(&mut s, typed);
+            typ(&mut s, "One hill");
+            assert_eq!((s.text.as_str(), s.kinds[1]), ("T\nOne hill", K::Callout(kind)), "{typed:?}");
+            // Return goes on in the same callout; an empty line leaves it
+            s.newline();
+            assert_eq!(s.kinds[2], K::Callout(kind));
+            s.newline();
+            assert_eq!(s.kinds[2], K::Paragraph);
+            check(&s);
+        }
+        // a name Obsidian does not have stays words in the quote
+        let mut s = st("T\n");
+        typ(&mut s, "> [!nope] ");
+        assert_eq!((s.text.as_str(), s.kinds[1]), ("T\n[!nope] ", K::Quote));
+        // the menu: a kind on every line, the same kind again turns them back
+        let mut s = st("T\na\nb");
+        s.select(2..s.text.len(), false);
+        s.set_selection_kind(K::Callout(Callout::Tip));
+        assert_eq!(s.kinds, [K::Title, K::Callout(Callout::Tip), K::Callout(Callout::Tip)]);
+        s.set_selection_kind(K::Callout(Callout::Warning));
+        assert_eq!(s.kinds[1], K::Callout(Callout::Warning), "another kind replaces it");
+        s.set_selection_kind(K::Callout(Callout::Warning));
+        assert_eq!(s.kinds[1], K::Paragraph);
+        // the checklist key keeps what is done
+        let mut s = st_kinds(&[(K::Title, "T"), (K::Check(true), "a"), (K::Paragraph, "b")]);
+        s.select(2..s.text.len(), false);
+        s.set_selection_kind(K::Check(false));
+        assert_eq!(s.kinds, [K::Title, K::Check(true), K::Check(false)]);
+        s.set_selection_kind(K::Check(false));
+        assert_eq!(s.kinds, [K::Title, K::Paragraph, K::Paragraph]);
+    }
+
+    #[std::prelude::v1::test]
+    fn code_blocks_open_with_a_fence_and_keep_return_inside() {
+        // ``` and a language, then Return
+        let mut s = st("T\n");
+        typ(&mut s, "```rust");
+        s.newline();
+        assert_eq!((s.text.as_str(), s.kinds[1]), ("T\n", rust()));
+        typ(&mut s, "fn main() {");
+        s.newline();
+        typ(&mut s, "    let x = 1;");
+        s.newline();
+        // a new line starts as far in as the one above
+        assert_eq!(&s.text[s.line_range(3)], "    ");
+        s.backspace();
+        s.backspace();
+        s.backspace();
+        s.backspace();
+        typ(&mut s, "}");
+        // a blank line inside stays; Return twice at the end leaves
+        s.set_caret(at(&s, "    let"), false);
+        s.newline();
+        assert_eq!(s.kinds[1..], [rust(), rust(), rust(), rust()]);
+        assert_eq!(&s.text[s.line_range(2)], "");
+        s.set_caret(s.text.len(), false);
+        s.newline();
+        assert_eq!(s.kinds.len(), 6);
+        s.newline();
+        assert_eq!((s.kinds[5], &s.text[s.line_range(5)]), (K::Paragraph, ""));
+        assert_eq!(s.text, "T\nfn main() {\n\n    let x = 1;\n}\n");
+        check(&s);
+        // a fence with no language, by Return or by a space
+        let mut s = st("T\n");
+        typ(&mut s, "```");
+        s.newline();
+        assert_eq!(s.kinds[1], K::Code(Lang::default()));
+        let mut s = st("T\n");
+        typ(&mut s, "```py ");
+        assert_eq!((s.text.as_str(), s.kinds[1]), ("T\n", K::Code(Lang::new("py"))));
+        // like the other shortcuts, the space opens it, so the words typed on go in it;
+        // mid-line it is only backticks
+        let mut s = st("T\n");
+        typ(&mut s, "```js is fun");
+        assert_eq!((s.text.as_str(), s.kinds[1]), ("T\nis fun", K::Code(Lang::new("js"))));
+        let mut s = st("T\nsay ");
+        typ(&mut s, "```");
+        s.newline();
+        assert_eq!(s.kinds[1..], [K::Paragraph, K::Paragraph]);
+    }
+
+    #[std::prelude::v1::test]
+    fn editing_inside_code() {
+        let mut s = st_kinds(&[(K::Title, "T"), (rust(), "fn a() {"), (rust(), "x"), (rust(), "}")]);
+        // Backspace at a line start joins the line above, as in a code editor
+        s.set_caret(at(&s, "x"), false);
+        s.backspace();
+        assert_eq!((s.text.as_str(), s.kinds.clone()), ("T\nfn a() {x\n}", vec![K::Title, rust(), rust()]));
+        // at the start of the block it drops the block's kind, line by line
+        s.set_caret(2, false);
+        s.backspace();
+        assert_eq!(s.kinds[1..], [K::Paragraph, rust()]);
+        // Tab is four spaces; Shift-Tab takes them off and keeps the caret on its letter
+        let mut s = st_kinds(&[(K::Title, "T"), (rust(), "x = 1")]);
+        s.set_caret(2, false);
+        s.indent();
+        assert_eq!((s.text.as_str(), s.cursor()), ("T\n    x = 1", 6));
+        s.set_caret(7, false);
+        s.outdent();
+        assert_eq!((s.text.as_str(), s.cursor()), ("T\nx = 1", 3));
+        assert_eq!(s.outdent(), Fx::default());
+        // a paste of several lines stays code
+        let mut s = st_kinds(&[(K::Title, "T"), (rust(), "")]);
+        s.paste("a\nb\n\nc");
+        assert_eq!(s.kinds[1..], [rust(), rust(), rust(), rust()]);
+        // a block is read as one, from its first line
+        let s = st_kinds(&[(K::Title, "T"), (K::Paragraph, "p"), (rust(), "a"), (rust(), "b"), (K::Code(Lang::new("py")), "c"), (K::Check(false), "d")]);
+        assert_eq!((s.unit_of(1), s.unit_of(2), s.unit_of(3), s.unit_of(4), s.unit_of(5)), (1..2, 2..4, 2..4, 4..5, 5..6));
+        check(&s);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_patch_and_a_ground_hold_their_lines() {
+        let ts = text_system();
+        let s = st_kinds(&[
+            (K::Title, "T"),
+            (K::Paragraph, "before"),
+            (rust(), "fn a() {"),
+            (rust(), "}"),
+            (K::Callout(Callout::Note), "one"),
+            (K::Callout(Callout::Note), "two"),
+            (K::Callout(Callout::Tip), "three"),
+            (K::Check(true), "done"),
+            (K::Paragraph, "after"),
+        ]);
+        let l = lay_out(&s, &ts, 300.);
+        assert_eq!(joined_runs(&l), vec![2..4, 4..6, 6..7]);
+        let blocks = code_blocks(&l);
+        assert_eq!((blocks.len(), blocks[0].lines.clone(), blocks[0].lang), (1, 2..4, Lang::new("rust")));
+        let g = blocks[0].ground;
+        assert_eq!((g.origin.x, g.size.width), (px(0.), px(300.)), "the ground spans the column");
+        assert_eq!(g.origin.y, l.lines[2].top - px(sewn::CODE_HEAD));
+        assert_eq!(g.origin.y + g.size.height, l.lines[3].top + l.lines[3].height() + px(sewn::CODE_PAD));
+        assert!(g.origin.y > l.lines[1].top + l.lines[1].height(), "the ground starts below the paragraph");
+        // no gap between a block's lines; boxes never overlap their neighbours
+        assert_eq!(l.lines[3].top, l.lines[2].top + l.lines[2].height());
+        let boxes: Vec<Bounds<Pixels>> = joined_runs(&l).iter().map(|r| run_box(&l, r)).collect();
+        for w in boxes.windows(2) {
+            assert!(w[0].origin.y + w[0].size.height < w[1].origin.y, "{w:?}");
+        }
+        assert!(boxes[2].origin.y + boxes[2].size.height < l.lines[7].top);
+        // code sits right of its numbers, callout words inside their patch
+        assert_eq!((l.lines[2].indent, l.lines[4].indent, l.lines[7].indent), (px(sewn::CODE_INDENT), px(sewn::CALLOUT_INSET), px(sewn::CHECK_INDENT)));
+        assert_eq!(l.lines[2].font_size, code_size(px(10.)));
+        // a click on a box finds its item; on its words, nothing
+        let item = &l.lines[7];
+        assert_eq!(check_box_at(&l, point(px(9.), item.top + item.line_height / 2.)), Some(7));
+        assert_eq!(check_box_at(&l, point(px(60.), item.top + item.line_height / 2.)), None);
+        // done words are tacked through at mid x-height, inside their row
+        let tacks = tack_stitches(&l, 7);
+        assert!(!tacks.is_empty());
+        for t in &tacks {
+            assert!(t.a.y > item.top.as_f32() && t.a.y < (item.top + item.line_height).as_f32());
+            assert!(t.a.x >= item.indent.as_f32() - 2.5 && t.b.x <= (item.indent + px(4. * 6. + 2.5)).as_f32());
+        }
+    }
+
+    #[std::prelude::v1::test]
+    fn a_long_line_of_code_hangs_past_its_indentation() {
+        let ts = text_system();
+        let line = "    let total = alpha + beta + gamma + delta + epsilon;";
+        let s = st_kinds(&[(K::Title, "T"), (rust(), line), (rust(), "x")]);
+        let l = lay_out(&s, &ts, 200.);
+        let lb = &l.lines[1];
+        assert!(lb.rows() > 1, "{:?}", lb.row_starts);
+        // at a 10 px note the code is 8 px and a character 4.8 px: four spaces and two more
+        assert!((lb.hang - px(4.8 * 6.)).abs() < px(0.01), "{:?}", lb.hang);
+        let second = lb.start + lb.row_starts[1];
+        assert_eq!(l.point_of(second).x, lb.indent + lb.hang);
+        assert_eq!(l.hit(point(lb.indent + lb.hang + px(0.5), lb.top + lb.line_height + px(1.))).0, second);
+        let r = l.rects(second..second + 1);
+        assert_eq!(r[0].origin.x, lb.indent + lb.hang);
+        // every row stays inside the ground
+        for row in 0..lb.rows() {
+            let end = lb.start + lb.row_end(row);
+            assert!(l.caret_point(end, true).x <= px(200. - sewn::CODE_RIGHT) + px(0.01), "row {row}");
+        }
+        // short lines do not wrap and do not hang
+        assert_eq!(l.lines[2].rows(), 1);
+    }
+
+    #[std::prelude::v1::test]
+    fn code_is_coloured_and_inline_code_is_the_small_face() {
+        let ts = text_system();
+        let mut s = st_kinds(&[(K::Title, "T"), (K::Paragraph, "call finish() now"), (rust(), "fn a() -> u64 { 42 } // done")]);
+        let at_code = at(&s, "finish()");
+        s.marks = vec![MarkSpan { start: at_code, end: at_code + "finish()".len(), mark: Mark::Code }];
+        let snap = DocSnapshot { text: s.text.clone(), kinds: s.kinds.clone(), marks: s.marks.clone(), marked: None, note_size: px(10.), palette: Palette::light() };
+        let st = line_style(K::Paragraph, px(10.), &snap.palette);
+        let runs = runs_for_line(&snap, 2, 2 + "call finish() now".len(), &st);
+        let inline = runs.iter().find(|r| r.font.family.as_ref() == MONO_INLINE).expect("inline code run");
+        assert_eq!((inline.len, inline.background_color), ("finish()".len(), None));
+        let texts: Vec<&str> = s.text.split('\n').collect();
+        let tokens = code_tokens(&texts, &s.kinds);
+        let cst = line_style(rust(), px(10.), &snap.palette);
+        let start = s.line_range(2).start;
+        let runs = code_runs(&snap, start, start + texts[2].len(), &cst, &tokens[2]);
+        assert_eq!(runs.iter().map(|r| r.len).sum::<usize>(), texts[2].len());
+        assert!(runs.iter().all(|r| r.font.family.as_ref() == MONO && r.font.features == crate::code::features()));
+        let colour_of = |word: &str| {
+            let at = texts[2].find(word).unwrap();
+            let mut pos = 0;
+            runs.iter().find(|r| {
+                pos += r.len;
+                pos > at
+            }).unwrap().color
+        };
+        let p = Palette::light();
+        use crate::code::Token;
+        assert_eq!(colour_of("fn"), crate::code::color(Token::Keyword, &p));
+        assert_eq!(colour_of("u64"), crate::code::color(Token::Type, &p));
+        assert_eq!(colour_of("42"), crate::code::color(Token::Number, &p));
+        assert_eq!(colour_of("// done"), crate::code::color(Token::Comment, &p));
+        assert_eq!(colour_of("a()"), p.ink);
+        let _ = lay_out(&s, &ts, 300.);
+    }
 }

@@ -1366,4 +1366,83 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
         assert_eq!(&welcome.joined_text()[t.start..t.end], t.quote);
         assert_eq!(hash_text("  same words "), hash_text("same words"));
     }
+
+    #[std::prelude::v1::test]
+    fn new_block_kinds_round_trip_and_old_notes_still_load() {
+        use BlockKind::{Check, Code, Paragraph};
+        // the new kinds as JSON: an object for the ones that carry a value
+        let blocks = vec![block(Check(true), "done"), block(BlockKind::Callout(Callout::Warning), "w"), block(Code(Lang::new("Rust")), "fn"), block(Code(Lang::default()), "")];
+        let json = serde_json::to_string(&blocks).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"kind":{"check":true},"text":"done"},{"kind":{"callout":"warning"},"text":"w"},{"kind":{"code":"rust"},"text":"fn"},{"kind":{"code":""},"text":""}]"#
+        );
+        assert_eq!(serde_json::from_str::<Vec<Block>>(&json).unwrap(), blocks);
+        // a kind from a newer build, or a broken one, reads as a paragraph, and so does a
+        // block without one; a language is cut to its first word and 15 bytes
+        let odd = r#"[{"kind":"table","text":"a"},{"kind":{"check":"yes"},"text":"b"},{"text":"c"},{"kind":{"code":"Objective-C++ {x}"},"text":"d"},{"kind":{"code":"averyveryverylonglanguage"}},{"kind":{"callout":"danger"},"text":"e"}]"#;
+        let blocks: Vec<Block> = serde_json::from_str(odd).unwrap();
+        assert_eq!(
+            blocks.iter().map(|b| b.kind).collect::<Vec<_>>(),
+            [Paragraph, Paragraph, Paragraph, Code(Lang::new("objective-c++")), Code(Lang::new("averyveryverylo")), Paragraph]
+        );
+        assert_eq!((blocks[2].text.as_str(), blocks[4].text.as_str()), ("c", ""));
+        assert_eq!(Lang::new("averyveryverylonglanguage").as_str().len(), Lang::MAX);
+        assert_eq!(format!("{:?}", Lang::new("C#")), "\"c#\"");
+
+        // on disk: a note saved before these kinds, and one with them, both open
+        let tmp = TempDir::new();
+        fs::create_dir_all(tmp.notes()).unwrap();
+        let old = r#"{"id":"old","title":"Old","blocks":[{"kind":"title","text":"Old"},{"kind":"bullet","text":"[ ] still words"},{"kind":"quote","text":"q"}],"marks":[{"start":4,"end":9,"mark":"code"}]}"#;
+        fs::write(tmp.notes().join("old.json"), old).unwrap();
+        let mut new = Note::new("New", Mode::ThinksWithYou, None);
+        new.blocks = vec![block(BlockKind::Title, "New"), block(Check(false), "item"), block(Code(Lang::new("py")), "x = 1")];
+        fs::write(tmp.notes().join(format!("{}.json", new.id)), serde_json::to_vec(&new).unwrap()).unwrap();
+        let store = Store::open_at(tmp.0.clone()).unwrap();
+        let old = store.note("old").expect("the old note opens");
+        assert_eq!((old.blocks[1].kind, old.blocks[1].text.as_str(), old.marks.len()), (BlockKind::Bullet, "[ ] still words", 1));
+        assert_eq!(store.note(&new.id).unwrap().blocks, new.blocks);
+        // the kinds in a word, for the script's dump
+        let names: Vec<String> = [BlockKind::Title, Paragraph, BlockKind::H2, Check(false), Check(true), BlockKind::Callout(Callout::Tip), Code(Lang::new("rust")), Code(Lang::default())]
+            .into_iter()
+            .map(kind_name)
+            .collect();
+        assert_eq!(names, ["title", "paragraph", "h2", "check", "check:done", "callout:tip", "code:rust", "code"]);
+    }
+
+    #[std::prelude::v1::test]
+    fn checklists_callouts_and_code_as_markdown() {
+        use BlockKind::{Bullet, Check, Code, Paragraph, Quote};
+        let rust = Code(Lang::new("rust"));
+        let blocks = vec![
+            block(BlockKind::Title, "T"),
+            block(Paragraph, "Intro."),
+            block(Check(true), "bib"),
+            block(Check(false), "run"),
+            block(Bullet, "loose"),
+            block(BlockKind::Callout(Callout::Note), "one"),
+            block(BlockKind::Callout(Callout::Note), ""),
+            block(BlockKind::Callout(Callout::Note), "two"),
+            block(BlockKind::Callout(Callout::Tip), "tip"),
+            block(rust, ""),
+            block(rust, "fn a() {"),
+            block(rust, ""),
+            block(rust, "    1 // **not bold**"),
+            block(rust, "}"),
+            block(rust, "  "),
+            block(Paragraph, "After."),
+            block(Code(Lang::default()), "```inside"),
+            block(Code(Lang::default()), ""),
+            block(Quote, "q"),
+        ];
+        let expected = "Intro.\n\n- [x] bib\n- [ ] run\n- loose\n\n> [!note]\n> one\n>\n> two\n\n> [!tip]\n> tip\n\n\
+```rust\nfn a() {\n\n    1 // **not bold**\n}\n```\n\nAfter.\n\n````\n```inside\n````\n\n> q";
+        assert_eq!(plain_text_of(&blocks), expected);
+        // what goes under a line of a block (its threads) comes after the whole block
+        let md = markdown_blocks(&blocks, 0, |i| blocks[i].text.clone(), |i| (i == 5 || i == 11).then(|| format!("[under {i}]\n\n")));
+        assert!(md.contains("> two\n\n[under 5]\n\n> [!tip]"), "{md}");
+        assert!(md.contains("}\n```\n\n[under 11]\n\nAfter."), "{md}");
+        // a block with no words is left out
+        assert_eq!(plain_text_of(&[block(BlockKind::Title, "T"), block(rust, " "), block(BlockKind::Callout(Callout::Tip), "")]), "");
+    }
 }

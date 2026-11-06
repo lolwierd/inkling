@@ -227,7 +227,8 @@ pub fn wordmark(t: &Theme, size: f32) -> impl IntoElement {
             let i_w = shaped.x_for_index("\u{131}".len());
             let x = bounds.origin.x + i_w * 0.47;
             let y = bounds.origin.y + px(h * 0.5 - size * 0.6);
-            crate::stitch::french_knot(window, point(x, y), px(size * 0.13), thread, 1.);
+            // the dot is one cross-stitch in Inkling's thread, as in the Darn · Border wordmark
+            crate::stitch::cross_stitch(window, point(x, y), px(size * 0.085), thread);
         },
     )
     .w(px(size * 3.25))

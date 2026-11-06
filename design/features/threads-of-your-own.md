@@ -275,7 +275,7 @@ instead of "You", so a mind called into your thread sees who said what.
 | Feature | What it means for your threads | Shared types |
 |---|---|---|
 | Answer in the note + Write it in | Answer in the note should skip `own` threads: a mind deciding a paragraph answers your question is a mind answering. Write it in should treat a tied-off own thread like any tied-off thread and offer your last line. | reads `Thread.own` |
-| Let it stand + Turn it over | Cutting your own thread is not letting a point stand. Built after the rebase: `Thread::is_point()` is false for your threads, so their second button stays Dismiss, cutting one snips it, and the points every mind is told (`ctx.letStand`) never include one, even after a mind you called has spoken in it. The back of the note lists your threads with the rest, named "You" (`Thread::asker`). | reads `Thread.own` |
+| Let it stand + Turn it over | Cutting your own thread is not letting a point stand. Built after the rebase: `Thread::is_point()` is false for your threads, so their second button stays Dismiss, cutting one snips it, and the points every mind is told (`ctx.letStand`) never include one, even after a mind you called has spoken in it. Built after Turn it over landed: the back of the note lists your threads with the rest, as "Your question", in ink, a called mind named over its answer, and a cut one as Snipped with no reason to add (`back::Entry.own`, `Entry::speaker`). | reads `Thread.own`; adds `Entry.own` |
 | Show its working | No overlap: your threads hold no corrections. A mind called in answers as Ask does. | none |
 | Loose ends | Your open threads are loose ends. Built after the rebase: `loose_ends::who` is `Thread::asker`, so a row of yours says "You" (and typing "you" finds it), and `Row.own` draws its mark and name in ink (`own::ink`), as its tag is. | reads `Thread.own`; adds `Row.own` |
 | Threads between notes | No overlap: those threads are always a mind's. | none |
@@ -439,6 +439,8 @@ Start here landed:
   under a correction. The question box says "↩ ask", and the docs write Return as ↩.
 - Loose ends (⇧⌘K) lists your open threads with the rest, named "You" and in ink; the
   `own` module is `pub(crate)` so it can share `own::ink`.
+- Turn it over (⇧⌘B) writes a thread of yours as "Your question", in ink, with each called
+  mind named; cut, it is Snipped, never Let stand.
 
 Left for the owner or another agent: the welcome tour (`src/welcome.rs`, the film agent's)
 and the film do not show Ask yourself yet, though `design/capabilities.md` now lists it;

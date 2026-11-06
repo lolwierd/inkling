@@ -1,0 +1,48 @@
+# Threads of your own, in every state that changes how they show: ⇧⌘↵ opens the question box
+# with nobody seated and Esc closes it; in a note that waits to be asked a thread of yours still
+# hangs and nothing goes to the brain; Marks only puts an ink ? after its words; hidden threads
+# hide it, and ⇧⌘↵ shows them again; Ask Inkling's box with its mind unseated asks yourself;
+# the export calls it "Me"; cutting it shows Undo and ⌥⌘Z puts it back.
+# fixture: running-plan
+wait: 1200
+mode: ask
+select: Strength work twice a week
+key: cmd-shift-enter
+dump: box
+expect: d.asking === true && d.room.length === 0 && d.editor_focused === false
+escape
+dump: closed
+expect: d.asking === false && d.threads.length === 2
+select: Strength work twice a week
+ask-yourself: Calves or hips first?
+settle
+dump: in-a-waiting-note
+expect: d.note.mode === "WhenYouAsk" && d.threads.find(t => t.own).quote === "Strength work twice a week"
+set: placement=marks
+wait: 400
+dump: marks
+expect: d.marks.includes(d.threads.find(t => t.own).id + ":?")
+set: placement=both
+open: jmw
+dump: hidden
+expect: d.hidden === true
+select: Last year I ran the city 10k
+key: cmd-shift-enter
+dump: shown-again
+expect: d.hidden === false && d.asking === true && d.room.length === 0
+escape
+select: Last year I ran the city 10k
+room: Skeptic
+ask: [[delay:1]]
+dump: asked-a-mind
+expect: d.threads.some(t => t.kind === "Ask" && !t.own)   // a mind seated: an ordinary Ask
+export: md
+dismiss: 3
+dump: cut
+expect: d.threads.find(t => t.own).status === "Dismissed" && d.undo === d.threads.find(t => t.own).id
+key: alt-cmd-z
+dump: back
+expect: d.threads.find(t => t.own).status === "Open" && d.undo === null
+quit
+expect: log.some(r => r.msg.startsWith("script export md:") && r.msg.includes("> **Me** on “Strength work twice a week”") && r.msg.includes("> *Me:* Calves or hips first?"))
+expect: tasks.filter(t => t !== "ask").length === 0   // a waiting note: only the one Ask went out, never a read or a relate

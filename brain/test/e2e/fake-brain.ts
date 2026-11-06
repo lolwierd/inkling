@@ -124,9 +124,13 @@ function ownText(input: Any): string {
     case "relate":
       parts.push(input.target);
       break;
-    case "ask":
+    case "ask": {
       parts.push(input.target, input.question);
+      // a call into the writer's own thread: the line that called is the last one, if theirs
+      const last = Array.isArray(input.history) ? input.history[input.history.length - 1] : null;
+      if (last && last.role === "you") parts.push(last.text);
       break;
+    }
     case "draw":
       parts.push(input.quote, input.thought, input.request);
       break;
@@ -255,8 +259,11 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
           redraw: has("redraw"),
         },
       };
-    case "ask":
-      return { stream: has("empty") ? "" : `[${id}] Answer to “${clean(input.question ?? "")}” about “${shown.slice(0, 40)}”.` };
+    case "ask": {
+      // a call into the writer's own thread carries the thread so far
+      const hist = Array.isArray(input.history) ? ` (history ${input.history.length})` : "";
+      return { stream: has("empty") ? "" : `[${id}] Answer to “${clean(input.question ?? "")}” about “${shown.slice(0, 40)}”${hist}.` };
+    }
     case "answer":
       return { stream: has("empty") ? "" : `[${id}] You called me: “${shown.slice(0, 50)}”.` };
     case "chat": {

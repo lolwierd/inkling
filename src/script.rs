@@ -67,6 +67,8 @@
 //! brief: What it is for     # Tell Inkling (empty clears it)
 //! mind: Skeptic             # this note's mind, by name
 //! room: Inkling, Skeptic    # minds for the next `ask:` (Ask the room, up to three)
+//! ask-yourself: Too many?   # Ask yourself on the selection: a thread of your own, no mind
+//! call: Skeptic             # call a mind into the open thread of yours (empty: the note's)
 //! undo-dismiss              # put back the last dismissed thread
 //! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
 //! read-through              # Read it through, as ⇧⌘R: start a pass, or stop the one running
@@ -204,6 +206,10 @@ pub enum Step {
     UndoDelete,
     /// Read it through, as ⇧⌘R does: start a pass over the note, or stop the one running.
     ReadThrough,
+    /// Ask yourself on the selection, as Return in its box does: a thread of your own.
+    AskYourself(String),
+    /// Call a mind into the open thread of yours (the note's mind when no name is given).
+    Call(String),
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -291,6 +297,8 @@ pub fn parse(src: &str) -> Vec<Step> {
                     _ => "md".into(),
                 }),
                 "log" => Step::Log(arg),
+                "ask-yourself" => Step::AskYourself(arg),
+                "call" => Step::Call(arg),
                 "room" => Step::Room(arg.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect()),
                 "undo-dismiss" => Step::UndoDismiss,
                 "read-through" => Step::ReadThrough,

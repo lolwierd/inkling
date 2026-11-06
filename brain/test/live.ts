@@ -539,6 +539,41 @@ const scenarios: Record<string, () => Promise<unknown>> = {
     check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
     return { ...r, tokens: r.e.usage };
   },
+  // The writer already hung the question read_note's mind asks (a burst across the minute's
+  // edge) on those words, as a thread of their own: the mind should leave it to them.
+  async read_own() {
+    const target = LIMITER[1];
+    const quote = "a user can never send more than 100 requests in any 60-second span";
+    const threads = [{ quote, resolved: false, own: true, messages: [{ role: "you", text: "Is that true across the edge of a minute, or can a burst at 0:59 and 1:00 get 200 through?" }] }];
+    const r = await call(LIGHT, { task: "read", ctx: ctx(LIMITER, { threads }), target });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") {
+      checkThought(r.e.data, target);
+      const d = r.e.data;
+      if (d.speak) {
+        check(!(quote.includes(d.quote) || d.quote.includes("60-second")), `asked on the writer's own words: ${JSON.stringify(d.quote)}`);
+        check(!/edge|boundar|straddl|burst|200/i.test(d.text), `asked the writer's own question back: ${d.text}`);
+      }
+    }
+    return r;
+  },
+  // Called into the writer's own thread, with what they added since.
+  async ask_own() {
+    const quote = "a user can never send more than 100 requests in any 60-second span";
+    const threads = [{ quote, resolved: false, own: true, messages: [{ role: "you", text: "Is that true across the edge of a minute?" }] }];
+    const history = [
+      { role: "you", text: "I think a burst at 0:59 and 1:00 gets 200 through." },
+      { role: "you", text: "Inkling, am I right about the burst?" },
+    ];
+    const r = await call(HEAVY, { task: "ask", ctx: ctx(LIMITER, { threads }), target: quote, question: "Is that true across the edge of a minute?", history });
+    check(r.e.ev === "done", `${r.e.ev}: ${r.e.message}`);
+    if (r.e.ev === "done") {
+      checkStream(r.id, r.e.data);
+      check(/200|burst|window|edge|boundar/i.test(r.e.data.text), `does not answer the burst: ${r.e.data.text}`);
+      check(words(r.e.data.text) <= 150, `${words(r.e.data.text)} words`);
+    }
+    return r;
+  },
   async api_key_auth() {
     // Only meaningful with LIVE_ENV_INKLING_USE_API_KEY=1 and a bogus key.
     const r = await call(LIGHT, { task: "learn", aboutMe: null, message: "I'm a backend engineer." });

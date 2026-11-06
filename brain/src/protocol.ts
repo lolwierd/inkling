@@ -16,6 +16,8 @@ export interface Mind {
 export interface ThreadMessage {
   role: "mind" | "you";
   text: string;
+  /** Which mind wrote it, when that is not the thread's own: a mind the writer called into a thread of their own. */
+  mind?: string;
 }
 
 export interface ThreadSummary {
@@ -24,6 +26,8 @@ export interface ThreadSummary {
   resolved: boolean;
   /** A thread between notes: the other note and the words it quotes there. */
   elsewhere?: { noteTitle: string; quote: string } | null;
+  /** The writer hung this thread themselves; no mind answers in it unless called. */
+  own?: boolean;
 }
 
 /** Words from another note that share the subject of the paragraph just read (relate). */
@@ -89,7 +93,7 @@ export type Task =
   // `through`: a read made by Read it through, which reads a finished draft once.
   | { task: "read"; ctx: Context; target: string; through?: boolean }
   | { task: "probe"; ctx: Context; target: string }
-  | { task: "ask"; ctx: Context; target: string; question: string }
+  | { task: "ask"; ctx: Context; target: string; question: string; history?: ThreadMessage[] }
   | { task: "answer"; ctx: Context; target: string }
   | { task: "sketch"; ctx: Context; target: string }
   | { task: "draw"; ctx: Context; quote: string; thought: string; request?: string }

@@ -84,12 +84,15 @@ pub struct Row {
     pub state: State,
     /// What typing searches, lowercased: the quote, the note's title, its folder, the mind.
     hay: String,
+    /// A thread of your own (Ask yourself): named You, and in your ink rather than a mind's
+    /// thread.
+    pub own: bool,
 }
 
-/// The mind as its tag's header names it: a thread with no mind's name (an old note's)
-/// says Inkling. The one place to teach when a thread can belong to you.
+/// Who hung the thread, as its tag's header names it: You for a thread of your own, else
+/// its mind; a thread with no mind's name (an old note's) says Inkling.
 pub fn who(thread: &Thread) -> String {
-    if thread.mind_name.trim().is_empty() { "Inkling".to_string() } else { thread.mind_name.clone() }
+    thread.asker()
 }
 
 /// Whitespace runs, line breaks included, folded to one space: a quote across paragraphs
@@ -145,6 +148,7 @@ pub fn collect(notes: &[Note], folders: &[Folder], live: Option<&Note>, mind_of:
                 here,
                 state: State::Open,
                 hay,
+                own: t.own,
             };
             rows.push((row.opened, note.created_at, note.id.as_str(), t.start, row));
         }
@@ -402,7 +406,7 @@ impl Card {
             let on = ix == self.selected;
             let open = r.state == State::Open;
             // the colour the page draws this thread in, so a row and its tag agree
-            let color = crate::note_page::mind_thread(&r.mind_name, &r.own_mind, ink, &t);
+            let color = if r.own { crate::note_page::own::ink(&t) } else { crate::note_page::mind_thread(&r.mind_name, &r.own_mind, ink, &t) };
             // the mark its folded tab shows: ? or ×, or the knot once it is tied off
             let mark_el: AnyElement = match r.state {
                 State::Tied => div().size(px(7.)).rounded_full().bg(color).into_any_element(),
@@ -613,6 +617,7 @@ mod tests {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     }
 
@@ -661,6 +666,20 @@ mod tests {
             older,
         ];
         assert_eq!(keys(&collect(&notes, &[], None, mind_of)), ["older/z", "newer/a", "newer/b"]);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_of_your_own_is_a_loose_end_named_you() {
+        let mut mine = thread("y1", "four days a week", Open, "", "2026-10-01T09:00:00Z", 20);
+        mine.own = true;
+        let mut cut = thread("y2", "a cut one", Dismissed, "", "2026-09-01T09:00:00Z", 60);
+        cut.own = true;
+        let notes = vec![note("plan", "Plan", None, vec![mine, cut, thread("t1", "5:30", Open, "Inkling", "2026-10-10T09:00:00Z", 40)])];
+        let rows = collect(&notes, &[], None, mind_of);
+        assert_eq!(keys(&rows), ["plan/y1", "plan/t1"], "listed while open, oldest first, like any thread");
+        assert_eq!((rows[0].mind.as_str(), rows[0].own, mark(&rows[0])), ("You", true, "?"));
+        assert!(!rows[1].own && rows[1].mind == "Inkling");
+        assert_eq!(narrow(&rows, "you"), [0], "typing You finds your own");
     }
 
     #[std::prelude::v1::test]

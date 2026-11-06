@@ -34,6 +34,7 @@ mod between;
 /// Threads between notes, as the page shows and follows them.
 mod ends;
 mod read_through;
+pub(crate) mod own;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -554,6 +555,8 @@ pub struct NotePage {
     ends: ends::Ends,
     /// Read it through: the pass running on this note, if any (`read_through.rs`).
     read_through: Option<read_through::Pass>,
+    /// Your own threads a mind is answering in now, and which mind (`own::call_into_own`).
+    own_calls: HashMap<String, String>,
 }
 
 fn role_wire(r: Role) -> &'static str {
@@ -653,6 +656,7 @@ impl NotePage {
             relate_next: None,
             ends: Default::default(),
             read_through: None,
+            own_calls: HashMap::new(),
         };
         page.load_into_editor(cx);
         page
@@ -718,6 +722,7 @@ impl NotePage {
             self.cancel_request(&req, cx);
             self.drop_if_empty(&id, cx);
         }
+        self.own_calls.clear();
         self.flush(cx);
         if let Some((req, _)) = self.chat_pending.take() {
             self.cancel_request(&req, cx);
@@ -1136,7 +1141,7 @@ impl NotePage {
             .map(|a| (a.id.clone(), a.range.clone()))
             .collect();
         for (id, range) in touched {
-            let Some(th) = self.note.threads.iter().find(|t| t.id == id && t.status == ThreadStatus::Open) else { continue };
+            let Some(th) = self.note.threads.iter().find(|t| t.id == id && t.status == ThreadStatus::Open && !t.own) else { continue };
             if text.get(range).is_some_and(|now| now != th.quote) {
                 // keep the words from before the first edit of this run of typing
                 let before = th.quote.clone();
@@ -1293,8 +1298,9 @@ impl NotePage {
                 json!({
                     "quote": t.quote,
                     "resolved": t.status == ThreadStatus::Resolved,
-                    "messages": t.messages.iter().map(|m| json!({"role": role_wire(m.role), "text": crate::working::wire_text(m)})).collect::<Vec<_>>(),
+                    "messages": t.messages.iter().map(own::message_json).collect::<Vec<_>>(),
                     "elsewhere": crate::between::summary_wire(&self.note, &t.id),
+                    "own": t.own,
                 })
             })
             .collect();
@@ -1649,6 +1655,7 @@ impl NotePage {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         });
         self.editor.update(cx, |e, cx| e.add_anchor(Anchor { id: id.clone(), range, open: true }, cx));
         self.schedule_save(cx);
@@ -1910,6 +1917,10 @@ impl NotePage {
         if target.trim().is_empty() {
             return;
         }
+        if asking.room.is_empty() {
+            self.hang_own(asking.range.clone(), question, window, cx);
+            return;
+        }
         let end = asking.range.end;
         self.editor.update(cx, |e, cx| e.move_cursor_to(end, cx));
         // One thread per mind in the room, each in its own colour, answering side by side.
@@ -1955,9 +1966,7 @@ impl NotePage {
     fn toggle_room(&mut self, mind: Mind, cx: &mut Context<Self>) {
         let Some(asking) = self.asking.as_mut() else { return };
         if let Some(i) = asking.room.iter().position(|m| m.name == mind.name) {
-            if asking.room.len() > 1 {
-                asking.room.remove(i);
-            }
+            asking.room.remove(i);
         } else if asking.room.len() < ROOM_MAX {
             asking.room.push(mind);
         }
@@ -2035,7 +2044,8 @@ impl NotePage {
         self.editor.update(cx, |e, _| e.active_anchor = id.clone());
         if let Some(id) = id {
             if !self.replies.contains_key(&id) {
-                let input = cx.new(|cx| InputState::new(window, cx).placeholder("Write back…"));
+                let hint = if self.is_own(&id) { "Add to it\u{2026}" } else { "Write back\u{2026}" };
+                let input = cx.new(|cx| InputState::new(window, cx).placeholder(hint));
                 let tid = id.clone();
                 let sub = cx.subscribe_in(&input, window, move |this, _, ev: &InputEvent, window, cx| match ev {
                     InputEvent::PressEnter { .. } => this.send_reply(&tid, window, cx),
@@ -2082,6 +2092,9 @@ impl NotePage {
     }
 
     fn send_reply(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_own(id) {
+            return self.add_to_own(id, window, cx);
+        }
         let Some(input) = self.replies.get(id).cloned() else { return };
         let text = input.read(cx).value().trim().to_string();
         if text.is_empty() || self.pending.contains_key(id) {
@@ -2187,7 +2200,9 @@ impl NotePage {
                 }
                 if let Some(mut r) = self.ropes.remove(id) {
                     r.cut();
-                    self.snipped.push((r, Theme::get(cx).voice_ink, std::time::Instant::now()));
+                    let t = Theme::get(cx);
+                    let hue = if self.is_own(id) { own::ink(t) } else { t.voice_ink };
+                    self.snipped.push((r, hue, std::time::Instant::now()));
                 }
             }
             ThreadStatus::Open => {
@@ -2249,11 +2264,10 @@ impl NotePage {
         let Some(t) = self.note.threads.iter().find(|t| t.id == id) else { return String::new() };
         let mut out = format!("> {}\n\n", t.quote);
         // named as Export names them: the mind (Inkling when an old thread has no name), and Me
-        let mind = if t.mind_name.trim().is_empty() { "Inkling" } else { t.mind_name.as_str() };
         for m in &t.messages {
             match m.role {
                 Role::Mind => {
-                    out.push_str(&format!("{mind}: {}\n\n", m.text));
+                    out.push_str(&format!("{}: {}\n\n", t.author(m), m.text));
                     for line in Self::check_lines(m) {
                         out.push_str(&format!("{line}\n\n"));
                     }
@@ -2275,7 +2289,7 @@ impl NotePage {
         note.blocks = vec![Block { kind: BlockKind::Title, text: title }];
         note.blocks.push(Block { kind: BlockKind::Quote, text: quote });
         for m in &t.messages {
-            let who = if m.role != Role::Mind { "Me".to_string() } else if t.mind_name.trim().is_empty() { "Inkling".to_string() } else { t.mind_name.clone() };
+            let who = if m.role == Role::Mind { t.author(m) } else { "Me".into() };
             note.blocks.push(Block { kind: BlockKind::Paragraph, text: format!("{who}: {}", m.text.replace('\n', " ")) });
         }
         note.blocks.push(Block { kind: BlockKind::Paragraph, text: String::new() });
@@ -2465,6 +2479,18 @@ impl NotePage {
                 }
             }
             Step::Riddle => self.find_loose_thread(window, cx),
+            Step::AskYourself(q) => {
+                self.ask_yourself(window, cx);
+                if let Some(input) = self.asking.as_ref().map(|a| a.input.clone()) {
+                    input.update(cx, |i, cx| i.set_value(q.clone(), window, cx));
+                    self.submit_ask(window, cx);
+                }
+            }
+            Step::Call(name) => {
+                if !self.call_by_name(name, cx) {
+                    log::warn!("script: no thread of yours open, or no mind named {name:?}");
+                }
+            }
             Step::Visualize => self.sketch_selection(window, cx),
             Step::Ask(q) => {
                 self.start_ask(window, cx);
@@ -2781,7 +2807,7 @@ impl NotePage {
             "slots": slots.iter().map(|s| json!({"id": short(&s.id), "side": format!("{:?}", s.side), "anchor": s.anchor_top.as_f32(), "top": s.top.as_f32(), "h": s.height.as_f32()})).collect::<Vec<_>>(),
             "threads": self.note.threads.iter().map(|t| json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
-                "quote": t.quote, "msgs": t.messages.len(), "drawing": t.drawing.is_some(),
+                "quote": t.quote, "msgs": t.messages.len(), "drawing": t.drawing.is_some(), "own": t.own,
                 "ending": format!("{:?}", t.ending()), "reason": t.reason, "before": t.first_quote,
                 "check": t.messages.iter().find_map(|m| m.check.as_ref()).map(crate::working::summary),
             })).collect::<Vec<_>>(),
@@ -2831,6 +2857,7 @@ impl NotePage {
         crate::back::dump_into(&mut state, self, window, cx);
         self.between_state(&mut state, cx);
         state["read_through"] = self.read_through_state();
+        state["room"] = json!(self.asking.as_ref().map(|a| a.room.iter().map(|m| m.name.clone()).collect::<Vec<_>>()).unwrap_or_default());
         state["tabs"] = Value::Object(
             self.tab_bounds
                 .borrow()
@@ -3459,7 +3486,7 @@ impl NotePage {
         let id = thread.id.clone();
         let is_active = self.active.as_deref() == Some(id.as_str());
         let tied = thread.status == ThreadStatus::Resolved;
-        let thread_color = mind_thread(&thread.mind_name, &self.mind.name, cx.global::<Store>().settings.ink, &t);
+        let thread_color = if thread.own { own::ink(&t) } else { mind_thread(&thread.mind_name, &self.mind.name, cx.global::<Store>().settings.ink, &t) };
         let unfold = self.unfold.get(&id).copied().unwrap_or(0.);
         let since = self.tying.get(&id).map(|at| anim_since(*at, std::time::Instant::now()));
         let fade = if tied && !is_active { tag_fade(since) } else { 1. };
@@ -3584,7 +3611,7 @@ impl NotePage {
         let pending = self.pending.get(&id).map(|(_, s)| s.clone());
         // an asked thread starts with your question and its answer; replies are what follows
         let replies = thread.messages.len().saturating_sub(if thread.kind == ThoughtKind::Ask { 2 } else { 1 });
-        let mind = if thread.mind_name.is_empty() { "Inkling".to_string() } else { thread.mind_name.clone() };
+        let mind = thread.asker();
         let kind = match thread.kind {
             ThoughtKind::Correction => "correction",
             ThoughtKind::Sketch => "sketch",
@@ -3690,7 +3717,7 @@ impl NotePage {
             // a thread between notes quotes the other end under what it asks
             let mut far = self.far_end_block(thread, thread_color, cx);
             for m in messages {
-                body = body.child(self.message_view(m, &t, false));
+                body = body.child(self.thread_message(thread, m, &t, cx));
                 if let Some(w) = self.working_block(thread, m, thread_color, is_active, width - 30., cx) {
                     body = body.child(w);
                 }
@@ -3698,7 +3725,7 @@ impl NotePage {
             }
             body = body.children(far);
             if let Some(Pending::Streaming(s)) = &pending {
-                body = body.child(self.message_view(&Message::new(Role::Mind, s.clone()), &t, false));
+                body = body.child(self.thread_message(thread, &self.partial(&id, s.clone()), &t, cx));
             }
             if let Some(d) = self.drawing_block(&id, width - 36., cx) {
                 body = body.child(d);
@@ -3746,7 +3773,7 @@ impl NotePage {
                     div()
                         .text_size(px(ts::SMALL))
                         .text_color(p.faint)
-                        .child(if replies == 1 { "1 reply".to_string() } else { format!("{replies} replies") }),
+                        .child(Self::more_label(thread, replies)),
                 );
             }
         }
@@ -3810,6 +3837,7 @@ impl NotePage {
                             .when(lets_stand, |b| b.tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new(crate::stand::TOOLTIP).build(window, cx)))
                             .keyed_as("tag:dismiss", 4., thread_color, cx, move |this, _, cx| this.set_status(&id_dis, ThreadStatus::Dismissed, cx)),
                     )
+                    .children((thread.own && !tied).then(|| self.own_ask_button(&id, thread_color, cx)))
                     .child(div().flex_1())
                     .child(
                         ui::ghost_button(SharedString::from(format!("note-{id_note}")), "Make a note", &t)
@@ -4115,6 +4143,7 @@ impl NotePage {
             );
         }
         let find_keys: SharedString = crate::shortcuts::keys_for("app::FindLooseThread", cx).unwrap_or_default().into();
+        let own_keys: SharedString = crate::shortcuts::keys_for("app::AskYourself", cx).unwrap_or_default().into();
         let action = |id: &'static str, title: SharedString, hint: SharedString| {
             div()
                 .id(id)
@@ -4166,7 +4195,8 @@ impl NotePage {
             .child(div().px(px(5.)).pt(px(2.)).child(colors))
             .child(div().mx(px(9.)).my(px(5.)).border_t_1().border_color(p.rule))
             .child(action("tb-riddle", "Find a loose thread".into(), find_keys).on_click(cx.listener(|this, _, window, cx| this.find_loose_thread(window, cx))))
-            .child(action("tb-ask", ask, "Your own question".into()).on_click(cx.listener(|this, _, window, cx| this.start_ask(window, cx))))
+            .child(action("tb-ask", ask, "Answered in the margin".into()).on_click(cx.listener(|this, _, window, cx| this.start_ask(window, cx))))
+            .child(action("tb-own", "Ask yourself".into(), own_keys).on_click(cx.listener(|this, _, window, cx| this.ask_yourself(window, cx))))
             .child(action("tb-viz", "Sketch it".into(), "Stitched step by step".into()).on_click(cx.listener(|this, _, window, cx| this.sketch_selection(window, cx))));
         Some(
             deferred(div().absolute().top(top - px(6.)).left(px(self.m.popover_left(236.))).occlude().child(card))
@@ -4266,7 +4296,12 @@ impl NotePage {
             );
         }
         let n = room.len();
-        let hint = if n > 1 { format!("{n} minds answer side by side") } else { "Add minds to ask the room".to_string() };
+        let hint = match n {
+            0 => "No mind answers. Add one to ask it.".to_string(),
+            1 => "Add minds to ask the room".to_string(),
+            n => format!("{n} minds answer side by side"),
+        };
+        let dot = if n == 0 { own::ink(&t) } else { t.voice_ink };
         Some(
             deferred(
                 div()
@@ -4286,7 +4321,7 @@ impl NotePage {
                                     .flex()
                                     .items_center()
                                     .gap(px(7.))
-                                    .child(ui::small_dot(t.voice_ink, 6.))
+                                    .child(ui::small_dot(dot, 6.))
                                     .child(div().flex_1().child(Input::new(&input).appearance(false).px_0().text_size(px(ts::BODY)))),
                             )
                             .child(chips)
@@ -4298,7 +4333,8 @@ impl NotePage {
                                     .gap(px(8.))
                                     .text_size(px(ts::META))
                                     .text_color(p.faint)
-                                    .child(hint)
+                                    // a long hint wraps rather than push the key off the box
+                                    .child(div().flex_1().min_w(px(0.)).child(hint))
                                     .child(div().flex_none().child("\u{21a9} ask")),
                             ),
                     )
@@ -4670,7 +4706,7 @@ impl Render for NotePage {
         let thread_color = t.voice_ink;
         let own_mind = self.mind.name.clone();
         let chosen_ink = cx.global::<Store>().settings.ink;
-        let color_of = |name: &str| mind_thread(name, &own_mind, chosen_ink, &t);
+        let color_of = |th: &Thread| if th.own { own::ink(&t) } else { mind_thread(&th.mind_name, &own_mind, chosen_ink, &t) };
 
         // How each thread's words are stitched, the open ones numbered in reading
         // order, and the gutter: a tacking stitch for read paragraphs, a knot and its
@@ -4683,8 +4719,8 @@ impl Render for NotePage {
                 if th.status == ThreadStatus::Dismissed {
                     continue;
                 }
-                let color = color_of(&th.mind_name);
-                styles.insert(th.id.clone(), AnchorStyle { color, correction: th.kind == ThoughtKind::Correction });
+                let color = color_of(th);
+                styles.insert(th.id.clone(), AnchorStyle { color, correction: th.kind == ThoughtKind::Correction, own: th.own });
                 if th.status == ThreadStatus::Open {
                     if let Some(a) = ed.anchors().iter().find(|a| a.id == th.id) {
                         open.push((a.range.start, th.id.clone(), color));
@@ -4787,7 +4823,7 @@ impl Render for NotePage {
                 let Some(rects) = anchor_boxes.get(&th.id) else { continue };
                 let Some(last) = rects.last() else { continue };
                 let id = th.id.clone();
-                let color = color_of(&th.mind_name);
+                let color = color_of(th);
                 let glyph = if th.status == ThreadStatus::Resolved {
                     div().size(px(5.)).rounded_full().bg(color).into_any_element()
                 } else {
@@ -4855,7 +4891,7 @@ impl Render for NotePage {
                 } else {
                     0.22 + 0.4 * unfolded
                 };
-                ropes.push((rope.clone(), opacity, knot, color_of(&th.mind_name)));
+                ropes.push((rope.clone(), opacity, knot, color_of(th)));
                 holes.push((a, opacity));
             }
             self.ropes.retain(|id, _| alive.contains(id));

@@ -285,6 +285,23 @@ describe("malformed input never kills the brain", () => {
     expect(echoed.systemPrompt).not.toContain("undefined");
   });
 
+  test("the writer's own threads and the mind each line came from survive the context", async () => {
+    const b = brain();
+    const threads = [
+      { quote: "four days a week", resolved: false, own: true, messages: [{ role: "you", text: "Too many?" }, { role: "mind", text: "Which two are hard?", mind: "Skeptic" }] },
+      { quote: "5:30", resolved: false, own: "yes", messages: [{ role: "mind", text: "Check the sum.", mind: "  " }] },
+    ];
+    const history = [{ role: "you", text: "Two easy, two hard." }, { role: "you", text: "Inkling, enough?", mind: "ignored on your lines" }];
+    b.send(run("x", { task: "ask", ctx: ctx(fake({ echo: "options" }), { threads }), target: "four days a week", question: "Too many?", history }));
+    const echoed = JSON.parse((await b.end("x")).data.text);
+    expect(echoed.prompt).toContain("Thread 1 (the writer's own) on «four days a week»:\n  Writer: Too many?\n  Skeptic: Which two are hard?");
+    // only `true` marks a thread as theirs, and a blank name is no name
+    expect(echoed.prompt).toContain("Thread 2 on «5:30»:\n  You: Check the sum.");
+    expect(echoed.prompt).toContain("Unless they ask you about one directly");
+    expect(echoed.prompt).toContain("On «four days a week» the writer hung a question of their own:");
+    expect(echoed.prompt).toContain("Writer: Two easy, two hard.\nWriter: Inkling, enough?");
+  });
+
   test("unknown voice and frequency fall back instead of printing undefined", async () => {
     const b = brain();
     const c = ctx(fake({ echo: "options" }), { mind: { name: "Ada", voice: "shouty", frequency: "always" } });

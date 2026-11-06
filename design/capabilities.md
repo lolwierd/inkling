@@ -43,9 +43,10 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Move a tag | drag it by the tab or the top row; it keeps its place |
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |
+| Threads of your own | Add to it: a line for you, sent nowhere; Ask Inkling on the tag, or a line that starts with a mind's name, calls that mind in for one answer; only you tie it off or cut it, and editing its words starts no reread; the minds see it as yours and do not ask it back |
 | Tie off | Resolve: the knot is tied and joins the border at the top of the page |
 | Let it stand | on a mind's question or correction, Let stand (⇧⌘⌫): what you typed in its box goes with it as your reason, and every mind that reads the note is told the point, so none raises it again, in any words; Find a loose thread looks past it; Undo for a few seconds, or ⌥⌘Z |
-| Snip | your own asks, sketches and answers: Dismiss (⇧⌘⌫); Undo for a few seconds, or ⌥⌘Z |
+| Snip | your own threads, asks, sketches and answers: Dismiss (⇧⌘⌫); Undo for a few seconds, or ⌥⌘Z |
 | Reopen, Copy, Make a note | from an open tag; Make a note turns a thread into a new note |
 | Jump between threads | ⌥⌘↓ and ⌥⌘↑ |
 | Loose ends | ⇧⌘K (or File > Loose Ends…, or the sidebar's Loose ends): every open thread in the notebook, oldest first, showing your words, the mind, the note and the age; type to narrow; Return opens the note at those words with the tag open |
@@ -61,6 +62,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 |---|---|
 | Find a loose thread | select words, ⌘↩: the one thing in them most worth a question |
 | Ask your own question | select words, Ask Inkling |
+| Ask yourself | select words, Ask yourself (⇧⌘↩): your question hangs from them as a thread of your own, in your ink with seed stitches; no mind answers |
 | Sketch it | select words, Sketch it: a drawing stitched out step by step, with captions; click to enlarge |
 | Ask the room | up to three minds at once, each on its own thread in its own colour |
 | Call a mind by name | start a sentence with its name and a comma ("Skeptic, …") |

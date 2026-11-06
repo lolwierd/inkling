@@ -183,6 +183,8 @@ pub struct Entry {
     /// Its words are still in the note, so it can be shown there or opened on them again.
     pub words_found: bool,
     pub sketch: bool,
+    /// A thread of your own (Ask yourself): named You, in your ink.
+    pub own: bool,
 }
 
 /// What an entry offers.
@@ -248,12 +250,29 @@ impl Entry {
             reason: t.reason.clone(),
             words_found: !t.quote.is_empty() && text.contains(t.quote.as_str()),
             sketch: t.drawing.is_some(),
+            own: t.own,
         }
     }
 
-    /// The mind's name as the entry shows it.
+    /// Who hung it, as the entry shows it: You for a thread of your own, else its mind.
     pub fn who(&self) -> &str {
-        if self.mind.is_empty() { "Inkling" } else { &self.mind }
+        if self.own {
+            "You"
+        } else if self.mind.is_empty() {
+            "Inkling"
+        } else {
+            &self.mind
+        }
+    }
+
+    /// Who wrote a message: You, a mind you called into a thread of yours, or its mind.
+    pub fn speaker<'a>(&'a self, m: &'a Message) -> &'a str {
+        match m.role {
+            Role::You => "You",
+            Role::Mind if !m.mind.trim().is_empty() => m.mind.trim(),
+            Role::Mind if self.own => "Inkling",
+            Role::Mind => self.who(),
+        }
     }
 
     /// The words it was opened on.
@@ -281,6 +300,7 @@ impl Entry {
     /// Whose thread it was, for the Markdown: "Skeptic’s question", "You asked Skeptic".
     pub fn whose(&self) -> String {
         match self.kind {
+            k if self.own => format!("Your {}", kind_label(k)),
             ThoughtKind::Ask => format!("You asked {}", self.who()),
             k => format!("{}\u{2019}s {}", self.who(), kind_label(k)),
         }
@@ -417,7 +437,7 @@ fn markdown_in(note: &Note, tz: &impl TimeZone<Offset: std::fmt::Display>, this_
                 .messages
                 .iter()
                 .map(|m| {
-                    let who = if m.role == Role::Mind { e.who() } else { "You" };
+                    let who = e.speaker(m);
                     // a correction's working goes with its message, as Copy writes it
                     let mut text = format!("*{who}:* {}", m.text.trim());
                     for line in m.check.as_ref().map(crate::working::text_lines).unwrap_or_default() {
@@ -494,6 +514,10 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
     for (i, m) in shown.iter().enumerate() {
         if i == 1 && folded > 0 {
             talk = talk.child(div().flex().child(control(Act::More, format!("{folded} more"), cx)));
+        }
+        // in a thread of yours, a mind you called is named over its answer
+        if e.own && m.role == Role::Mind {
+            talk = talk.child(div().text_size(px(ts::SMALL)).font_weight(FontWeight::SEMIBOLD).text_color(p.graphite).child(e.speaker(m).to_string()));
         }
         talk = talk.child(message(m, color, t));
     }
@@ -727,7 +751,7 @@ pub fn view(page: &mut NotePage, own: &str, left: f32, column: f32, width: f32, 
         body = body.child(div().text_size(px(ts::BODY)).line_height(px(20.)).text_color(p.graphite).child(EMPTY));
     }
     for e in &list {
-        let color = crate::note_page::mind_thread(&e.mind, own, chosen, &t);
+        let color = if e.own { crate::note_page::own::ink(&t) } else { crate::note_page::mind_thread(&e.mind, own, chosen, &t) };
         let reason_box = page.back.editing.as_ref().filter(|ed| ed.id == e.id).map(|ed| reason_box(&ed.input, &t));
         let look = Look { unfolded: page.back.unfolded.contains(&e.id), reason_box, on: on.clone() };
         body = body.child(entry(e, color, &t, look, cx));
@@ -885,6 +909,7 @@ mod tests {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     }
 
@@ -953,6 +978,23 @@ mod tests {
         let mut old = thread("o", "x", ThoughtKind::Question, ThreadStatus::Open, at(6, 9), &["?"]);
         old.mind_name.clear();
         assert_eq!(Entry::of(&old, "x").who(), "Inkling");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_of_your_own_is_yours_on_the_back() {
+        // your question, Skeptic called into it, then cut: snipped, never let stand
+        let mut mine = thread("y", "four days", ThoughtKind::Question, ThreadStatus::Dismissed, at(6, 9), &["you: Too many?", "Two of them easy."]);
+        mine.own = true;
+        mine.mind_name.clear();
+        mine.messages[1].mind = "Skeptic".into();
+        let e = Entry::of(&mine, "four days");
+        assert_eq!((e.who(), e.whose(), e.ending), ("You", "Your question".to_string(), Ending::Snipped));
+        assert_eq!(e.messages.iter().map(|m| e.speaker(m)).collect::<Vec<_>>(), ["You", "Skeptic"]);
+        assert!(!e.acts().contains(&Act::Reason), "no reason to give: it was never a mind's point");
+        let mut note = running_plan();
+        note.threads.push(mine);
+        let md = to_markdown(&note);
+        assert!(md.contains("## Snipped \u{b7} Your question") && md.contains("> *You:* Too many?") && md.contains("> *Skeptic:* Two of them easy."), "{md}");
     }
 
     #[std::prelude::v1::test]

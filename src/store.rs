@@ -260,11 +260,15 @@ pub struct Message {
     /// answer fills it; a check this build cannot read is left out, not the message.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "check_or_none")]
     pub check: Option<Check>,
+    /// The mind that wrote it, when that is not the thread's own: a mind you called into
+    /// your own thread. Empty otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mind: String,
 }
 
 impl Message {
     pub fn new(role: Role, text: impl Into<String>) -> Self {
-        Self { role, text: text.into(), at: Utc::now(), check: None }
+        Self { role, text: text.into(), at: Utc::now(), check: None, mind: String::new() }
     }
 }
 
@@ -328,7 +332,7 @@ fn check_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Check>
 
 /// Fields with a sensible empty value default when a file lacks them, so a note
 /// written by hand or by another build still opens. A thread keeps its id and quote.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Thread {
     pub id: String,
     /// Byte range of the quote in the note's joined text (blocks joined by '\n').
@@ -370,6 +374,10 @@ pub struct Thread {
     /// the words never changed, and for threads whose words changed before this field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_quote: Option<String>,
+    /// You hung this thread yourself (Ask yourself): it is sewn in your ink, and no mind
+    /// answers in it unless you call one. `mind_name` stays empty.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own: bool,
 }
 
 /// The most characters a reason for letting a point stand keeps.
@@ -403,7 +411,9 @@ impl Thread {
     /// loose thread) that the mind has said. Only these are let stand; dismissing anything
     /// else (a loose thread still being looked for included) snips it.
     pub fn is_point(&self) -> bool {
-        matches!(self.kind, ThoughtKind::Question | ThoughtKind::Correction) && self.messages.iter().any(|m| m.role == Role::Mind)
+        // a thread of your own is never a mind's point, even after you called one into it:
+        // cutting your own question is not letting a point stand
+        !self.own && matches!(self.kind, ThoughtKind::Question | ThoughtKind::Correction) && self.messages.iter().any(|m| m.role == Role::Mind)
     }
 
     /// Open is still open, Resolved is tied off, and Dismissed is let stand on a point and
@@ -473,6 +483,30 @@ impl Relation {
         match self {
             Relation::Contradicts => "contradicts",
             Relation::Depends => "depends",
+        }
+    }
+}
+
+impl Thread {
+    /// Who hung it, as its tag names it: "You" for a thread of your own, else its mind.
+    pub fn asker(&self) -> String {
+        if self.own {
+            "You".into()
+        } else if self.mind_name.trim().is_empty() {
+            "Inkling".into()
+        } else {
+            self.mind_name.clone()
+        }
+    }
+
+    /// Who wrote one of its messages: "You", the mind you called into your own thread, or
+    /// the thread's own mind.
+    pub fn author(&self, m: &Message) -> String {
+        match m.role {
+            Role::You => "You".into(),
+            Role::Mind if !m.mind.trim().is_empty() => m.mind.clone(),
+            Role::Mind if self.own => "Inkling".into(),
+            Role::Mind => self.asker(),
         }
     }
 }
@@ -1383,6 +1417,28 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
+    fn own_threads_load_and_older_notes_are_written_as_before() {
+        // older files have neither field: a mind's thread, its messages unnamed
+        let old: Thread = serde_json::from_str(r#"{"id": "a", "quote": "q", "messages": [{"role": "mind", "text": "Why?"}]}"#).unwrap();
+        assert!(!old.own && old.messages[0].mind.is_empty());
+        let mut t = Thread { id: "b".into(), quote: "four days a week".into(), own: true, ..Default::default() };
+        let mut called = Message::new(Role::Mind, "Two of them easy.");
+        called.mind = "Skeptic".into();
+        t.messages = vec![Message::new(Role::You, "Too many?"), called];
+        let back: Thread = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
+        assert!(back.own && back.mind_name.is_empty());
+        assert_eq!(back.messages.iter().map(|m| m.mind.as_str()).collect::<Vec<_>>(), ["", "Skeptic"]);
+        // a note without your threads is written exactly as before: no new keys
+        let plain = serde_json::to_string(&old).unwrap();
+        assert!(!plain.contains("\"own\":") && !plain.contains("\"mind\":"), "{plain}");
+        // a thread of your own is never a mind's point, even once a mind you called has
+        // spoken in it: cutting it snips it, and no mind is told it was let stand
+        let mut cut = back.clone();
+        cut.set_status(ThreadStatus::Dismissed);
+        assert!(!cut.is_point() && cut.ending() == Ending::Snipped);
+    }
+
+    #[std::prelude::v1::test]
     fn the_file_name_is_the_note_id() {
         let tmp = TempDir::new();
         fs::create_dir_all(tmp.notes()).unwrap();
@@ -1762,6 +1818,7 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     }
 
@@ -1899,7 +1956,7 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
         a.threads.push(Thread {
             id: "t".into(), start: 2, end: 7, quote: "Words".into(), kind: ThoughtKind::Question, messages: vec![], drawing: None,
             status: ThreadStatus::Open, side: Side::Right, mind_name: "Inkling".into(), tag_offset: (0., 0.), created_at: a.created_at,
-            reason: None, ended_at: None, first_quote: None,
+            reason: None, ended_at: None, first_quote: None, ..Default::default()
         });
         a.elsewhere.push(Elsewhere { thread: "t".into(), note: "b".into(), title: "B".into(), ..Default::default() });
         let mut b = a.clone();

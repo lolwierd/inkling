@@ -352,3 +352,46 @@ describe("points the writer let stand", async () => {
     }
   });
 });
+
+describe("the writer's own threads in prompts", async () => {
+  const { askPrompt, readPrompt, OWN_THREADS_RULE } = await import("../src/prompts.ts");
+  const mind = { name: "Inkling", description: "", howItThinks: "", voice: "plain" as const, frequency: "when_it_matters" as const };
+  const ctx = (threads: any[]) => ({ noteTitle: "Plan", noteText: "Run four days a week.", brief: null, mind, aboutMe: null, threads, letStand: [], now: "Saturday 7 November 2026" });
+  const own = { quote: "four days a week", resolved: false, own: true, messages: [{ role: "you" as const, text: "Too many?" }] };
+  const theirs = { quote: "Run", resolved: true, messages: [{ role: "mind" as const, text: "How far?" }] };
+
+  test("a read marks them and says once not to answer or ask them again", () => {
+    const p = readPrompt(ctx([theirs, own]), "Run four days a week.");
+    expect(p).toContain("Thread 1 (resolved) on «Run»:\n  You: How far?");
+    expect(p).toContain("Thread 2 (the writer's own) on «four days a week»:\n  Writer: Too many?");
+    expect(p.split(OWN_THREADS_RULE).length).toBe(2);
+  });
+
+  test("without them the margin reads as before", () => {
+    const p = readPrompt(ctx([theirs]), "Run four days a week.");
+    expect(p).not.toContain(OWN_THREADS_RULE);
+    expect(p).not.toContain("the writer's own");
+  });
+
+  test("another mind's line is under its name; the mind's own lines stay 'You'", () => {
+    const visited = { ...own, messages: [...own.messages, { role: "mind" as const, text: "Which two?", mind: "Skeptic" }, { role: "mind" as const, text: "Mine.", mind: "inkling" }] };
+    const p = readPrompt(ctx([visited]), "Run four days a week.");
+    expect(p).toContain("  Skeptic: Which two?");
+    expect(p).toContain("  You: Mine.");
+  });
+
+  test("Ask without a history is today's prompt; a call into the writer's thread brings it", () => {
+    const plain = askPrompt(ctx([]), "four days a week", "Too many?");
+    expect(plain).toContain("The writer selected «four days a week» and asked you:\n<question>Too many?</question>");
+    expect(askPrompt(ctx([]), "four days a week", "Too many?", false, [])).toBe(plain);
+    const called = askPrompt(ctx([own]), "four days a week", "Too many?", false, [
+      { role: "you", text: "Two easy, two hard." },
+      { role: "mind", text: "Which two?", mind: "Skeptic" },
+      { role: "you", text: "Inkling, is that enough?" },
+    ]);
+    expect(called).toContain("On «four days a week» the writer hung a question of their own:\n<question>Too many?</question>");
+    expect(called).toContain("Writer: Two easy, two hard.\nSkeptic: Which two?\nWriter: Inkling, is that enough?");
+    expect(called).toContain("They have now called you into the thread.");
+    expect(called).not.toContain("selected «");
+  });
+});

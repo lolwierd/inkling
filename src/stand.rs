@@ -115,6 +115,7 @@ mod tests {
             reason: None,
             ended_at: None,
             first_quote: None,
+            ..Default::default()
         }
     }
 
@@ -122,6 +123,21 @@ mod tests {
         let mut t = thread(quote, ThoughtKind::Question, ThreadStatus::Dismissed, "Skeptic", said);
         t.ended_at = Some(Utc::now() - Duration::minutes(minutes_ago));
         t
+    }
+
+    #[std::prelude::v1::test]
+    fn a_thread_of_your_own_is_never_let_stand_even_after_a_mind_answered_in_it() {
+        // your own question, which you called Skeptic into, then cut
+        let mut own = thread("four days a week", ThoughtKind::Question, ThreadStatus::Open, "", "");
+        own.own = true;
+        own.messages = vec![Message::new(Role::You, "Too many?"), Message::new(Role::Mind, "Two of them easy.")];
+        own.messages[1].mind = "Skeptic".into();
+        assert!(!lets_stand(&own), "its second button is Dismiss, not Let stand");
+        assert_eq!(dismiss(&mut own, "I decided"), DISMISSED);
+        assert_eq!((own.ending(), own.reason.as_deref()), (Ending::Snipped, None));
+        // and no mind is told it as a point let stand
+        let theirs = stood("hold 5:30", "Is 5:30 race pace?", 1);
+        assert_eq!(points(&[own, theirs], "four days a week, hold 5:30").iter().map(|p| p.quote.as_str()).collect::<Vec<_>>(), ["hold 5:30"]);
     }
 
     #[std::prelude::v1::test]

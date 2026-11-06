@@ -71,7 +71,12 @@ function required(v: unknown, field: string): string {
 
 function messages(v: unknown): ThreadMessage[] {
   if (!Array.isArray(v)) return [];
-  return v.filter(isObject).map((m) => ({ role: m.role === "you" ? "you" : "mind", text: text(m.text) }));
+  return v.filter(isObject).map((m) => {
+    const out: ThreadMessage = { role: m.role === "you" ? "you" : "mind", text: text(m.text) };
+    const mind = optionalText(m.mind);
+    if (mind && out.role === "mind") out.mind = mind.trim();
+    return out;
+  });
 }
 
 /** At most this many points the writer let stand reach a prompt (the app sends 12). */
@@ -123,6 +128,7 @@ function context(v: unknown): Context {
           messages: messages(t.messages),
           resolved: t.resolved === true,
           elsewhere: isObject(t.elsewhere) && text(t.elsewhere.quote).trim() ? { noteTitle: text(t.elsewhere.noteTitle), quote: text(t.elsewhere.quote) } : null,
+          own: t.own === true,
         }))
       : [],
     now: text(v.now) || new Date().toDateString(),
@@ -179,7 +185,7 @@ function task(v: unknown): Task {
     case "sketch":
       return { task: v.task, ctx: context(v.ctx), target: required(v.target, "target") };
     case "ask":
-      return { task: "ask", ctx: context(v.ctx), target: required(v.target, "target"), question: required(v.question, "question") };
+      return { task: "ask", ctx: context(v.ctx), target: required(v.target, "target"), question: required(v.question, "question"), history: messages(v.history) };
     case "draw":
       return { task: "draw", ctx: context(v.ctx), quote: text(v.quote), thought: text(v.thought), request: optionalText(v.request) ?? undefined };
     case "reply":
@@ -322,7 +328,7 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
       return { data: { text: links(nonEmpty(d.text, "an empty reply"), found), resolved: d.resolved === true, redraw: d.redraw === true }, usage };
     }
     case "ask": {
-      const { text: out, usage, found } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web), settings, signal, delta, onLimit, web);
+      const { text: out, usage, found } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web, input.history), settings, signal, delta, onLimit, web);
       return { data: { text: links(out, found) }, usage };
     }
     case "answer": {

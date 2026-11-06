@@ -65,7 +65,7 @@ printed the page state; someone had to read it and remember what it should say. 
   against that dump, the notebook files the app saved, the brain traffic and the log.
   JavaScript because agents write it fluently and it needs no new language; after the
   run because the app cannot evaluate expressions and files are only final at exit.
-  The app's script parser skips these lines, so the app did not change for them.
+  The app's script parser skips these lines (one line in `src/script.rs`).
 - **Header lines** (`# fixture:`, `# after:`, `# env:`, `# timeout:`, `# brain: real`,
   `# allow-warn:`, `# tags:`) carry what each scenario needs. Before, which scenario
   needed the Beta fixture, which one relaunched on another's notebook and which needed a
@@ -75,7 +75,7 @@ printed the page state; someone had to read it and remember what it should say. 
   while testing nothing. Unknown steps and expectations that do not parse are caught
   before any window opens.
 
-Writing the expectations from the dumps found three scenarios that had stopped testing
+Writing the expectations from the dumps found four scenarios that had stopped testing
 what they say:
 
 - `u03-wait-while-typing` slowed the fake `read` so a question would land mid-typing.
@@ -134,11 +134,11 @@ second to spare, and this machine often runs several agents' builds and a video 
 once. A new step, `settle`, waits until the page has nothing scheduled or in flight (no
 pause pending, nothing reading, no reply, sketch or chat on its way, not typing), up to
 20 s, and fails the run if it gives up. `scripts/dev state` and `shot` settle before they
-look, so `--step "type: ..."` returns the page after the read, not before it. This was
-the one change that needed code in `src/app.rs` and `src/note_page.rs`, which other
+look, so `--step "type: ..."` returns the page after the read, not before it. With the
+dump fix above, this is all the code in `src/app.rs` and `src/note_page.rs`, which other
 agents were editing: a `settled()` predicate next to `typing_recently` and a branch in
-`run_script`, 25 lines together. The older scenarios keep their clock waits (they pass);
-new ones should settle.
+`run_script`, about 25 lines. The older scenarios keep their clock waits (they pass); new
+ones should settle.
 
 For the clock waits that remain, `scripts/dev e2e` takes a lock under
 `$TMPDIR/inkling-agent`, so two agents' suites do not slow each other into failures, and
@@ -184,6 +184,10 @@ reach for `cargo run`, which takes the owner's focus and opens their real notebo
   reformatting would collide with every parallel branch.
 - **`brain/test/e2e/run.sh`, `dumps.py` and `show.py` stay** for sessions that use them.
   `scripts/dev e2e` and `scripts/dev show` do the same and more.
+- **No edit to the new tour's text.** `src/welcome.rs` says the mind "answers only when
+  you ask", which is the old mode's name used as plain English. The word lint flags the
+  name only as a label ("When you ask"); whether the sentence should change is the
+  owner's call.
 
 ## Measured on 6 Nov 2026 (this machine, while other agents built)
 

@@ -40,6 +40,8 @@ pub enum Kind {
     ThreadDismissed,
     /// Something went wrong: an ochre thread, and a close control.
     Problem,
+    /// "Your reply is in the note, ready to rework.", with Undo (Write it in).
+    WrittenIn,
 }
 
 impl Kind {
@@ -49,11 +51,12 @@ impl Kind {
             Kind::Done => Duration::from_secs(3),
             Kind::NoteDeleted | Kind::ThreadDismissed => Duration::from_secs(8),
             Kind::Problem => Duration::from_secs(12),
+            Kind::WrittenIn => Duration::from_secs(8),
         }
     }
 
     fn undo(self) -> bool {
-        matches!(self, Kind::NoteDeleted | Kind::ThreadDismissed)
+        matches!(self, Kind::NoteDeleted | Kind::ThreadDismissed | Kind::WrittenIn)
     }
 
     fn name(self) -> &'static str {
@@ -62,6 +65,7 @@ impl Kind {
             Kind::NoteDeleted => "note_deleted",
             Kind::ThreadDismissed => "thread_dismissed",
             Kind::Problem => "problem",
+            Kind::WrittenIn => "written_in",
         }
     }
 }
@@ -436,6 +440,18 @@ mod tests {
         assert!(s.live(Kind::ThreadDismissed).is_some());
         s.step(at(t0, 10_100));
         assert!(s.live(Kind::ThreadDismissed).is_none());
+    }
+
+    #[std::prelude::v1::test]
+    fn a_reply_written_in_offers_undo_for_8_s() {
+        let t0 = Instant::now();
+        let mut s = Toasts::default();
+        s.push(Kind::WrittenIn, "Your reply is in the note, ready to rework.", t0);
+        assert!(Kind::WrittenIn.undo());
+        s.step(at(t0, 7900));
+        assert!(s.live(Kind::WrittenIn).is_some());
+        s.step(at(t0, 8050));
+        assert!(s.live(Kind::WrittenIn).is_none());
     }
 
     #[std::prelude::v1::test]

@@ -36,7 +36,7 @@ wait: 600
 chat: and the chat? [[null]]
 wait: 600
 dump: nulls
-expect: d.error === "Inkling came back with nothing to say. Try again." && d.pending.length === 0 && d.chat_pending === null
+expect: d.chat_error === "Inkling came back with nothing to say." && d.pending.length === 0 && d.chat_pending === null   // the chat says so under the question
 activate: 1
 reply: reply null [[null]]
 wait: 600

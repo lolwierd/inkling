@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "6 Nov 2026, 23:40 IST"
+UPDATED = "7 Nov 2026, 00:20 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -28,15 +28,18 @@ WAITING = [
      "Its top three: Answer in the note (a paragraph you write elsewhere can tie a thread off), Let it stand (a dismissal "
      "with a reason, remembered by every mind) and Threads of your own (your own question on your own words).",
      ("See all ten", "#manifesto")),
+    ("Five small calls from the UI critique",
+     "Settings uses rounded-rectangle buttons while the page's dialogs use pills. The selection toolbar marks the current block "
+     "filled for T, H1 to H3 and the lists, but outlined in colour for the callouts and Code. ⌘K dims the page much less than "
+     "Export does. A tag can be dragged off the sheet onto the cloth. Settings › Minds does not show each mind's thread colour. "
+     "Each is a small change; say which you want.",
+     None),
 ]
 
-RUNNING = [
-    ("A fresh UI critique, now",
-     "Everything else has landed. A new pair of eyes is going through every screen and state, light and dark, at four window "
-     "sizes and with awkward content, fixing what is not polished: overflows, borders, spacing, type, focus, motion."),
-]
+RUNNING = []
 
 DONE = [
+    ("A fresh UI critique", "33 problems found and 25 fixed. The page scrolls under a band of cloth, so nothing runs under the window's controls; a reply wraps inside its tag; Marks only sets its ? like a footnote; the gutter's marks stay on the paper; long mind names end in an ellipsis; and madder is only ever Inkling's colour. Of the other 8, three are by design and five are small calls for you, under Waiting on you."),
     ("Toasts and keyboard focus", "One stack of stitched labels at the bottom, ochre for problems with a close button, Undo inside; hovering pauses it. A dashed focus ring in your thread colour and a Tab order through everything."),
     ("The README", "Written for people, with the film at the top."),
     ("Sewn blocks", "Checklists that take a cross-stitch, callouts sewn on as patches (note, warning, tip), code blocks with line numbers and thread-colour syntax, and quotes on a back-stitched seam. Type [ ], > [!note] or three backticks."),
@@ -49,9 +52,9 @@ DONE = [
     ("Settings, as a Mac window", "Every shortcut can be changed; models come from Claude Code itself."),
     ("Import from Obsidian", "A vault comes in with its folders; Inkling leaves the imported words alone."),
     ("The manifesto", "Eight beliefs, ten features they call for, six things they argue against."),
-    ("A UI audit", "59 findings: 45 fixed on the spot, the rest running now."),
+    ("A UI audit", "59 findings, all closed: 55 fixed, 3 made moot by later changes, 1 written up."),
     ("Built for agents", "A map of the repo and one command that checks everything."),
-    ("Checks", "153 Rust tests and 101 brain tests pass; 35 of 36 scenarios pass (the last needs the real model)."),
+    ("Checks", "188 Rust tests and 101 brain tests pass; 42 of 43 scenarios pass (the last needs the real model)."),
 ]
 
 LOGOS = [
@@ -73,6 +76,9 @@ DOTS = [
 ]
 
 SHOTS = [
+    ("scroll-band", "Scrolled, the page slides under a band of cloth that holds the window's controls, with a soft shadow on the paper."),
+    ("reply-wraps", "Your reply wraps inside an open tag; it used to run off the edge."),
+    ("marks-only", "Marks only: the ? or × sits after the words like a footnote mark."),
     ("toasts", "Toasts: one stack at the bottom; a problem in ochre with a close button, Undo under it."),
     ("focus-ring", "Keyboard focus: a dashed ring in your thread colour, only when you use the keyboard."),
     ("sewn-blocks", "New: a checklist, the three callouts, a code block with a thread on its last line, and a quote on its seam."),
@@ -180,7 +186,9 @@ def card(title, body, link=None, chip=None):
 def build():
     film = LINKS["film"]
     waiting = "".join(card(t, b, link, ("wait", "Waiting on you")) for t, b, link in WAITING)
-    running = "".join(card(t, b, None, ("run", "Running")) for t, b in RUNNING)
+    running = "".join(card(t, b, None, ("run", "Running")) for t, b in RUNNING) or (
+        '<p class="meta">Nothing is running now. All of the work is merged into master.</p>'
+    )
     done = "".join(f'<li><strong>{esc(t)}.</strong> {esc(b)}</li>' for t, b in DONE)
     pick = LOGOS[0]
     logos = "".join(
@@ -203,6 +211,9 @@ def build():
         "{{N_WAIT}}": str(len(WAITING)), "{{N_RUN}}": str(len(RUNNING)),
     }.items():
         page = page.replace(k, v)
+    if not RUNNING:
+        # no branches out, so the note about branches would only confuse
+        page = page.replace('<p class="section-note">Each is on a branch of its own; I review and merge as they report.</p>', "")
     (HERE / "index.html").write_text(page)
     print("wrote", HERE / "index.html", len(page), "bytes")
 

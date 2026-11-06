@@ -327,10 +327,10 @@ does what ⇧⌘R does:
 
 | Scenario | What it proves |
 |---|---|
-| `u21-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; the mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass; a read that fails ends the pass with "Couldn’t read it through. You’ve reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
+| `u21-read-through` | A waiting note reads nothing as you write; a pass reads the three finished paragraphs (not "Short one."), one thread arrives with its quote, and the toast says so; ⇧⌘R again says "Nothing new to read."; after a new paragraph the next pass reads only that one; a read that fails ends the pass with "Couldn’t read it through. You’ve reached your Claude usage limit…", leaves that paragraph unread, and skips the paragraph still being written; every read sent has `through: true`. |
 | `u22-read-through-long` | The sixty-paragraph note (`hard-content`): the needle is on the paragraph being read; Stop keeps what was read and says "Stopped after N of 60…"; ⇧⌘R goes on with only what is left; opening another note stops it ("Read it through stopped when you left “A very long note”."); the last pass finishes, every paragraph read exactly once (60 distinct reads, two cancelled). |
 | `u23-read-through-imported` | The guide's words are left alone ("Nothing new to read."); the writer's first sentence in it still gets its question (`probe`, with `through`); an imported Obsidian note is read on request (6 of its units: not headings, not two-word code) and is marked `imported`. |
-| `u24-read-through-look` | The screenshots in `design/features/shots/`: the menu and a pass midway, in Linen and Lamplight, from the new `read-through` fixture (a six-paragraph draft in a waiting note with one open question). |
+| `u24-read-through-look` | The mode menu's third item, reached from the keyboard (`d.focus === "menu:2"`), starts a pass over the new `read-through` fixture (a six-paragraph draft in a waiting note with one open question); and the screenshots in `design/features/shots/`: the menu and a pass midway, in Linen and Lamplight. |
 
 ## Files and functions
 

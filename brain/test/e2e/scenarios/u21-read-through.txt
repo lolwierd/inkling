@@ -1,7 +1,7 @@
 # Read it through: a note that waits to be asked reads nothing as you write; one command
 # reads every finished paragraph once, top to bottom, threads arriving as it goes, and the
-# end says so. Again, it has nothing new. The mode menu's last item starts it from the
-# keyboard. A read that fails ends the pass, saying where it stopped and why.
+# end says so. Again, it has nothing new; after a new paragraph, it reads only that. A
+# read that fails ends the pass, saying where it stopped and why.
 # tags: read-through
 note: Draft
 mode: ask
@@ -24,24 +24,15 @@ expect: d.toasts.some(t => t.text === "Inkling read it through. New threads are 
 key: cmd-shift-r
 dump: again
 expect: d.read_through === null && d.toasts.some(t => t.text === "Nothing new to read.")
-# a new paragraph, read through from the mode menu, by the keyboard
+# a new paragraph: the next pass reads only it (u24 starts a pass from the mode menu)
 type: The cache is warmed from the nightly build, so the first run is never cold. [[silent]]
 settle
-caret: end
-# from the left of the header, which other features do not grow: ⌃Tab leaves the note for
-# Chat, Tab goes round to ☰, then the mind, Tell Inkling and the mode
-key: ctrl-tab tab tab tab tab
-dump: on-mode
-expect: d.focus === "header:mode"
-key: enter
-key: down
-dump: menu
-expect: d.menu === "Mode" && d.focus === "menu:2"   // the third item: Read it through
-shot: read-through-menu
-key: enter
+read-through
+dump: second
+expect: d.read_through !== null && d.read_through.total === 1
 settle: 30000
-dump: by-menu
-expect: d.menu === null && d.read_through === null && d.read_hashes === 4
+dump: second-done
+expect: d.read_through === null && d.read_hashes === 4
 expect: d.toasts.some(t => t.text === "Inkling read it through. Nothing to ask.")
 # a read that fails ends the pass; the paragraph being written is left for later
 type: Rollback runs on its own when the error rate passes two percent. [[error:rate_limit]]

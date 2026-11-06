@@ -1334,7 +1334,9 @@ impl AppView {
         };
         // Read it through: how far the pass has got, centred over the page
         let pass = self.page.update(cx, |p, cx| p.read_through_status(cx));
-        let calm = typed.is_some_and(|k| self.last_pointer.is_none_or(|m| m < k)) && !self.sidebar_open;
+        // (a control up here with the keyboard on it stays in view, ring and all)
+        let keyed_here = ui::focused_key(window, cx).is_some_and(|k| k.starts_with("chrome:"));
+        let calm = typed.is_some_and(|k| self.last_pointer.is_none_or(|m| m < k)) && !self.sidebar_open && !keyed_here;
         let target = if calm { 0. } else { 1. };
         let now = Instant::now();
         let dt = self.chrome_frame.map(|l| (now - l).as_secs_f32()).unwrap_or(1. / 60.).clamp(1. / 240., 1. / 30.);
@@ -1358,7 +1360,9 @@ impl AppView {
             .h(px(crate::note_page::CHROME_H))
             .window_control_area(WindowControlArea::Drag)
             .opacity(next)
-            .when(next > 0.02, |d| {
+            // drawn even when faded right out, so ☰ and Chat keep their places in the Tab
+            // order after you type (the keyboard on one brings them back into view)
+            .map(|d| {
                 d.child(
                     div()
                         .id("toggle-sidebar")

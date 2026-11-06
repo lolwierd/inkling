@@ -484,6 +484,7 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
     said = said.child(div().font_family(SERIF).text_size(words).line_height(words_lh).text_color(p.ink).child(e.after.clone()));
     col = col.child(said);
     // what was said: the first message, then the last, the rest folded between them
+    let writing = look.reason_box.is_some();
     let (shown, folded) = e.said(look.unfolded);
     let mut talk = div().mt(px(8.)).flex().flex_col().gap(px(6.));
     for (i, m) in shown.iter().enumerate() {
@@ -516,9 +517,10 @@ pub fn entry<V: 'static>(e: &Entry, color: Hsla, t: &Theme, look: Look<V>, cx: &
     if let Some(u) = under {
         col = col.child(div().mt(px(4.)).child(u));
     }
-    // the quiet controls, as the tags have them
+    // the quiet controls, as the tags have them (while its box is open, Return and Esc are
+    // the reason's controls)
     let mut row = div().mt(px(8.)).flex().flex_wrap().items_center().gap(px(14.));
-    for act in e.acts() {
+    for act in e.acts().into_iter().filter(|a| !(*a == Act::Reason && writing)) {
         let label = match act {
             Act::Show => "Show on the page".to_string(),
             Act::Reason if e.reason.is_some() => "Change the reason".to_string(),
@@ -683,7 +685,7 @@ pub fn view(page: &mut NotePage, own: &str, left: f32, column: f32, width: f32, 
     }
     for e in &list {
         let color = crate::note_page::mind_thread(&e.mind, own, chosen, &t);
-        let reason_box = page.back.editing.as_ref().filter(|ed| ed.id == e.id).map(|ed| reason_box(&ed.input, color, &t));
+        let reason_box = page.back.editing.as_ref().filter(|ed| ed.id == e.id).map(|ed| reason_box(&ed.input, &t));
         let look = Look { unfolded: page.back.unfolded.contains(&e.id), reason_box, on: on.clone() };
         body = body.child(entry(e, color, &t, look, cx));
     }
@@ -700,8 +702,9 @@ pub fn view(page: &mut NotePage, own: &str, left: f32, column: f32, width: f32, 
         .into_any_element()
 }
 
-/// The one-line box a reason is written in, where the reason goes.
-fn reason_box(input: &Entity<InputState>, color: Hsla, t: &Theme) -> AnyElement {
+/// The one-line box a reason is written in, where the reason goes: a plain box, as the
+/// tag's and the brief's are, holding your words in your typeface.
+fn reason_box(input: &Entity<InputState>, t: &Theme) -> AnyElement {
     let p = t.p;
     div()
         .px(px(10.))
@@ -709,7 +712,7 @@ fn reason_box(input: &Entity<InputState>, color: Hsla, t: &Theme) -> AnyElement 
         .rounded(px(6.))
         .bg(p.card)
         .border_1()
-        .border_color(color.opacity(0.5))
+        .border_color(p.rule)
         .font_family(SERIF)
         .text_color(p.ink)
         .child(Input::new(input).appearance(false).px_0().text_size(t.note_size - px(2.)))

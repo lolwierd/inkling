@@ -19,6 +19,8 @@ struct Second {
     frames: u32,
     layouts: u32,
     layout_lines: usize,
+    /// Lines shaped afresh (the rest were carried over from the layout before).
+    layout_shaped: usize,
     layout_total: Duration,
     layout_max: Duration,
 }
@@ -28,6 +30,7 @@ static SECOND: Mutex<Second> = Mutex::new(Second {
     frames: 0,
     layouts: 0,
     layout_lines: 0,
+    layout_shaped: 0,
     layout_total: Duration::ZERO,
     layout_max: Duration::ZERO,
 });
@@ -46,17 +49,18 @@ pub fn frame() {
     report(&mut s);
 }
 
-/// The editor laid out `lines` lines, which took `took`.
-pub fn layout(lines: usize, took: Duration) {
+/// The editor laid out `lines` lines, shaping `shaped` of them afresh, which took `took`.
+pub fn layout(lines: usize, shaped: usize, took: Duration) {
     if !on() {
         return;
     }
     if took >= SLOW_LAYOUT {
-        log::info!("perf: layout of {lines} lines took {:.2} ms", took.as_secs_f64() * 1000.);
+        log::info!("perf: layout of {lines} lines ({shaped} shaped) took {:.2} ms", took.as_secs_f64() * 1000.);
     }
     let mut s = stats();
     s.layouts += 1;
     s.layout_lines = lines;
+    s.layout_shaped += shaped;
     s.layout_total += took;
     s.layout_max = s.layout_max.max(took);
 }
@@ -74,11 +78,12 @@ fn report(s: &mut Second) {
     }
     let ms = |d: Duration| d.as_secs_f64() * 1000.;
     log::info!(
-        "perf: {} frames in {:.2} s; {} layouts of {} lines, {:.2} ms in all, slowest {:.2} ms",
+        "perf: {} frames in {:.2} s; {} layouts of {} lines ({} shaped), {:.2} ms in all, slowest {:.2} ms",
         s.frames,
         span.as_secs_f64(),
         s.layouts,
         s.layout_lines,
+        s.layout_shaped,
         ms(s.layout_total),
         ms(s.layout_max)
     );

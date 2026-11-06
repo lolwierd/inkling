@@ -40,7 +40,7 @@ pub mod ts {
     pub const PANE: f32 = 20.;
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
     /// The writing page: flat, no texture.
     pub paper: Hsla,

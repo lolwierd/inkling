@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "7 Nov 2026, 00:20 IST"
+UPDATED = "7 Nov 2026, 01:25 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -28,17 +28,22 @@ WAITING = [
      "Its top three: Answer in the note (a paragraph you write elsewhere can tie a thread off), Let it stand (a dismissal "
      "with a reason, remembered by every mind) and Threads of your own (your own question on your own words).",
      ("See all ten", "#manifesto")),
-    ("Five small calls from the UI critique",
-     "Settings uses rounded-rectangle buttons while the page's dialogs use pills. The selection toolbar marks the current block "
-     "filled for T, H1 to H3 and the lists, but outlined in colour for the callouts and Code. ⌘K dims the page much less than "
-     "Export does. A tag can be dragged off the sheet onto the cloth. Settings › Minds does not show each mind's thread colour. "
-     "Each is a small change; say which you want.",
-     None),
 ]
 
-RUNNING = []
+RUNNING = [
+    ("The film, re-cut",
+     "A much quieter score: one calm piece under the whole film, almost no sound effects, no sewing machine or ticking. "
+     "The running plan is replaced by a technical note, in the film and in the app's Start here guide, with fresh real answers from the model."),
+    ("UI polish, every screen and flow",
+     "A fresh agent on Opus at max effort, looking for the small things that are easy to miss: pixel alignment, states, "
+     "wording, empty and error states, keyboard flows, light and dark, four window sizes."),
+    ("Code health, next",
+     "Once the polish lands, an agent on Fable at max effort goes through the code for performance, bugs, code smells, "
+     "complexity and implicit state machines, and fixes what it finds. It waits so the two never rewrite the same code at once."),
+]
 
 DONE = [
+    ("The critique's five calls", "Three changed: the toolbar's current key is filled in its own colour, a dragged tag stays on the paper, and Settings › Minds shows each mind's colour. Settings keeps its Mac-style buttons, and ⌘K keeps its light dim."),
     ("A fresh UI critique", "33 problems found and 25 fixed. The page scrolls under a band of cloth, so nothing runs under the window's controls; a reply wraps inside its tag; Marks only sets its ? like a footnote; the gutter's marks stay on the paper; long mind names end in an ellipsis; and madder is only ever Inkling's colour. Of the other 8, three are by design and five are small calls for you, under Waiting on you."),
     ("Toasts and keyboard focus", "One stack of stitched labels at the bottom, ochre for problems with a close button, Undo inside; hovering pauses it. A dashed focus ring in your thread colour and a Tab order through everything."),
     ("The README", "Written for people, with the film at the top."),
@@ -76,6 +81,8 @@ DOTS = [
 ]
 
 SHOTS = [
+    ("mind-colours", "Settings › Minds now shows the colour each mind asks in."),
+    ("toolbar-current", "The selection toolbar fills the current key in its own colour: here, a Note callout."),
     ("scroll-band", "Scrolled, the page slides under a band of cloth that holds the window's controls, with a soft shadow on the paper."),
     ("reply-wraps", "Your reply wraps inside an open tag; it used to run off the edge."),
     ("marks-only", "Marks only: the ? or × sits after the words like a footnote mark."),

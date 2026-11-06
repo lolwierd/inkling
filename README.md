@@ -26,6 +26,8 @@ The film is three and a half minutes long and shows everything Inkling does, in 
 
 **The window stays out of the way.** There is no toolbar. The few controls fade while you write and come back when you move the pointer. Settings is a proper Mac window, every keyboard shortcut can be changed, and you choose Linen (light) or Lamplight (dark), your thread colour, the lettering and the text size. Hold ⌥ to speak instead of typing.
 
+**Your own blocks are sewn too.** Type `[ ] ` to start a checklist: a ticked item takes a cross-stitch and its line is tacked through. Type `> [!note] ` (or `warning`, or `tip`) for a callout, a patch sewn onto the page in the colour of its kind. Three backticks open a code block with line numbers, a Copy button and syntax in thread colours. Madder, Inkling's own colour, never appears in your blocks, so you can always tell your marks from its questions.
+
 **It is a real notebook.** Notes and folders live in the sidebar, ⌘K finds a note or starts one, ⌘⇧C copies a note as Markdown, and ⌘⇧E exports it as Markdown, HTML or Word, with its threads or without. File > Import from Obsidian brings in a whole vault, folders and all, and Inkling leaves the imported words alone so it reads only what you write afterwards.
 
 The complete list, row by row, is [`design/capabilities.md`](design/capabilities.md).

@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-UPDATED = "6 Nov 2026, 22:15 IST"
+UPDATED = "6 Nov 2026, 22:50 IST"
 
 LINKS = {
     "logos": "https://claude.ai/artifact/HsnfPbYBDSn5Bk5m9gh3bX",
@@ -31,9 +31,6 @@ WAITING = [
 ]
 
 RUNNING = [
-    ("Sewn blocks in the editor",
-     "Checklists that take a cross-stitch, callouts sewn on as patches (note, warning, tip), code blocks with stitched-in "
-     "syntax colours, and quotes on a back-stitched seam. From the motion board, as you picked."),
     ("The audit's leftovers, keyboard focus, and toasts",
      "Nine small findings, a stitched focus ring with a Tab order, and toasts as one quiet stack in the thread look, "
      "with Undo and errors in the same place."),
@@ -44,6 +41,7 @@ RUNNING = [
 ]
 
 DONE = [
+    ("Sewn blocks", "Checklists that take a cross-stitch, callouts sewn on as patches (note, warning, tip), code blocks with line numbers and thread-colour syntax, and quotes on a back-stitched seam. Type [ ], > [!note] or three backticks."),
     ("The film, re-cut", "3:28, all 44 capabilities on screen, a camera that moves with the thread, and a score made from needle, thread and cloth. It has its own page, linked under The film."),
     ("The logo: Darn · Border", "Your pick. It is the app icon now, and the wordmark in the app dots its i with one cross-stitch."),
     ("Loose Threads, in the app", "Stitches under your words, a hanging thread with real rope physics, tags in the margin, a knot when a thread is answered."),
@@ -77,6 +75,8 @@ DOTS = [
 ]
 
 SHOTS = [
+    ("sewn-blocks", "New: a checklist, the three callouts, a code block with a thread on its last line, and a quote on its seam."),
+    ("sewn-blocks-dark", "The same blocks in Lamplight."),
     ("start-here", "Start here: a new notebook opens on a working tour, with real threads to try."),
     ("tag-hover", "Rest the pointer on a folded tag and the question drops open."),
     ("tag-open", "Click it to write back; Resolve, Dismiss, Make a note and Copy sit underneath."),

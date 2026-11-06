@@ -442,6 +442,55 @@ impl Thread {
     }
 }
 
+/// How the two ends of a thread between notes stand.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Relation {
+    /// Read as written, they cannot both be true.
+    #[default]
+    Contradicts,
+    /// These words build on the other words and do not match them.
+    Depends,
+}
+
+impl Relation {
+    pub fn wire(self) -> &'static str {
+        match self {
+            Relation::Contradicts => "contradicts",
+            Relation::Depends => "depends",
+        }
+    }
+}
+
+/// The far end of a thread between notes: words in another note that the thread `thread`
+/// of this note also quotes. Kept beside the threads, so a thread's own shape does not
+/// change. Every field defaults, so a hand-edited or newer file still loads.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(default)]
+pub struct Elsewhere {
+    /// The thread in this note's `threads` it belongs to.
+    pub thread: String,
+    /// The other note's id.
+    pub note: String,
+    /// Byte range of the other words in that note's joined text (blocks joined by '\n',
+    /// title included), and the words themselves.
+    pub start: usize,
+    pub end: usize,
+    pub quote: String,
+    /// That note's title and its `updated_at`, as last seen: shown once it is deleted, and
+    /// used by exports.
+    pub title: String,
+    pub edited: DateTime<Utc>,
+    pub relation: Relation,
+    /// Where the far end's tag hangs in the other note, and where it was dragged to there.
+    pub side: Side,
+    pub tag_offset: (f32, f32),
+    /// Only on a visiting end: the thread it names lives in `note`, and is shown here
+    /// while this note is open (`between::add_visitors`). Never saved.
+    #[serde(skip)]
+    pub visiting: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChatMessage {
     pub role: Role,
@@ -487,6 +536,9 @@ pub struct Note {
     pub created_at: DateTime<Utc>,
     #[serde(default)]
     pub updated_at: DateTime<Utc>,
+    /// The far ends of this note's threads between notes, one per such thread.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elsewhere: Vec<Elsewhere>,
 }
 
 fn default_mind_id() -> String {
@@ -515,7 +567,17 @@ impl Note {
             first_run: false,
             created_at: now,
             updated_at: now,
+            elsewhere: vec![],
         }
+    }
+
+    /// The far end of `thread`, when it is a thread between notes.
+    pub fn elsewhere_of(&self, thread: &str) -> Option<&Elsewhere> {
+        self.elsewhere.iter().find(|e| e.thread == thread)
+    }
+
+    pub fn elsewhere_of_mut(&mut self, thread: &str) -> Option<&mut Elsewhere> {
+        self.elsewhere.iter_mut().find(|e| e.thread == thread)
     }
 
     /// The note's text as one string, blocks joined by newlines.
@@ -1013,6 +1075,7 @@ fn load_notes(dir: &Path) -> Result<Vec<Note>> {
             note.id = stem;
         }
         drop_broken_marks(&mut note);
+        drop_broken_links(&mut note);
         notes.push(note);
     }
     notes.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
@@ -1028,6 +1091,20 @@ fn drop_broken_marks(note: &mut Note) {
     note.marks.retain(|m| m.start < m.end && m.end <= text.len() && text.is_char_boundary(m.start) && text.is_char_boundary(m.end));
     if note.marks.len() < before {
         log::warn!("note {}: dropped {} mark(s) that do not fit its text", note.id, before - note.marks.len());
+    }
+}
+
+/// A far end that names no thread of the note, no other note, or the note itself (a hand
+/// edit, another tool) would show a link to nowhere: it is dropped when the note loads, as
+/// is a second entry for one thread.
+fn drop_broken_links(note: &mut Note) {
+    let before = note.elsewhere.len();
+    let id = note.id.clone();
+    let threads: HashSet<String> = note.threads.iter().map(|t| t.id.clone()).collect();
+    let mut seen = HashSet::new();
+    note.elsewhere.retain(|e| !e.note.is_empty() && e.note != id && threads.contains(&e.thread) && seen.insert(e.thread.clone()));
+    if note.elsewhere.len() < before {
+        log::warn!("note {}: dropped {} link(s) to other notes that lead nowhere", note.id, before - note.elsewhere.len());
     }
 }
 
@@ -1720,5 +1797,45 @@ After the list.\n\n1. numbering starts again\n\n- a different list\n\n> Said som
         assert_eq!(t.reason.as_ref().map(|r| r.chars().count()), Some(REASON_MAX));
         t.set_reason(" \n ");
         assert_eq!(t.reason, None);
+    }
+
+    #[std::prelude::v1::test]
+    fn links_to_other_notes_load_round_trip_and_drop_when_broken() {
+        let tmp = TempDir::new();
+        fs::create_dir_all(tmp.notes()).unwrap();
+        // a note written before threads between notes: no `elsewhere`, and none written back
+        let old = r#"{"id": "old", "title": "Old", "blocks": [{"kind": "title", "text": "Old"}], "threads": [{"id": "a", "quote": "q"}]}"#;
+        fs::write(tmp.notes().join("old.json"), old).unwrap();
+        // one good link, and four that lead nowhere: no such thread, no note, itself, twice
+        let linked = r#"{"id": "home", "title": "Home", "blocks": [{"kind": "title", "text": "Home"}, {"text": "On Sunday 22 March."}],
+            "threads": [{"id": "t1", "quote": "Sunday 22 March", "start": 8, "end": 23}],
+            "elsewhere": [
+                {"thread": "t1", "note": "far", "start": 9, "end": 24, "quote": "Sunday 15 March", "title": "Far", "relation": "depends", "side": "left", "tag_offset": [3.0, -4.0], "from_the_future": 1},
+                {"thread": "t1", "note": "far", "quote": "a second entry for one thread"},
+                {"thread": "nope", "note": "far"},
+                {"thread": "t1", "note": ""},
+                {"thread": "t1", "note": "home"}
+            ]}"#;
+        fs::write(tmp.notes().join("home.json"), linked).unwrap();
+
+        let store = Store::open_at(tmp.0.clone()).unwrap();
+        let o = store.note("old").unwrap();
+        assert!(o.elsewhere.is_empty() && o.elsewhere_of("a").is_none());
+        let saved = serde_json::to_value(o).unwrap();
+        assert!(saved.get("elsewhere").is_none(), "a note without links writes no elsewhere key");
+        let h = store.note("home").unwrap();
+        assert_eq!(h.elsewhere.len(), 1, "{:?}", h.elsewhere);
+        let e = h.elsewhere_of("t1").unwrap();
+        assert_eq!((e.note.as_str(), e.start, e.end, e.quote.as_str(), e.title.as_str()), ("far", 9, 24, "Sunday 15 March", "Far"));
+        assert_eq!((e.relation, e.side, e.tag_offset, e.visiting), (Relation::Depends, Side::Left, (3., -4.), false));
+
+        // a visiting end is never written: the flag does not survive a save
+        let mut h = h.clone();
+        h.elsewhere[0].visiting = true;
+        store.save_note(&h);
+        let back: Note = serde_json::from_slice(&fs::read(tmp.notes().join("home.json")).unwrap()).unwrap();
+        assert_eq!(back.elsewhere.len(), 1);
+        assert!(!back.elsewhere[0].visiting);
+        assert_eq!(back.elsewhere[0].quote, "Sunday 15 March");
     }
 }

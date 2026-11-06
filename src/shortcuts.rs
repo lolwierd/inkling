@@ -17,7 +17,7 @@ use gpui_kit::*;
 
 use crate::app::{
     CopyNote, DismissThread, ExportNote, FindLooseThread, JustMyWords, LooseEnds, NewNote, NextThread, OpenPalette,
-    OpenSettings, PrevThread, Quit, ToggleChat, ToggleSidebar, TurnOver, UndoDismiss,
+    OpenSettings, PrevThread, Quit, ReadThrough, ToggleChat, ToggleSidebar, TurnOver, UndoDismiss,
 };
 use crate::app::FollowThread;
 use crate::store::Store;
@@ -44,6 +44,8 @@ fn app_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-shift-backspace", DismissThread, None),
         KeyBinding::new("alt-cmd-z", UndoDismiss, None),
         KeyBinding::new("cmd-shift-b", TurnOver, None),
+        // a pass spends reads, so it takes ⇧ as well as ⌘, like the other note-wide keys
+        KeyBinding::new("cmd-shift-r", ReadThrough, None),
     ]
 }
 
@@ -108,6 +110,7 @@ const LABELS: &[(&str, &str, Group, Option<&str>)] = &[
     ("app::CopyNote", "Copy as Markdown", Group::Notes, None),
     ("app::ExportNote", "Export…", Group::Notes, None),
     ("app::FindLooseThread", "Find a loose thread", Group::Threads, Some("In a selection. With a thread open, it ties it off.")),
+    ("app::ReadThrough", "Read it through", Group::Threads, Some("Reads every paragraph not read yet, once. Press it again to stop.")),
     ("app::NextThread", "Next open thread", Group::Threads, None),
     ("app::PrevThread", "Previous open thread", Group::Threads, None),
     ("app::LooseEnds", "Loose ends", Group::Threads, Some("Every open thread in the notebook, oldest first.")),

@@ -29,6 +29,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Fix the words, the thread settles | edit the words an open thread is about: it reads them again and ties off when the problem is gone |
 | Your first sentence | in a new notebook, the first sentence you write always gets a question |
 | Reads along, or waits to be asked | per note, in the row above the title; the default is a setting |
+| Read it through | the mode menu's last item, or ⇧⌘R: every paragraph it has not read, top to bottom, once, by the same rules as reading along; the needle works down the gutter, a pill at the top of the window says how far it has got, and threads arrive as it goes; Stop or ⇧⌘R again stops it, and the next pass goes on from there |
 | Tell Inkling what a note is for | the brief, above the title; every read and answer takes it into account |
 | Learns about you | About you in Settings; it can learn from your replies (switch) |
 
@@ -81,7 +82,7 @@ Update this list when a feature lands or goes; the key is the default binding.
 | Find or start a note | ⌘K |
 | Copy a note | ⇧⌘C |
 | Export | ⇧⌘E: Markdown, HTML or Word, with the threads or without; checklists, callouts and code come along (`- [ ]`, `> [!note]`, fenced code in Markdown) |
-| Import from Obsidian | File > Import from Obsidian…: a vault's notes come in with their folders, as Obsidian shows them (tasks as checklists, callouts as callouts, code fences as code); their words are left unread, so only what you write afterwards is read |
+| Import from Obsidian | File > Import from Obsidian…: a vault's notes come in with their folders, as Obsidian shows them (tasks as checklists, callouts as callouts, code fences as code); their words are left unread, so only what you write afterwards is read, until you ask: Read it through reads them |
 | Welcome guide | Help > Welcome Guide |
 
 ## Model and keys

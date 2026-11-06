@@ -84,7 +84,8 @@ export interface RunSettings {
 }
 
 export type Task =
-  | { task: "read"; ctx: Context; target: string }
+  // `through`: a read made by Read it through, which reads a finished draft once.
+  | { task: "read"; ctx: Context; target: string; through?: boolean }
   | { task: "probe"; ctx: Context; target: string }
   | { task: "ask"; ctx: Context; target: string; question: string }
   | { task: "answer"; ctx: Context; target: string }

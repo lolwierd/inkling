@@ -91,14 +91,27 @@ const CHECK_RULES = [
 const NO_SOURCES =
   "You cannot open any source from here: no web, no books, no files. A fact that rests only on what you remember is a question, not a correction; say what you remember inside the question.";
 
-export function readPrompt(ctx: Context, target: string): string {
+/** The system prompt for the reads of a Read it through pass: the note and its margin
+ *  ride at its end. Every read of the pass sends the same note, and the runtime caches the
+ *  system prompt, so from the second read on the note comes from the cache instead of
+ *  being written again with each paragraph (measured: about a quarter of the cost on a
+ *  sixty-paragraph note; design/features/read-it-through.md). */
+export function throughSystemPrompt(ctx: Context): string {
+  return [systemPrompt(ctx), "", "The note you are reading through, with its margin:", noteBlock(ctx)].join("\n");
+}
+
+/** A read. Reading it through (`through`), the note is in the system prompt instead
+ *  (`throughSystemPrompt`), and the writer has finished the whole draft. */
+export function readPrompt(ctx: Context, target: string, through = false): string {
   return [
-    noteBlock(ctx),
-    "",
-    "The writer just finished this paragraph:",
+    ...(through ? [] : [noteBlock(ctx), ""]),
+    through
+      ? "The writer has finished this draft and asked you to read it through, one paragraph at a time. The next paragraph:"
+      : "The writer just finished this paragraph:",
     `<paragraph>${target}</paragraph>`,
     "",
     "Decide whether to say something about this paragraph. Most paragraphs deserve silence (speak = false). Never repeat a point that an existing margin thread already makes, or one the writer let stand.",
+    ...(through ? ["The whole draft is in front of you: when another paragraph of the note already answers what you would ask, stay silent."] : []),
     "If you speak:",
     "- quote: copy the exact words from the paragraph that your note is about, the shortest span that makes sense (often 3 to 15 words). It must match the paragraph character for character.",
     "- text: your margin note, at most 45 words, usually ending in one question.",

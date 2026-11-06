@@ -364,6 +364,36 @@ describe("what each task sends back", () => {
     });
   });
 
+  test("a read made by Read it through answers like a read, with the note out of its prompt", async () => {
+    const b = brain();
+    const target = "We keep one Redis counter per user and reset it every minute.";
+    // The fake SDK takes its directive from the prompt. In the paragraph, it is found.
+    b.send(run("t", { task: "read", ctx: ctx("the note"), target: `${target} ${fake(thought(true, "reset it every minute", "When does it reset?"))}`, through: true }));
+    expect((await b.end("t")).data).toEqual({ speak: true, kind: "question", quote: "reset it every minute", text: "When does it reset?", sketch: false });
+    b.send(run("s", { task: "read", ctx: ctx("the note"), target: `Fine. ${fake(thought(false, "", ""))}`, through: true }));
+    expect((await b.end("s")).data).toEqual({ speak: false });
+    // In the note, it is found by a read along but not by the pass's read, whose note
+    // rides in the system prompt: the fake SDK then answers "ok", which is no thought.
+    const inNote = ctx(fake(thought(false, "", "")));
+    b.send(run("a", { task: "read", ctx: inNote, target }));
+    expect((await b.end("a")).data).toEqual({ speak: false });
+    b.send(run("p", { task: "read", ctx: inNote, target, through: true }));
+    expect(await b.end("p")).toMatchObject({ ev: "error", kind: "bad_output" });
+  });
+
+  test("reading it through still holds back a point the writer let stand, and a correction still shows its working", async () => {
+    const b = brain();
+    // the directives sit in the paragraph: a pass's note rides in the system prompt
+    const point = { quote: "four days a week", point: "Is pace the problem?", kind: "question", mind: "Skeptic", reason: "Pace is the problem." };
+    b.send(run("l", { task: "read", ctx: ctx("Four days a week.", { letStand: [point] }), target: `Four days a week. ${fake(thought(true, "Four days", "Why four?", { repeats: 1 }))}`, through: true }));
+    expect((await b.end("l")).data).toEqual({ speak: false, repeats: 1 });
+    const pace = "My pace is 5:30 per km, so the 10k takes 50 minutes.";
+    const sum = { sum: [{ sum: "5:30 × 10", is: "55:00" }], givens: [{ value: "5:30", words: "5:30 per km" }, { value: "10", words: "the 10k" }] };
+    const correction = thought(true, "so the 10k takes 50 minutes", "At 5:30 a km the 10k takes 55:00.", { kind: "correction", check: sum, question: "How long is 10 km at 5:30?" });
+    b.send(run("w", { task: "read", ctx: ctx(pace), target: `${pace} ${fake(correction)}`, through: true }));
+    expect((await b.end("w")).data).toMatchObject({ kind: "correction", quote: "so the 10k takes 50 minutes", check: { sum: [{ sum: "5:30 × 10", is: "55:00", rounded: false }] } });
+  });
+
   test("a non-object structured answer is bad_output", async () => {
     const b = brain();
     b.send(run("r", { task: "read", ctx: ctx(fake({ structured: ["speak"] })), target: "a b" }));

@@ -1,0 +1,36 @@
+# Read it through leaves the guide's own words alone: they are the app's. The writer's first
+# sentence in a new notebook still gets its question (the probe). A note brought in from
+# Obsidian is read when asked: its words are the writer's own (Note.imported); reading
+# along still leaves them alone.
+# env: FAKE_READ_DEFAULT=silent
+# timeout: 90
+# tags: read-through
+wait: 1500
+mode: ask
+read-through
+dump: guide
+expect: d.note.title === "Start here" && d.read_hashes === 0 && d.read_through === null && d.first_run
+expect: d.toasts.some(t => t.text === "Nothing new to read.")
+caret: end
+keys: The best tests are the ones that fail for one reason only.
+read-through
+settle: 30000
+dump: first
+expect: d.read_hashes === 1 && !d.first_run && d.read_through === null
+expect: requests.some(r => r.input.task === "probe" && r.input.through === true && r.input.target === "The best tests are the ones that fail for one reason only.")
+expect: d.toasts.some(t => t.text === "Inkling read it through. New threads are in the margin.")
+import: ../fixtures/obsidian-vault
+settle
+switch: Rate limiter
+mode: ask
+dump: imported-before
+expect: d.note.title === "Rate limiter" && d.left_alone > 0 && d.read_hashes === 0
+read-through
+dump: imported-started
+expect: d.read_through !== null && d.read_through.total === 6   // the paragraph, three bullets, two numbered items; not the headings or the two-word code
+settle: 30000
+dump: imported
+expect: d.read_through === null && d.read_hashes === 6
+expect: note("Rate limiter").imported === true && note("Start here").imported === false
+expect: requests.some(r => r.input.task === "read" && r.input.through === true && r.input.target === "We keep one counter per user and reset it every minute.")
+quit

@@ -69,6 +69,7 @@
 //! room: Inkling, Skeptic    # minds for the next `ask:` (Ask the room, up to three)
 //! undo-dismiss              # put back the last dismissed thread
 //! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
+//! read-through              # Read it through, as ⇧⌘R: start a pass, or stop the one running
 //! open: settings            # sidebar|palette|loose|settings|minds|newmind|model|about|export|jmw
 //! close                     # close the sidebar and every overlay
 //! quit                      # every script should end with it
@@ -200,6 +201,8 @@ pub enum Step {
     Delete(String),
     /// Bring back the note deleted last, as the toast's Undo does.
     UndoDelete,
+    /// Read it through, as ⇧⌘R does: start a pass over the note, or stop the one running.
+    ReadThrough,
 }
 
 /// "640, 300" or "640 300" as a point.
@@ -289,6 +292,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "log" => Step::Log(arg),
                 "room" => Step::Room(arg.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect()),
                 "undo-dismiss" => Step::UndoDismiss,
+                "read-through" => Step::ReadThrough,
                 "jump" => Step::Jump(arg != "prev"),
                 "hover" => Step::Hover(arg.parse().unwrap_or(0)),
                 "drag" => {

@@ -1,0 +1,67 @@
+{
+ "id": "00000000-0000-4000-8000-0000000000d1",
+ "title": "Build cache: NFS to object storage",
+ "folder": null,
+ "blocks": [
+  {
+   "kind": "title",
+   "text": "Build cache: NFS to object storage"
+  },
+  {
+   "kind": "paragraph",
+   "text": "We are moving the build cache from the NFS share to object storage. The share fills up every two weeks and someone clears it by hand."
+  },
+  {
+   "kind": "paragraph",
+   "text": "The rollout goes region by region over five days, smallest first. If error rates rise we roll that region back and stop."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Each runner keeps a 50 GB disk cache in front of the bucket, so hot layers never leave the machine."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Writes are billed per request, about 40 a build. At 0.5 cents a thousand, a thousand builds a day is 20 cents, which rounds to nothing next to the disks we stop buying."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Rollback triggers when the 5xx rate passes 2% for five minutes in a region, or median build time grows by more than 20%."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Eviction is still open: thirty days since last access seems right, but I have not checked our hit rates by age."
+  },
+  {
+   "kind": "paragraph",
+   "text": ""
+  }
+ ],
+ "marks": [],
+ "brief": null,
+ "mode": "when_you_ask",
+ "mind_id": "inkling",
+ "chat": [],
+ "read_hashes": [],
+ "threads": [
+  {
+   "id": "d1",
+   "start": 507,
+   "end": 557,
+   "quote": "rounds to nothing next to the disks we stop buying",
+   "kind": "question",
+   "status": "open",
+   "side": "right",
+   "mind_name": "Inkling",
+   "created_at": "2026-11-07T09:00:00Z",
+   "messages": [
+    {
+     "role": "mind",
+     "text": "The 20 cents checks out, but it only counts writes. The bucket also bills for stored GB per month, and it has no size limit until eviction is settled. What does a month of stored layers cost?",
+     "at": "2026-11-07T09:00:00Z"
+    }
+   ]
+  }
+ ],
+ "created_at": "2026-11-07T09:00:00Z",
+ "updated_at": "2026-11-07T09:00:00Z"
+}

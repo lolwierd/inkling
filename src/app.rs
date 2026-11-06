@@ -48,6 +48,7 @@ gpui_kit::actions!(
         Zoom,
         TurnOver,
         FollowThread,
+        ReadThrough,
     ]
 );
 
@@ -1199,6 +1200,8 @@ impl AppView {
             let page = self.page.read(cx);
             (page.last_typed(), page.chat_open)
         };
+        // Read it through: how far the pass has got, centred over the page
+        let pass = self.page.update(cx, |p, cx| p.read_through_status(cx));
         let calm = typed.is_some_and(|k| self.last_pointer.is_none_or(|m| m < k)) && !self.sidebar_open;
         let target = if calm { 0. } else { 1. };
         let now = Instant::now();
@@ -1243,6 +1246,10 @@ impl AppView {
                             cx.notify();
                         }),
                 )
+                .children(pass.map(|pill| {
+                    let right = if chat_open { crate::note_page::CHAT_WIDTH } else { 0. };
+                    div().absolute().top(px(8.)).left_0().right(px(right)).flex().justify_center().child(pill)
+                }))
                 .child(
                     div()
                         .absolute()
@@ -1813,6 +1820,7 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_action(cx.listener(|this, _: &ImportObsidian, _, cx| this.choose_vault(cx)))
             .on_action(cx.listener(|this, _: &TurnOver, window, cx| this.page.update(cx, |p, cx| p.turn_over(window, cx))))
+            .on_action(cx.listener(|this, _: &ReadThrough, _, cx| this.page.update(cx, |p, cx| p.toggle_read_through(cx))))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_move(cx.listener(Self::on_pointer))

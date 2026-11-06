@@ -1,0 +1,38 @@
+# Read it through on the sixty-paragraph note: the needle works down one paragraph at a
+# time; Stop leaves the read in flight unread and keeps what was read; ⇧⌘R goes on from
+# there; opening another note stops it too; the last pass reads only what is left, so every
+# paragraph is read once in all.
+# fixture: hard-content
+# env: FAKE_READ_DEFAULT=silent FAKE_DELAY_READ_MS=150
+# timeout: 180
+# tags: read-through
+switch: A very long note
+mode: ask
+dump: before
+expect: d.read_hashes === 0 && d.threads.length === 1
+read-through
+wait: 2000
+dump: midway
+expect: d.read_through !== null && d.read_through.total === 60 && d.read_through.done > 0 && d.read_through.done < 60
+expect: d.reading !== null && d.reading.line === d.read_through.next - 1   // the needle is on the paragraph being read
+read-through
+dump: stopped
+expect: d.read_through === null && d.reading === null && d.read_hashes > 0 && d.read_hashes < 60
+expect: d.toasts.some(t => /^Stopped after \d+ of 60\. Read it through again to go on\.$/.test(t.text))
+key: cmd-shift-r
+wait: 1500
+dump: resumed
+expect: d.read_through !== null && d.read_through.total === 60 - dumps.stopped.read_hashes   // only what is left
+switch: Groceries
+dump: left
+expect: d.note.title === "Groceries" && d.read_through === null && d.toasts.some(t => t.text === "Read it through stopped when you left “A very long note”.")
+switch: A very long note
+read-through
+settle: 90000
+dump: done
+expect: d.read_through === null && d.read_hashes === 60
+expect: d.toasts.some(t => t.text === "Inkling read it through. Nothing to ask.")
+expect: new Set(requests.filter(r => r.input.task === "read").map(r => r.input.target)).size === 60
+expect: events.filter(e => e.ev === "error" && e.kind === "cancelled").length === 2   // the reads Stop and leaving cancelled
+expect: note("A very long note").read_hashes.length === 60
+quit

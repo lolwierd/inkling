@@ -908,13 +908,13 @@ impl NotePage {
         self.marks_open.clear();
         self.panel_sides.clear();
         // Nothing of the old note's threads stays behind: looks-again that were due, the
-        // needle, questions waiting for a pause, the dismissal Undo could put back (its
-        // anchor would land in the new note), a drag, the pointer's rest, the springs,
-        // the threads and their motion, the measured tags and the room a script seats.
+        // needle, questions waiting for a pause, a drag, the pointer's rest, the springs,
+        // the threads and their motion, the measured tags and the room a script seats. (The
+        // last dismissal stays: Undo puts a thread between notes back from either end, and
+        // skips a thread the note does not have.)
         self.rechecks.clear();
         self.rechecking.clear();
         self.arrived.clear();
-        self.last_dismissed = None;
         self.drag = None;
         self.last_drag_end = None;
         self.tags.clear();

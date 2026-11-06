@@ -10,6 +10,7 @@ settle
 delete: Race calendar
 activate: 1
 dump: gone
+expect: d.between.some(e => e.thread === "b1" && e.gone && e.quote === "Sunday 15 March")   // the other words kept
 expect: d.ends.tags.length === 1 && d.ends.tags[0].line === "Race calendar · deleted" && d.ends.tags[0].go === false
 expect: d.statuses.includes("b1:Open:Inkling") && d.ends.sidebar["Race-week plan"] === 1 && !("Race calendar" in d.ends.sidebar)
 follow: 1

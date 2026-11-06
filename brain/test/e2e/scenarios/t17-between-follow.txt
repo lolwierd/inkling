@@ -16,6 +16,7 @@ dump: there
 expect: d.note.title === "Race calendar" && d.active === "b1" && d.focus === "reply"
 expect: d.ends.in_view === true && d.ends.following === null
 expect: d.anchors.some(a => a.id === "b1" && a.open) && d.threads.length === 1   // the far end, stitched under the calendar's words
+expect: d.between.some(e => e.thread === "b1" && e.visiting && e.quote === "Sunday 22 March")   // and pointing home
 expect: d.ends.tags.some(e => e.thread === "b1" && e.line.startsWith("Race-week plan · ") && e.go)
 expect: d.ends.tags.find(e => e.thread === "b1").side === "Right"   // shown here first: neither margin crowded, so its home end's side
 key: alt-cmd-right

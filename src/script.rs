@@ -169,6 +169,10 @@ pub enum Step {
     Room(Vec<String>),
     /// Put back the last dismissed thread, as Undo does.
     UndoDismiss,
+    /// Press Write it in on the open tag: your reply goes in under its paragraph.
+    WriteIn,
+    /// The Undo on Write it in's toast: the paragraph comes back out.
+    UndoWriteIn,
     /// Jump to the next (`jump: next`) or previous (`jump: prev`) open thread.
     Jump(bool),
     /// Rest the pointer on a thread's tag (0 = on none).
@@ -218,10 +222,6 @@ pub enum Step {
     Knot(usize),
     /// Rest the pointer on thread n's knot (0 = on none): its answer washes.
     HoverKnot(usize),
-    /// Press Write it in on the open tag: your reply goes in under its paragraph.
-    WriteIn,
-    /// The Undo on Write it in's toast: the paragraph comes back out.
-    UndoWriteIn,
 }
 
 /// "640, 300" or "640 300" as a point.

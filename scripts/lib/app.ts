@@ -281,12 +281,14 @@ export async function launch(o: LaunchOptions): Promise<LaunchResult> {
     INKLING_BACKGROUND: "1",
     INKLING_WINDOW_TITLE: WINDOW_TITLE,
     INKLING_LOG_JSON: "1",
-    RUST_LOG: process.env.RUST_LOG || "inkling=info,warn",
   });
   if ((o.jiggle ?? 120) > 0) env.INKLING_JIGGLE = String(o.jiggle ?? 120);
   if (!o.real) env.INKLING_BRAIN_ENTRY = FAKE_BRAIN;
   if (o.open) env.INKLING_OPEN = o.open;
   Object.assign(env, o.env ?? {});
+  // Dumps are part of the test protocol, not optional diagnostics. An inherited
+  // filter (including a module-specific one) must never hide them.
+  env.RUST_LOG = "warn,inkling=info";
 
   const started = Date.now();
   const proc = Bun.spawn([binary()], { cwd: o.dir, env, stdin: "ignore", stdout: fd, stderr: fd });

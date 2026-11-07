@@ -317,6 +317,8 @@ export interface RunOptions {
   real: boolean;
   lock: boolean;
   json: boolean;
+  /** Nested in `check --json`: progress goes to stderr, the parent owns stdout. */
+  summary?: boolean;
 }
 
 /** Pick scenarios by name, prefix or tag ("all", "smoke"), plus what they start from. */
@@ -396,8 +398,10 @@ export async function runSuite(o: RunOptions): Promise<number> {
   const count = (st: string) => results.filter((r) => r.status === st).length;
   const summary = { root, ms: Date.now() - started, passed: count("pass"), failed: count("fail"), skipped: count("skip"), results };
   writeFileSync(join(root, "results.json"), JSON.stringify(summary, null, 1));
-  if (o.json) console.log(JSON.stringify(summary, null, 1));
-  else say(`${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped in ${(summary.ms / 1000).toFixed(0)}s. Results: ${join(root, "results.json")}`);
+  if (o.summary !== false) {
+    if (o.json) console.log(JSON.stringify(summary, null, 1));
+    else say(`${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped in ${(summary.ms / 1000).toFixed(0)}s. Results: ${join(root, "results.json")}`);
+  }
   return summary.failed ? 1 : 0;
 }
 

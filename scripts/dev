@@ -106,6 +106,7 @@ async function check(): Promise<number> {
   })();
   const others = Promise.all([
     run("brain tests", ["bun", "test", "test/"], brain, bunTests),
+    run("tool tests", ["bun", "test", "scripts/test/"], REPO, bunTests),
     run("brain types", ["bun", "run", "check"], brain, () => "tsc --noEmit"),
     (async (): Promise<Step> => {
       const found = lintWords().map((f) => `${f.file}:${f.line}: "${f.word}" in ${JSON.stringify(f.text)} -> say: ${f.use}`);
@@ -115,13 +116,15 @@ async function check(): Promise<number> {
     })(),
   ]);
   const steps: Step[] = [...(await rust), ...(await others)];
-  let e2eCode = 0;
+  let e2e: boolean | null = null;
+  let e2eStatus = has("--e2e") ? "skipped" : "not_requested";
   if (has("--e2e") && steps.every((s) => s.ok)) {
     if (!json) console.log("e2e smoke:");
-    e2eCode = await runSuite({ names: ["smoke"], jobs: 1, real: false, lock: !has("--no-lock"), json: false });
+    e2e = (await runSuite({ names: ["smoke"], jobs: 1, real: false, lock: !has("--no-lock"), json, summary: !json })) === 0;
+    e2eStatus = e2e ? "pass" : "fail";
   }
-  const ok = steps.every((s) => s.ok) && e2eCode === 0;
-  if (json) console.log(JSON.stringify({ ok, steps, e2e: has("--e2e") ? e2eCode === 0 : null }, null, 1));
+  const ok = steps.every((s) => s.ok) && e2e !== false;
+  if (json) console.log(JSON.stringify({ ok, steps, e2e, e2e_status: e2eStatus }, null, 1));
   else {
     for (const s of steps) console.log(`${s.ok ? "ok  " : "FAIL"}  ${s.name.padEnd(13)} ${(s.ms / 1000).toFixed(1).padStart(5)}s  ${s.detail}`);
     for (const s of steps.filter((s) => !s.ok)) console.log(`\n--- ${s.name} (last lines)\n${s.tail}`);
@@ -185,7 +188,7 @@ async function look(kind: "state" | "shot"): Promise<number> {
     else console.error(`problem: no screenshot (${shot?.error ?? "the shot step never ran"})`);
     if (state) console.error(compactDump(state));
   }
-  const ok = !!state && !run.timedOut && run.exit === 0 && p.panics.length === 0 && (kind === "state" || !!run.shots.at(-1)?.path);
+  const ok = !!state && !run.timedOut && run.exit === 0 && p.panics.length === 0 && p.errors.length === 0 && p.scriptWarnings.length === 0 && (kind === "state" || !!run.shots.at(-1)?.path);
   return ok ? 0 : 1;
 }
 

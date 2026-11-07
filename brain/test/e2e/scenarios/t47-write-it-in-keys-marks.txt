@@ -25,6 +25,8 @@ expect: d.hidden === true && d.offer === null
 open: jmw
 # Marks only: the card the mark opens offers it too
 set: placement=marks
+# The hidden-state probe activated this tag directly. Start the toggle closed.
+escape
 mark: 2
 dump: marks
 expect: d.offer === "t2" && d.active === "t2"

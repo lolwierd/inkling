@@ -4100,6 +4100,7 @@ impl NotePage {
         body = body.child(
             div()
                 .id(SharedString::from(format!("tag-top-{id}")))
+                .flex_none()
                 .flex()
                 .items_center()
                 .justify_between()
@@ -4217,30 +4218,31 @@ impl NotePage {
                 );
             }
         }
-        // Only the conversation scrolls. Leave room for the header, composer, and
-        // the actions even when their labels wrap in a narrow margin.
+        // The conversation gives up height to the fixed header and footer. Let
+        // flex layout measure wrapped actions instead of guessing their height.
         let conversation = div()
             .id(SharedString::from(format!("conversation-{id}")))
             .relative()
             .min_h(px(0.))
-            .max_h(px(panel_limit - if is_active { 150. } else { 50. }))
+            .max_h(px(panel_limit))
             .overflow_y_scroll()
             .track_scroll(&conversation_scroll)
             .child(body.pr(px(5.)));
-        let conversation = div().relative().child(conversation).child(
+        let conversation = div().relative().flex().flex_col().min_h(px(0.)).child(conversation).child(
             gpui_kit::component::scroll::Scrollbar::vertical(&conversation_scroll)
                 .mode(gpui_kit::component::scroll::ScrollbarMode::Always)
                 .styles(move |styles| styles
                     .track(|style| style.bg(gpui_kit::transparent_black()))
                     .thumb(move |style| style.bg(p.faint.opacity(0.35))))
         );
-        let mut body = header.child(conversation);
+        let mut body = header.max_h(px(panel_limit - 22.)).child(conversation);
         if is_active {
             if let Some(input) = self.replies.get(&id).cloned() {
                 let id_send = id.clone();
                 let can_send = !input.read(cx).value().trim().is_empty();
                 body = body.child(
                     div()
+                        .flex_none()
                         .flex()
                         .items_center()
                         .gap(px(6.))
@@ -4280,6 +4282,7 @@ impl NotePage {
             let id_note = id.clone();
             body = body.child(
                 div()
+                    .flex_none()
                     .flex()
                     .flex_wrap()
                     .items_center()

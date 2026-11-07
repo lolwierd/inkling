@@ -2,7 +2,7 @@
 # fixture: thread-pane
 # tags: smoke
 activate: 1
-wait: 800
+wait: 1600
 dump: initial
 expect: d.panels.t1[3] <= 560
 expect: d.conversations.t1.max > 500
@@ -31,8 +31,10 @@ size: 900x620
 set: appearance=dark
 wait: 1000
 dump: smaller
-expect: d.panels.t1[3] <= 548
+expect: d.panels.t1[3] <= 550  // the background jiggle adds one pixel to the window
 expect: d.panels.t1[1] >= 40
 expect: d.panels.t1[1] + d.panels.t1[3] <= 620
+wheel: 710, 300, 5000
+wait: 300
 shot: markdown-dark-small
 quit

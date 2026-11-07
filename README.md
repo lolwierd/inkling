@@ -4,9 +4,9 @@
 
 # Inkling
 
-Inkling is a notebook for your Mac that asks you questions. You write, and it reads along. When a line doesn't add up, it pulls a thread from those exact words out into the margin, with a question or a correction hanging on it. It never writes your notes for you. The thinking stays yours; Inkling only makes sure you have done it.
+Inkling is a Mac notebook that asks you questions. You write, and it reads along. When a line doesn't add up, it pulls a thread out of those exact words into the margin and hangs a question or a correction on it. It never writes your notes for you. The thinking is still yours to do, and Inkling notices when some of it is missing.
 
-It runs on your own Claude subscription, through the Claude Code login already on your Mac. Your notebook is stored on your Mac as plain files. Inkling sends the text it needs to read or answer to Claude, including local file and Claude Code memory context it consults.
+It runs on your own Claude subscription, through the Claude Code login you already have. Your notebook is a folder of plain files on your Mac. What goes to Claude is the text Inkling needs to read or answer, plus any local files and Claude Code memories it looks at along the way.
 
 [Install Inkling](#install-and-run) · [Changelog](CHANGELOG.md)
 
@@ -14,45 +14,45 @@ It runs on your own Claude subscription, through the Claude Code login already o
 
 <a href="design/video/page/film.mp4"><img src="design/video/page/preview.gif" alt="A line that doesn't add up gets a thread from its words, and the correction shows its working from your own numbers" width="100%"></a>
 
-Sixteen seconds of the film, without sound: a line that doesn't add up gets a thread from those words, and the correction shows its working from your own numbers. GitHub doesn't play a video kept in the repo, so the whole film (1:13, with sound) is a file: click the picture, or open [`design/video/page/film.mp4`](design/video/page/film.mp4). It follows one note from its first sentence to a thread tied off, and every word from Inkling in it is real model output. What it shows, moment by moment, is in [`design/video/coverage.md`](design/video/coverage.md).
+That's sixteen seconds of the film, without sound: a line that doesn't add up gets a thread from those words, and the correction shows its working from your own numbers. GitHub won't play a video stored in the repo, so the full film (1:13, with sound) is just a file. Click the picture or open [`design/video/page/film.mp4`](design/video/page/film.mp4). It follows one note from its first sentence to a thread tied off, and every word Inkling says in it is real model output. [`design/video/coverage.md`](design/video/coverage.md) lists what it shows, moment by moment.
 
 ## What it's like to use
 
-**You write, and it reads along.** When you pause, Inkling reads the paragraph you just finished. Most of the time it says nothing: a small stitch in the gutter shows it has read the paragraph and found nothing to ask. When something doesn't hold up, it sews a running stitch under the exact words and hangs a thread out to a tag in the margin, with a ? for a question or a × for a correction. A question that arrives while you are mid-sentence waits until you stop.
+When you pause, Inkling reads the paragraph you just finished. Most of the time it says nothing, and a small stitch in the gutter shows it read the paragraph and had nothing to ask. When something doesn't hold up, it sews a running stitch under the exact words and hangs a thread out to a tag in the margin, marked ? for a question or × for a correction. If a question comes up while you're mid-sentence, it waits until you stop.
 
-**Threads stay quiet until you look at them.** A tag stays folded until you rest the pointer on it, then drops open to show the question. Click it to write back, and the mind answers in the same thread. If you fix the words a thread is about, Inkling reads them again; when the problem is gone, the thread ties itself off and its knot joins the border at the top of the page. You can drag a tag anywhere on the page, jump between open threads with ⌥⌘↓ and ⌥⌘↑, or hide every thread with ⇧⌘. to see only your words.
+Tags stay folded until you rest the pointer on one, and then it drops open to show the question. Click it to write back, and the mind answers in the same thread. Fix the words a thread is about and Inkling reads them again. If the problem's gone, the thread ties itself off and its knot joins the border at the top of the page. You can drag a tag anywhere on the page, jump between open threads with ⌥⌘↓ and ⌥⌘↑, or hide every thread with ⇧⌘. to see only your words.
 
-**Every thread ends somewhere, and the ending is yours.** A correction always shows its working: the sum, made only from your own numbers, or your own words from elsewhere in the note; when it has neither, it asks instead. You settle a thread by fixing its words, by replying in its tag (and Write it in can put your reply under the paragraph, word for word, to rework), or by writing the answer anywhere else in the note, where a knot after your words ties it to the question. If you disagree, Let stand keeps your words, with a reason if you like, and no mind raises that point again, in any words. ⇧⌘B turns the note over: the back lists every thread it has had, oldest first, how each one ended, and the words before and after.
+How a thread ends is up to you. A correction always shows its working, either a sum built only from your own numbers or your own words from elsewhere in the note, and if it has neither it asks a question instead. You can settle a thread by fixing its words, by replying in its tag (Write it in will then put your reply under the paragraph, word for word, for you to rework), or by writing the answer somewhere else in the note, where a knot after your words ties it back to the question. If you disagree, Let stand keeps your words, with a reason if you want to give one, and no mind brings that point up again, however it's worded. ⇧⌘B turns the note over. The back lists every thread the note has had, oldest first, with how each one ended and the words before and after.
 
-**You can ask whenever you want.** Select some words and press ⌘↩, and Inkling picks the one thing in them most worth a question. You can also ask your own question, or have it answer with a sketch that is stitched out step by step. Ask the room to hear from up to three minds at once, or start a sentence with a mind's name to call it directly. ⌘J opens a chat about the whole note. Ask yourself (⇧⌘↵) hangs your own question on your words, in ink, and no mind answers unless you call one in. In a note that waits to be asked, ⇧⌘R reads the whole draft once, paragraph by paragraph. For what you ask it, Inkling can look things up on the web, and it shows a source only when the page really says what it quotes.
+You can also ask it things yourself. Select some words and press ⌘↩, and Inkling picks the one thing in them most worth a question. You can type your own question instead, or ask for a sketch, which gets stitched out step by step. Ask the room gets you up to three minds at once, and starting a sentence with a mind's name calls that mind in. ⌘J opens a chat about the whole note. Ask yourself (⇧⌘↵) hangs a question of your own on your words, in your ink, and no mind answers it unless you call one in. In a note that waits to be asked, ⇧⌘R reads the whole draft once, paragraph by paragraph. When you ask it something, Inkling can look things up on the web, and it only shows a source if the page really says what it quotes.
 
-**The minds have their own voices.** Inkling comes with a staff engineer, an editor, a skeptic, a Socratic tutor and an investor, and you can write your own: what it is for, how it thinks, its voice and how often it speaks. Each mind keeps its own thread colour, so you can see at a glance who asked what. Tell Inkling, above each note's title, says what that note is for, and a note can read along or wait to be asked.
+Inkling comes with five minds: a staff engineer, an editor, a skeptic, a Socratic tutor and an investor. You can write your own, saying what it's for, how it thinks, what it sounds like and how often it speaks. Each mind has its own thread colour, so you can tell at a glance who asked what. Tell Inkling, above each note's title, says what that note is for, and each note either reads along or waits to be asked.
 
-**The window stays out of the way.** There is no toolbar. The few controls fade while you write and come back when you move the pointer. Settings is a proper Mac window, every keyboard shortcut can be changed, and you choose Linen (light) or Lamplight (dark), your thread colour, the lettering and the text size. Hold ⌥ to speak instead of typing.
+There's no toolbar. The few controls there are fade while you write and come back when you move the pointer. Settings is a proper Mac window, every keyboard shortcut can be changed, and you pick Linen (light) or Lamplight (dark), your thread colour, the lettering and the text size. Hold ⌥ to dictate instead of typing.
 
-**Your own blocks are sewn too.** Type `[ ] ` to start a checklist: a ticked item takes a cross-stitch and its line is tacked through. Type `> [!note] ` (or `warning`, or `tip`) for a callout, a patch sewn onto the page in the colour of its kind. Three backticks open a code block with line numbers, a Copy button and syntax in thread colours. Madder is Inkling's own colour: it never appears in your blocks or among the colours for your words, so you can always tell your marks from its questions.
+Your own blocks are sewn as well. Type `[ ] ` for a checklist; a ticked item gets a cross-stitch and its line is tacked through. Type `> [!note] ` (or `warning`, or `tip`) for a callout, a patch sewn onto the page in the colour of its kind. Three backticks open a code block with line numbers, a Copy button and syntax in thread colours. Madder is Inkling's colour. It never shows up in your blocks or among the colours for your words, so you can always tell your marks from its questions.
 
-**It is a real notebook.** Notes and folders live in the sidebar, ⌘K finds a note or starts one, ⇧⌘C copies a note as Markdown, and ⇧⌘E exports it as Markdown, HTML or Word, with its threads or without. File > Import from Obsidian brings in a whole vault, folders and all, and Inkling leaves the imported words alone so it reads only what you write afterwards. ⇧⌘K lists every open thread in the notebook, oldest first, each a keystroke from its words. And when something you write contradicts or depends on another note, Inkling asks on a thread that quotes both; ⌥⌘→ goes to the other end.
+It also does the ordinary notebook things. Notes and folders live in the sidebar, ⌘K finds a note or starts one, ⇧⌘C copies a note as Markdown, and ⇧⌘E exports it as Markdown, HTML or Word, with or without its threads. File > Import from Obsidian brings in a whole vault, folders included, and Inkling leaves the imported text alone so it only reads what you write afterwards. ⇧⌘K lists every open thread in the notebook, oldest first, each a keystroke away from its words. And when something you write contradicts or depends on another note, Inkling asks on a thread that quotes both, and ⌥⌘→ takes you to the other end.
 
-The complete list, row by row, is [`design/capabilities.md`](design/capabilities.md).
+Everything it can do is listed in [`design/capabilities.md`](design/capabilities.md).
 
 ## What it believes
 
-Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](design/manifesto.md). You find out what you think by writing it down yourself, which is why Inkling never writes your notes for you. The most useful thing a reader can do is ask a good question in the right place, beside the exact words, and leave the answer to you. Most of what you write needs no comment, so Inkling's silence means something. And deciding that your words should stand is an answer too.
+The beliefs behind Inkling are written out in [`design/manifesto.md`](design/manifesto.md). The short version: you find out what you think by writing it down yourself, so Inkling never writes your notes for you. The most useful thing a reader can do is ask a good question in the right place, right beside the words, and leave the answer to you. Most of what you write needs no comment, which is why Inkling's silence is worth something. And deciding that your words should stand counts as an answer too.
 
 ## Install and run
 
 ### Download the app
 
-The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install a current version of [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`. Inkling uses the Claude Code installation on your Mac and picks up its updates. The downloaded app includes the runtime for its helper, so you can install it without Bun.
+The release ZIP is for Apple Silicon Macs on macOS 13 or later. You need a current version of [Claude Code](https://code.claude.com/docs/en/setup): run `claude` in Terminal and sign in with `/login`. Inkling uses that installation and picks up its updates. The app bundles its own runtime for the helper, so you don't need Bun.
 
-1. If a ZIP is available on the repository’s Releases page, download it and its matching `.zip.sha256` file. Otherwise, build from source below.
-2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, replacing `<version>` with the version you downloaded. The ZIP should report `OK`.
-3. Unzip it, move `Inkling.app` to Applications, and open it. Release builds use an ad hoc signature. If macOS blocks a verified download, follow [Apple’s instructions for opening a trusted app](https://support.apple.com/en-us/102445).
+1. Download the latest `Inkling-<version>-macos-arm64.zip` and its `.zip.sha256` file from [Releases](https://github.com/lolwierd/inkling/releases/latest). If there isn't one, build from source (below).
+2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, with the version you downloaded in place of `<version>`. It should print `OK`.
+3. Unzip it, move `Inkling.app` to Applications, and open it. Release builds are signed ad hoc and not notarized, so macOS may block the first launch. If it does, follow [Apple's instructions for opening a trusted app](https://support.apple.com/en-us/102445).
 
-To update, quit Inkling and replace the app in Applications with the new one. Your notebook lives separately in `~/Library/Application Support/Inkling/`.
+To update, quit Inkling and replace the app in Applications with the new one. Your notebook lives separately, in `~/Library/Application Support/Inkling/`.
 
-Inkling finds the native Claude Code installer and the standard Homebrew locations even when launched from Finder. If you installed Claude Code elsewhere and Finder cannot find it, quit Inkling and launch it from Terminal with the full executable path:
+Inkling looks for Claude Code where the native installer and Homebrew put it, even when you open it from Finder. If yours is somewhere else and Inkling can't find it, quit Inkling and launch it from Terminal with the full path:
 
 ```sh
 INKLING_CLAUDE_PATH="/absolute/path/to/claude" /Applications/Inkling.app/Contents/MacOS/inkling
@@ -60,7 +60,7 @@ INKLING_CLAUDE_PATH="/absolute/path/to/claude" /Applications/Inkling.app/Content
 
 ### Build from source
 
-Install [Rust via rustup](https://rustup.rs), [Bun](https://bun.com/docs/installation) and Claude Code. On a Mac without Xcode, install Apple’s Command Line Tools with `xcode-select --install` first.
+Install [Rust via rustup](https://rustup.rs), [Bun](https://bun.com/docs/installation) and Claude Code. On a Mac without Xcode, install Apple's Command Line Tools first with `xcode-select --install`.
 
 ```bash
 # From the root of your Inkling checkout
@@ -69,29 +69,31 @@ Install [Rust via rustup](https://rustup.rs), [Bun](https://bun.com/docs/install
 open target/Inkling.app
 ```
 
-The local bundle reads the brain from this checkout. Keep the checkout in place, or use `scripts/package.sh` on Apple Silicon to make a portable ZIP in `target/dist/`. With a recent Xcode, the bundle also gets the icon that follows macOS’s light, dark, clear and tinted styles.
+The local bundle reads the brain from this checkout, so leave the checkout where it is, or run `scripts/package.sh` on Apple Silicon to make a portable ZIP in `target/dist/`. With a recent Xcode, the bundle also gets the icon that follows macOS's light, dark, clear and tinted styles.
 
-The first time Inkling opens, Start here walks you through the notebook with threads to try. Help > Welcome Guide brings it back later.
+The first time Inkling opens, a note called Start here walks you through it with threads to try. Help > Welcome Guide brings it back later.
 
 ## How it works
 
-Inkling is two programs that talk over a pipe. The app, written in Rust with [GPUI](https://www.gpui.rs), draws the page, the threads and the margin, and keeps your notes. A small helper called the brain, written in TypeScript and run with Bun, talks to Claude through the Claude Agent SDK, using your Claude Code login. When you stop typing for a couple of seconds, the app sends the brain each paragraph you changed, together with the whole note, its threads, what the note is for and what Inkling knows about you, and the brain answers with silence, a question, a correction or a sketch. A paragraph it has read is not sent again until you change it, and a note that waits to be asked is never read on its own. After a read, Inkling looks through your other notes, on your Mac, for a passage the paragraph might contradict or depend on; only when one is close enough does it send one more call to compare the two.
+Inkling is two programs talking over a pipe. The app, written in Rust with [GPUI](https://www.gpui.rs), draws the page, the threads and the margin, and keeps your notes. A small helper called the brain, written in TypeScript and run with Bun, talks to Claude through the Claude Agent SDK using your Claude Code login.
 
-Everything else happens only when you ask: a question about a selection, the room (one call for each mind), a reply in a tag, a sketch (two calls: the idea, then the drawing) and chat. You pick the model in Settings > Model, from the list Claude Code offers; reading along uses low effort and answering medium, and you can change either.
+When you stop typing for a couple of seconds, the app sends the brain each paragraph you changed. The whole note goes with it, along with its threads, what the note is for and what Inkling knows about you. The brain answers with silence, a question, a correction or a sketch. A paragraph it has read isn't sent again until you change it, and a note that waits to be asked is never read on its own. After a read, Inkling searches your other notes, on your Mac, for a passage the paragraph might contradict or depend on. Only when one is close enough does it make one more call to compare the two.
 
-Inkling loads your Claude Code user instructions and can read and search local files and existing project memories. Choose local directories with Files on a note or on its folder page. Notes inherit the folder's directories until you override them on the note. These mappings tell Inkling where to look first; they do not restrict filesystem access. Relevant file contents become context for Claude. The available file tools read and search; they do not edit files.
+Everything else happens only when you ask: a question about a selection, the room (one call per mind), a reply in a tag, a sketch (two calls, one for the idea and one for the drawing) and chat. You pick the model in Settings > Model from the list Claude Code offers. Reading along uses low effort and answering uses medium, and you can change either.
 
-For what you ask it (Find a loose thread, a question about a selection, a mind called by name, a reply in a tag, chat), Inkling can also look things up on the web. Reading along, sketches, drawings, learning about you and comparing your notes do not search the web. A correction that cites a page keeps it only if a search in that same call returned the page and the quoted words are on it, which the brain checks by opening the page itself; otherwise the correction falls back to its arithmetic, your own words, or a question. Links in answers that no search returned are taken out. Lookups use more of your Claude plan. Calls have turn limits, and one that runs out while searching retries without the web. Settings > Model > Look things up on the web disables web lookup; local file and memory context remain available.
+Inkling loads your Claude Code user instructions and can read and search local files and existing project memories. Link a folder's notes to local directories with Files on the folder's page. Its notes use those directories until you give a note its own: press "linked to …" above the note's title, or use File > Link Files to This Note…. These links tell Inkling where to look first. They don't restrict what it can read on disk. Whatever files turn out to be relevant become context for Claude, and the file tools it has can read and search but not edit.
+
+When you ask it something (Find a loose thread, a question about a selection, a mind called by name, a reply in a tag, chat), Inkling can also search the web. Reading along, sketches, drawings, learning about you and comparing your notes never do. A correction that cites a page keeps the citation only if a search in that same call returned the page and the quoted words are actually on it, which the brain checks by opening the page itself. Otherwise the correction falls back to its arithmetic, your own words, or a question. Links that no search returned are taken out of answers. Lookups use more of your Claude plan. Calls have turn limits, and one that runs out while searching tries again without the web. To turn web lookups off, use Settings > Model > Look things up on the web; local files and memories stay available.
 
 ## The look
 
-The design is called Loose Threads, after embroidery: running stitches under your words, a thread that hangs with real rope physics, fabric tags, a knot when a thread is tied off, and a sampler border that grows as you work. The logo, Initial, marks the app the way linen was always marked as someone's own: a satin-stitched i, dotted with a French knot, inside a hemstitched border. The wordmark in the app carries the same i, in your thread colour. The type is Fraunces for writing and Figtree for the controls.
+The design is called Loose Threads, and it borrows from embroidery: running stitches under your words, a thread that hangs with real rope physics, fabric tags, a knot when a thread is tied off, and a sampler border that grows as you work. The logo, Initial, is a satin-stitched i dotted with a French knot inside a hemstitched border, the way people used to mark their linen with an initial. The wordmark in the app has the same i, in your thread colour. The type is Fraunces for writing and Figtree for the controls.
 
 ## Working on Inkling
 
-Start with [`AGENTS.md`](AGENTS.md). It maps the code, lists the rules, and explains the one command that matters: `scripts/dev check` runs every check in about fifteen seconds. `scripts/dev e2e` drives the real app through scripted scenarios against a fake brain, so it makes no model calls, and `scripts/dev shot` takes a screenshot of the app without touching your screen.
+Start with [`AGENTS.md`](AGENTS.md). It maps the code, lists the rules, and covers the command you'll run most: `scripts/dev check`, which runs every check in about fifteen seconds. `scripts/dev e2e` drives the real app through scripted scenarios against a fake brain, so it makes no model calls, and `scripts/dev shot` screenshots the app without touching your screen.
 
-GitHub Actions checks pull requests and pushes to `master`. See the [release runbook](docs/releasing.md) for preview builds, versions and tags.
+GitHub Actions checks pull requests and pushes to `master`. The [release runbook](docs/releasing.md) covers preview builds, versions and tags.
 
 | Where | What |
 |---|---|
@@ -100,14 +102,14 @@ GitHub Actions checks pull requests and pushes to `master`. See the [release run
 | `src/stitch.rs` | The thread's rope physics, stitches, knots, the needle and the border |
 | `src/settings.rs`, `src/shortcuts.rs` | The Settings window and every shortcut |
 | `src/import.rs` | Import from Obsidian |
-| `src/note_page/` | Each feature's own part of the page: answers in the note, Write it in, threads of your own, Read it through, the ends of threads between notes, going to a thread |
+| `src/note_page/` | Each feature's own part of the page: the header, answers in the note, Write it in, threads of your own, Read it through, the ends of threads between notes, going to a thread |
 | `src/stand.rs`, `src/working.rs`, `src/back.rs`, `src/loose_ends.rs`, `src/between.rs` | Let it stand, Show its working, Turn it over, Loose ends, finding the other note |
 | `brain/src/prompts.ts` | Every prompt Inkling sends to the model |
 
 ## A note on the Claude login
 
-Inkling launches Claude Code locally and uses your existing sign-in. To use an API key instead, set `INKLING_USE_API_KEY=1` and `ANTHROPIC_API_KEY`. See [Anthropic’s Agent SDK terms](https://code.claude.com/docs/en/agent-sdk/overview#license-and-terms).
+Inkling launches Claude Code locally and uses the sign-in you already have. To use an API key instead, set `INKLING_USE_API_KEY=1` and `ANTHROPIC_API_KEY`. See [Anthropic's Agent SDK terms](https://code.claude.com/docs/en/agent-sdk/overview#license-and-terms).
 
 ## License
 
-Inkling’s own code is released under [the Unlicense](UNLICENSE). Third-party components retain their own licenses, including the [bundled fonts](assets/fonts/) and [Bun](assets/licenses/Bun.md).
+Inkling's own code is released under [the Unlicense](UNLICENSE). Third-party parts keep their own licenses, including the [bundled fonts](assets/fonts/) and [Bun](assets/licenses/Bun.md).

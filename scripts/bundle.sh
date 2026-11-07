@@ -1,16 +1,18 @@
 #!/bin/sh
 # Build Inkling and wrap it in a minimal macOS app bundle at target/Inkling.app.
-# The bundle links to this checkout's brain/ folder, so edits to the sidecar
-# take effect on the next launch without rebuilding.
-#   ./scripts/bundle.sh            debug build
-#   ./scripts/bundle.sh release    optimized build
+# Local bundles link to this checkout's brain/ folder so edits apply on launch.
+# A portable bundle ships its own brain and production dependencies.
+#   ./scripts/bundle.sh                     debug build
+#   ./scripts/bundle.sh release             optimized build
+#   ./scripts/bundle.sh release --portable  optimized, independent of the checkout
 set -eu
 cd "$(dirname "$0")/.."
 PROFILE="${1:-debug}"
-case "$PROFILE" in
-  debug) cargo build ;;
-  release) cargo build --release ;;
-  *) echo "usage: $0 [debug|release]" >&2; exit 2 ;;
+PORTABLE="${2:-}"
+case "$PROFILE:$PORTABLE:$#" in
+  debug::0|debug::1) cargo build --locked ;;
+  release::1|release:--portable:2) cargo build --locked --release ;;
+  *) echo "usage: $0 [debug|release [--portable]]" >&2; exit 2 ;;
 esac
 # The binary is wherever cargo writes, which CARGO_TARGET_DIR or a cargo config
 # can move away from ./target; cargo metadata says where.
@@ -18,10 +20,22 @@ TARGET_DIR=$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_d
 BIN="${TARGET_DIR:-target}/$PROFILE/inkling"
 APP=target/Inkling.app
 MIN_MACOS=13.0
+PACKAGE=$(cargo pkgid --locked)
+# Cargo omits the package name when it matches the checkout folder.
+VERSION=${PACKAGE##*[#@]}
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/inkling"
-ln -s "$(pwd)/brain" "$APP/Contents/Resources/brain"
+if [ "$PORTABLE" = --portable ]; then
+  BRAIN="$APP/Contents/Resources/brain"
+  mkdir "$BRAIN"
+  cp -R brain/src "$BRAIN/"
+  cp brain/package.json brain/bun.lock "$BRAIN/"
+  (cd "$BRAIN" && bun install --frozen-lockfile --production)
+  cp assets/fonts/OFL-*.txt "$APP/Contents/Resources/"
+else
+  ln -s "$(pwd)/brain" "$APP/Contents/Resources/brain"
+fi
 
 # The icon. Inkling.icns is one drawing, the light Initial, whatever the system's style.
 # macOS draws an app icon in light, dark, clear and tinted only from a compiled asset
@@ -68,8 +82,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>Inkling</string>
 ${ICON_NAME:+  <key>CFBundleIconName</key><string>$ICON_NAME</string>}
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_MACOS</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>Inkling listens while you hold Option, to turn speech into text.</string>
@@ -77,5 +91,8 @@ ${ICON_NAME:+  <key>CFBundleIconName</key><string>$ICON_NAME</string>}
 </dict>
 </plist>
 PLIST
+if [ "$PORTABLE" = --portable ]; then
+  codesign --force --sign - "$APP"
+fi
 echo "icon: $ICON"
 echo "built $APP ($PROFILE)"

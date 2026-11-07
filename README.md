@@ -6,7 +6,9 @@
 
 Inkling is a notebook for your Mac that asks you questions. You write, and it reads along. When a line doesn't add up, it pulls a thread from those exact words out into the margin, with a question or a correction hanging on it. It never writes your notes for you. The thinking stays yours; Inkling only makes sure you have done it.
 
-It runs on your own Claude subscription, through the Claude Code login already on your Mac. Your notes stay on your Mac as plain files.
+It runs on your own Claude subscription, through the Claude Code login already on your Mac. Your notebook is stored on your Mac as plain files. Inkling sends the text it needs to read or answer to Claude.
+
+[Install Inkling](#install-and-run) · [Changelog](CHANGELOG.md)
 
 ## Watch it first
 
@@ -40,15 +42,31 @@ Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](desi
 
 ## Install and run
 
-You need macOS 13 or later, Rust (stable), [Bun](https://bun.sh), and Claude Code signed in: run `claude`, then `/login`.
+### Download the app
+
+The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install [Bun](https://bun.com/docs/installation) and [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`.
+
+1. Sign in to GitHub with access to this private repository. From [Releases](https://github.com/lolwierd/inkling/releases/latest), download `Inkling-<version>-macos-arm64.zip` and its matching `.zip.sha256` file.
+2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, replacing `<version>` with the version you downloaded. The ZIP should report `OK`.
+3. Unzip it, move `Inkling.app` to Applications, and open it. Private builds use an ad hoc signature. If macOS blocks a verified download, follow [Apple’s instructions for opening a trusted app](https://support.apple.com/en-us/102445).
+
+To update, quit Inkling and replace the app in Applications with the new one. Your notebook lives separately in `~/Library/Application Support/Inkling/`. Until the first release is published, build from source.
+
+### Build from source
+
+Install [Rust via rustup](https://rustup.rs), Bun and Claude Code. On a Mac without Xcode, install Apple’s Command Line Tools with `xcode-select --install` first.
 
 ```bash
-cd brain && bun install && cd ..
+git clone https://github.com/lolwierd/inkling.git
+cd inkling
+(cd brain && bun install --frozen-lockfile)
 ./scripts/bundle.sh release
 open target/Inkling.app
 ```
 
-With Xcode installed, the bundle also gets the icon that follows macOS's light, dark, clear and tinted styles; without it, it gets the light icon. The first time Inkling opens, a note called Start here walks you through everything, with real threads to try, and ends by asking you for one sentence about something you are working on. Help > Welcome Guide brings it back later. Your notes are JSON files in `~/Library/Application Support/Inkling/`.
+The local bundle reads the brain from this checkout. Keep the checkout in place, or use `scripts/package.sh` on Apple Silicon to make a portable ZIP in `target/dist/`. With a recent Xcode, the bundle also gets the icon that follows macOS’s light, dark, clear and tinted styles.
+
+The first time Inkling opens, Start here walks you through the notebook with threads to try. Help > Welcome Guide brings it back later.
 
 ## How it works
 
@@ -67,6 +85,8 @@ How the design was chosen, and the two directions it was chosen over, is in [`de
 ## Working on Inkling
 
 Start with [`AGENTS.md`](AGENTS.md). It maps the code, lists the rules, and explains the one command that matters: `scripts/dev check` runs every check in about fifteen seconds. `scripts/dev e2e` drives the real app through scripted scenarios against a fake brain, so it makes no model calls, and `scripts/dev shot` takes a screenshot of the app without touching your screen.
+
+GitHub Actions checks pull requests and pushes to `master`. See the [release runbook](docs/releasing.md) for preview builds, versions and tags.
 
 | Where | What |
 |---|---|

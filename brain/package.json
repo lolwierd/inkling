@@ -3,7 +3,7 @@
   "private": true,
   "license": "Unlicense",
   "type": "module",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Inkling's model sidecar: speaks JSON lines on stdio, talks to Claude through the Agent SDK.",
   "scripts": {
     "start": "bun run src/main.ts",

@@ -219,7 +219,7 @@ describe("childEnv", () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
     expect(env.HOME).toBe("/h");
-    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("inkling/0.1.3");
+    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("inkling/0.1.4");
   });
   test("keeps them with INKLING_USE_API_KEY=1", () => {
     const env = childEnv({ ANTHROPIC_API_KEY: "sk-test", INKLING_USE_API_KEY: "1" });

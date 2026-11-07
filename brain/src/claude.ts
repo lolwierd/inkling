@@ -96,7 +96,7 @@ export function childEnv(source: Record<string, string | undefined> = process.en
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
   }
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = "inkling/0.1.3";
+  env.CLAUDE_AGENT_SDK_CLIENT_APP = "inkling/0.1.4";
   return env;
 }
 

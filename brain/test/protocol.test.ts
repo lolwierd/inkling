@@ -121,7 +121,7 @@ describe("startup and lifecycle", () => {
   test("the first line is ready", async () => {
     const b = brain();
     const ev = await b.waitFor(() => true);
-    expect(ev).toEqual({ ev: "ready", provider: "claude", version: "0.1.3" });
+    expect(ev).toEqual({ ev: "ready", provider: "claude", version: "0.1.4" });
   });
 
   test("closing stdin exits, even with a request in flight", async () => {
@@ -723,7 +723,7 @@ describe("what reaches the runtime", () => {
   test("ANTHROPIC_API_KEY is dropped unless INKLING_USE_API_KEY=1", async () => {
     const b = brain({ ANTHROPIC_API_KEY: "sk-ant-test", ANTHROPIC_AUTH_TOKEN: "tok" });
     b.send(ask("e", { echo: "env" }));
-    expect(JSON.parse((await b.end("e")).data.text)).toEqual({ ANTHROPIC_API_KEY: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_AGENT_SDK_CLIENT_APP: "inkling/0.1.3" });
+    expect(JSON.parse((await b.end("e")).data.text)).toEqual({ ANTHROPIC_API_KEY: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_AGENT_SDK_CLIENT_APP: "inkling/0.1.4" });
     const k = brain({ ANTHROPIC_API_KEY: "sk-ant-test", INKLING_USE_API_KEY: "1" });
     k.send(ask("e", { echo: "env" }));
     expect(JSON.parse((await k.end("e")).data.text).ANTHROPIC_API_KEY).toBe(true);

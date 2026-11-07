@@ -45,9 +45,13 @@ impl NotePage {
     /// type again. One wake at a time.
     pub(super) fn wake_after_hold(&mut self, cx: &mut Context<Self>) {
         if self.lifecycle.hold_wake.is_some() { return; }
-        let Some(left) = crate::brain::hold_left() else { return };
+        if crate::brain::hold_left().is_none() { return; }
         self.lifecycle.hold_wake = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(left + Duration::from_secs(1)).await;
+            // look again every half minute: the hold can end early (a call that went
+            // through says the plan allows calls again) or move (a later refusal)
+            while let Some(left) = crate::brain::hold_left() {
+                cx.background_executor().timer(left.min(Duration::from_secs(30)) + Duration::from_millis(500)).await;
+            }
             let _ = this.update(cx, |page, cx| {
                 page.lifecycle.hold_wake = None;
                 page.after_read(cx);

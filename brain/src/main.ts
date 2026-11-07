@@ -6,7 +6,7 @@
 import { createInterface } from "node:readline";
 import { createHash } from "node:crypto";
 import { accountStatus, addUsage, ProviderError, runStructured, runText, TurnsSpent, usageLine, type Access, type LimitInfo } from "./claude.ts";
-import { cleanSvg, clip, findQuote, pickAnswers, sameWordsAs, snapQuote } from "./output.ts";
+import { cleanSvg, clip, findQuote, pickAnswers, snapQuote } from "./output.ts";
 import {
   answerPrompt,
   askPrompt,
@@ -315,12 +315,13 @@ function looked(opened: Opened): { looked?: string[] } {
  * paragraph's words, until the pass reaches it; dropped half an hour after the call. */
 const passes = new Map<string, { at: number; made: string; opened: Opened; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
 
-/** What a pass's one call was made from, apart from the margin (which the pass itself
- * changes): the note's words, the mind, the brief, the profile and the model. A read whose
- * request differs gets a new call. */
+/** What a pass's one call was made from, apart from the margin's threads (which the pass
+ * itself adds): the note's words, the mind, the brief, the profile, the linked directories,
+ * the points let stand and the model. A read whose request differs gets a new call. */
 function madeFrom(ctx: Context, settings: RunSettings): string {
-  const { mind, brief, aboutMe, noteTitle, noteText } = ctx;
-  return createHash("sha256").update(JSON.stringify({ mind, brief, aboutMe, noteTitle, noteText, model: settings.model, effort: settings.effort })).digest("hex");
+  const { mind, brief, aboutMe, noteTitle, noteText, localDirectories, letStand } = ctx;
+  const made = { mind, brief, aboutMe, noteTitle, noteText, localDirectories, letStand, model: settings.model, effort: settings.effort, web: settings.web };
+  return createHash("sha256").update(JSON.stringify(made)).digest("hex");
 }
 const PASS_KEEP_MS = 30 * 60 * 1000;
 
@@ -474,9 +475,9 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
       // A note that waits to be asked raises nothing new.
       if (input.task === "read" && input.answersOnly) return { data: { speak: false, ...answered }, usage };
       // A point the writer let stand is not raised again, in any words: the model says
-      // which one its note repeats, or it is on the same words, and then it is held back.
-      const kind = d.kind === "correction" ? "correction" : "question";
-      const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), kind, input.ctx.letStand, input.target);
+      // which one its note repeats, and then the note is held back. (Matching the words
+      // instead would hold back a changed claim: "-10" is not "10".)
+      const repeats = repeated(d.repeats, input.ctx.letStand.length);
       if (repeats > 0) {
         log(`${input.task} ${id} held back: it makes let-stand point ${repeats} again`);
         return { data: { speak: false, repeats, ...answered }, usage };
@@ -560,7 +561,7 @@ async function relate(
   const { data, usage } = await runStructured<unknown>(sys, prompt, RELATE_SCHEMA, settings, signal, onLimit);
   const d = structured(data);
   // A point the writer let stand is not raised again here either.
-  const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), "question", input.ctx.letStand, input.target);
+  const repeats = repeated(d.repeats, input.ctx.letStand.length);
   if (repeats > 0) {
     log(`relate held back: it makes let-stand point ${repeats} again`);
     return { data: { speak: false, repeats }, usage };

@@ -408,6 +408,12 @@ describe("what each task sends back", () => {
       const again = [{ paragraph: 1, kind: "question", quote: "around 90 percent", text: "From the second mind", sketch: false, repeats: 0 }];
       b.send(run("b", { task: "read", ctx: ctx("", { mind: other }), target: second, through: true, pass: "p3", ahead: [`${third} ${fake({ structured: { notes: again } })}`] }));
       expect((await b.end("b")).data).toMatchObject({ speak: true, text: "From the second mind" });
+      // so do other linked directories, and a point let stand since
+      for (const [id, extra] of [["c", { localDirectories: ["/repo-b"] }], ["d", { letStand: [{ quote: "around 90 percent", point: "Measured how?", kind: "question", mind: "Inkling", reason: null }] }]] as const) {
+        const more = [{ paragraph: 1, kind: "question", quote: "about two minutes", text: `Read again (${id})`, sketch: false, repeats: 0 }];
+        b.send(run(id, { task: "read", ctx: ctx("", { mind: other, ...extra }), target: `${third} ${fake({ structured: { notes: more } })}`, through: true, pass: "p3", ahead: [] }));
+        expect((await b.end(id)).data).toMatchObject({ speak: true, text: `Read again (${id})` });
+      }
     });
 
     test("answers are tied to their threads when the call comes back", async () => {
@@ -720,13 +726,12 @@ describe("what each task sends back", () => {
       const point = { quote: "Saturday 14 March", point: "Is the office open on Saturday?", kind: "question", mind: "Inkling", reason: "It is." };
       b.send(run("l", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 1 } })], passages }));
       expect((await b.end("l")).data).toEqual({ speak: false, repeats: 1 });
-      // a number that names no point is ignored, when the words are not the point's either
-      const elsewhere = { ...point, quote: "the budget for the whole trip" };
-      b.send(run("m", { task: "relate", ctx: ctx("", { letStand: [elsewhere] }), target, before: [fake({ structured: { ...clash, repeats: 4 } })], passages }));
+      // a number that names no point is ignored
+      b.send(run("m", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 4 } })], passages }));
       expect((await b.end("m")).data).toMatchObject({ speak: true, other: "Friday 13 March" });
-      // on the point's own words it is held back even when the model says it repeats none
+      // the model decides: on the point's own words, a clash it says repeats none is shown
       b.send(run("k", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 0 } })], passages }));
-      expect((await b.end("k")).data).toEqual({ speak: false, repeats: 1 });
+      expect((await b.end("k")).data).toMatchObject({ speak: true });
     });
 
     test("with no passages there is no model call", async () => {

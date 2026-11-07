@@ -517,36 +517,6 @@ describe("usage", () => {
   });
 });
 
-describe("a point let stand, on the same words", () => {
-  test("held back when the kind matches and the words are the same or mostly shared", async () => {
-    const { sameWordsAs } = await import("../src/output.ts");
-    const points = [
-      { quote: "I run four days a week", kind: "question" },
-      { quote: "always", kind: "correction" },
-    ];
-    const para = "I run four days a week, mostly easy, and I always stretch.";
-    expect(sameWordsAs("four days a week", "question", points, para)).toBe(1); // inside the point's words
-    expect(sameWordsAs("I run four days a week, mostly easy", "question", points, para)).toBe(1); // around them
-    expect(sameWordsAs("Always", "correction", points, para)).toBe(2); // a one-word point, the same word
-    expect(sameWordsAs("four days a week", "correction", points, para)).toBe(0); // another kind
-    expect(sameWordsAs("a week", "question", points, para)).toBe(0); // too few words to say
-    expect(sameWordsAs("mostly easy", "question", points, para)).toBe(0);
-    expect(sameWordsAs("", "question", points, para)).toBe(0);
-    // whole words only: a number or a word inside another is not the same words
-    expect(sameWordsAs("10", "correction", [{ quote: "100", kind: "correction" }], "It is 10.")).toBe(0);
-    expect(sameWordsAs("war", "question", [{ quote: "software", kind: "question" }], "war")).toBe(0);
-    expect(sameWordsAs("100", "correction", [{ quote: "100", kind: "correction" }], "It is 100.")).toBe(1);
-    // words that changed are a new claim, however much they overlap
-    const backups = [{ quote: "keep backups for 10 days", kind: "correction" }];
-    expect(sameWordsAs("keep backups for 100 days", "correction", backups, "We keep backups for 100 days.")).toBe(0);
-    expect(sameWordsAs("keep backups for 10 days", "correction", backups, "We keep backups for 10 days.")).toBe(1);
-    const crypt = [{ quote: "enable encryption at rest", kind: "correction" }];
-    expect(sameWordsAs("disable encryption at rest", "correction", crypt, "We disable encryption at rest.")).toBe(0);
-    // the point's words gone from the paragraph: nothing to hold back
-    expect(sameWordsAs("four days a week", "question", points, "Four days a week is too many.")).toBe(0);
-  });
-});
-
 describe("what a read's prompt holds", () => {
   test("a closing tag in the note cannot end its block, and a mind that speaks often is not told to keep quiet", async () => {
     const { readPrompt, inside } = await import("../src/prompts.ts");

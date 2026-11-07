@@ -10,6 +10,12 @@ It runs on your own Claude subscription, through the Claude Code login already o
 
 [Install Inkling](#install-and-run) · [Changelog](CHANGELOG.md)
 
+## Watch it first
+
+<a href="design/video/page/film.mp4"><img src="design/video/page/preview.gif" alt="A line that doesn't add up gets a thread from its words, and the correction shows its working from your own numbers" width="100%"></a>
+
+Sixteen seconds of the film, without sound: a line that doesn't add up gets a thread from those words, and the correction shows its working from your own numbers. GitHub doesn't play a video kept in the repo, so the whole film (1:13, with sound) is a file: click the picture, or open [`design/video/page/film.mp4`](design/video/page/film.mp4). It follows one note from its first sentence to a thread tied off, and every word from Inkling in it is real model output. What it shows, moment by moment, is in [`design/video/coverage.md`](design/video/coverage.md).
+
 ## What it's like to use
 
 **You write, and it reads along.** When you pause, Inkling reads the paragraph you just finished. Most of the time it says nothing: a small stitch in the gutter shows it has read the paragraph and found nothing to ask. When something doesn't hold up, it sews a running stitch under the exact words and hangs a thread out to a tag in the margin, with a ? for a question or a × for a correction. A question that arrives while you are mid-sentence waits until you stop.

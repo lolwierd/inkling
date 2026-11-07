@@ -44,13 +44,19 @@ Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](desi
 
 ### Download the app
 
-The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install [Bun](https://bun.com/docs/installation) and [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`.
+The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install [Bun](https://bun.com/docs/installation) and a current version of [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`. Inkling uses the Claude Code installation on your Mac and picks up its updates.
 
 1. Sign in to GitHub with access to this private repository. From [Releases](https://github.com/lolwierd/inkling/releases/latest), download `Inkling-<version>-macos-arm64.zip` and its matching `.zip.sha256` file.
 2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, replacing `<version>` with the version you downloaded. The ZIP should report `OK`.
 3. Unzip it, move `Inkling.app` to Applications, and open it. Private builds use an ad hoc signature. If macOS blocks a verified download, follow [Apple’s instructions for opening a trusted app](https://support.apple.com/en-us/102445).
 
-To update, quit Inkling and replace the app in Applications with the new one. Your notebook lives separately in `~/Library/Application Support/Inkling/`. Until the first release is published, build from source.
+To update, quit Inkling and replace the app in Applications with the new one. Your notebook lives separately in `~/Library/Application Support/Inkling/`.
+
+Inkling finds the native Claude Code installer and the standard Homebrew locations even when launched from Finder. If you installed Claude Code elsewhere and Finder cannot find it, quit Inkling and launch it from Terminal with the full executable path:
+
+```sh
+INKLING_CLAUDE_PATH="/absolute/path/to/claude" /Applications/Inkling.app/Contents/MacOS/inkling
+```
 
 ### Build from source
 

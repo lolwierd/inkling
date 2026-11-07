@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.1
+
+- Switched to the Claude Code already installed on your Mac, shrinking the download and picking up Claude Code updates without an Inkling release.
+
 ## 0.1.0
 
 - Added a Mac notebook that reads along and stitches questions and corrections to the words that prompted them. Corrections can show their arithmetic or the passage they rely on.

@@ -2,7 +2,7 @@
   "name": "inkling-brain",
   "private": true,
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Inkling's model sidecar: speaks JSON lines on stdio, talks to Claude through the Agent SDK.",
   "scripts": {
     "start": "bun run src/main.ts",

@@ -3,9 +3,9 @@
 // (Pro/Max subscription) instead of an API key.
 
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync } from "node:fs";
+import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, isAbsolute, join } from "node:path";
 import type { ErrorKind, RunSettings, Usage } from "./protocol.ts";
 import { foundIn, type Found } from "./web.ts";
 
@@ -33,9 +33,40 @@ export interface LimitInfo {
   kind?: string;
 }
 
-// Tests swap in a fake SDK; everything else uses the real one.
+// Finder launches without the shell's PATH. Keep the native install's symlink
+// so new sessions pick up the executable Claude Code updated it to.
+export function installedClaude(
+  env = process.env,
+  home = homedir(),
+  systemBins = ["/opt/homebrew/bin", "/usr/local/bin"],
+): string {
+  const override = env.INKLING_CLAUDE_PATH;
+  const candidates = override ? [override] : [
+    join(home, ".local/bin/claude"),
+    ...[...(env.PATH ?? "").split(delimiter), ...systemBins].map(dir => join(dir, "claude")),
+  ];
+  for (const path of candidates) {
+    if (!isAbsolute(path)) continue;
+    try {
+      if (!statSync(path).isFile()) continue;
+      accessSync(path, constants.X_OK);
+      return path;
+    } catch {
+      // Missing, a stale symlink, or not executable. Try the next location.
+    }
+  }
+  if (override) {
+    throw new ProviderError("other", "INKLING_CLAUDE_PATH must point to an executable Claude Code file using its full path.");
+  }
+  throw new ProviderError("other", "Claude Code was not found. Install Claude Code or set INKLING_CLAUDE_PATH to its executable.");
+}
+
+// Tests swap in a fake SDK without needing an installed Claude Code.
 type QueryFn = typeof query;
-let queryFn: QueryFn = query;
+let queryFn: QueryFn = args => query({
+  ...args,
+  options: { ...args.options, pathToClaudeCodeExecutable: installedClaude() },
+});
 export function setQueryForTests(fn: QueryFn) {
   queryFn = fn;
 }
@@ -65,7 +96,7 @@ export function childEnv(source: Record<string, string | undefined> = process.en
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
   }
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = "inkling/0.1.0";
+  env.CLAUDE_AGENT_SDK_CLIENT_APP = "inkling/0.1.1";
   return env;
 }
 
@@ -93,7 +124,6 @@ function baseOptions(system: string, settings: RunSettings, signal: AbortControl
     env: childEnv(),
     abortController: signal,
   };
-  if (process.env.INKLING_CLAUDE_PATH) opts.pathToClaudeCodeExecutable = process.env.INKLING_CLAUDE_PATH;
   return opts;
 }
 

@@ -1,0 +1,13 @@
+# choosing the open note must not restore an empty cancelled probe.
+note: Same note
+mode: ask
+type: These are the words I want to ask about. [[probe>delay:5000]]
+select: These are the words I want to ask about. [[probe>delay:5000]]
+probe
+dump: pending
+expect: d.pending.length === 1
+switch: Same note
+wait: 1000
+dump: reopened
+expect: d.pending.length > 0 || d.threads.every(t => t.msgs >= 1)
+quit

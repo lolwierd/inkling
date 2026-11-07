@@ -1,0 +1,12 @@
+# a reply about an earlier edit must not resolve newer words.
+# fixture: running-plan
+mode: ask
+edit: hold 5:30 for the whole race => hold 4:55 for the whole race [[reply>resolved]] [[reply>delay:5000]]
+wait: 2600
+dump: checking-first-edit
+expect: d.pending.length === 1
+edit: hold 4:55 for the whole race [[reply>resolved]] [[reply>delay:5000]] => hold 6:30 for the whole race
+wait: 6000
+dump: newer-words
+expect: d.threads.find(t => t.id === "t1").status === "Open"
+quit

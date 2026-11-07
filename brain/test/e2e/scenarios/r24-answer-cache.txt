@@ -1,0 +1,26 @@
+# answer-check cache must not leak between notes.
+note: First answer
+mode: ask
+type: These are the words I want to ask about.
+select: the words I want
+ask: What would settle this?
+settle
+caret: end
+keys: \nThe answer to this question is four.
+wait: 3000
+settle
+dump: first
+expect: requests.filter(r => r.input.task === "read" && r.input.answersOnly && r.input.ctx.noteTitle === "First answer" && r.input.target === "The answer to this question is four.").length === 1
+note: Second answer
+mode: ask
+type: These are the words I want to ask about.
+select: the words I want
+ask: What would settle this?
+settle
+caret: end
+keys: \nThe answer to this question is four.
+wait: 3000
+settle
+dump: second
+expect: requests.filter(r => r.input.task === "read" && r.input.answersOnly && r.input.target === "The answer to this question is four.").length === 2
+quit

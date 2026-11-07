@@ -1,0 +1,9 @@
+# turning learning off must invalidate an outstanding update.
+note: Learning off
+chat: I work as an engineer. [[learn>delay:2500]] [[learn>learn:Old learned profile]]
+set: learn=off
+wait: 3500
+dump: after-learning-off
+expect: settings.learns_about_me === false
+expect: settings.about_me !== "Old learned profile"
+quit

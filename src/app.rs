@@ -661,6 +661,19 @@ impl AppView {
             this.page.update(cx, |p, cx| p.flush(cx));
             async {}
         }));
+        // All save sites share one retry ledger, including settings and linked notes.
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(5)).await;
+                if this.update(cx, |_, cx| {
+                    let store = cx.global::<Store>();
+                    store.retry_failed();
+                    let problems = store.take_save_problems();
+                    if !problems.is_empty() { crate::toast::show(cx, Kind::Problem, problems.join("\n")); }
+                    cx.notify();
+                }).is_err() { break; }
+            }
+        }).detach();
         let weak_page = page.downgrade();
         window.on_window_should_close(cx, move |_, cx| {
             let _ = weak_page.update(cx, |p, cx| p.flush(cx));
@@ -1296,7 +1309,11 @@ impl AppView {
             let store = cx.global::<Store>();
             store.notes.iter().position(|n| n.id == id).map(|at| (store.notes[at].clone(), at))
         };
-        cx.global_mut::<Store>().delete_note(&id);
+        if let Err(e) = cx.global_mut::<Store>().delete_note(&id) {
+            crate::toast::show(cx, Kind::Problem, format!("Couldn’t delete this note: {e:#}"));
+            cx.notify();
+            return;
+        }
         self.deleted = kept;
         crate::toast::show(cx, Kind::NoteDeleted, "Note deleted");
         cx.notify();
@@ -1323,7 +1340,9 @@ impl AppView {
             let store = cx.global_mut::<Store>();
             let untouched = store.note(&blank).is_some_and(|n| n.blocks.iter().all(|b| b.text.trim().is_empty()) && n.threads.is_empty() && n.chat.is_empty());
             if untouched {
-                store.delete_note(&blank);
+                if let Err(e) = store.delete_note(&blank) {
+                    crate::toast::show(cx, Kind::Problem, format!("Couldn’t remove the empty note: {e:#}"));
+                }
             }
             cx.notify();
         }
@@ -1551,7 +1570,11 @@ impl AppView {
         let current = self.page.read(cx).note_id().to_string();
         let hidden = self.page.read(cx).just_my_words;
         let store = cx.global::<Store>();
-        let notes = store.notes.clone();
+        struct Row { id: String, title: String, folder: Option<String>, open: usize }
+        let counts = crate::between::open_counts(&store.notes);
+        let notes: Vec<Row> = store.notes.iter().map(|n| Row {
+            id: n.id.clone(), title: n.title.clone(), folder: n.folder.clone(), open: counts.get(n.id.as_str()).copied().unwrap_or(0),
+        }).collect();
         let folders = store.folders.clone();
         let brain = crate::brain::Brain::global(cx).read(cx);
         let who = brain
@@ -1599,12 +1622,12 @@ impl AppView {
                 }
             }
         } else { self.drag_scroll_frame = None; }
-        let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
+        let note_row = |n: &Row, indent: f32, cx: &mut Context<Self>| {
             let id = n.id.clone();
             let menu_id = n.id.clone();
             let on = self.folder_page.is_none() && n.id == current;
             // its own open threads and those from other notes that also quote it
-            let open = crate::between::open_here(&cx.global::<Store>().notes, n);
+            let open = n.open;
             row(SharedString::from(format!("note-{}", n.id)), on)
                 .on_drag(DraggedNote { id: n.id.clone(), title: if n.title.is_empty() { "Untitled".into() } else { n.title.clone() } }, |drag, offset, _, cx| drag.preview(offset, cx))
                 .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
@@ -1699,8 +1722,8 @@ impl AppView {
 
         let mut list = div().flex().flex_col().gap(px(1.));
         // Unfiled last, under the folders, as the notes no folder has taken
-        let unfiled_notes: Vec<&Note> = notes.iter().filter(|n| n.folder.as_ref().is_none_or(|f| !folders.iter().any(|x| &x.id == f))).collect();
-        let sections: Vec<(Option<&Folder>, Vec<&Note>, bool)> = folders
+        let unfiled_notes: Vec<&Row> = notes.iter().filter(|n| n.folder.as_ref().is_none_or(|f| !folders.iter().any(|x| &x.id == f))).collect();
+        let sections: Vec<(Option<&Folder>, Vec<&Row>, bool)> = folders
             .iter()
             .map(|f| (Some(f), notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect(), f.collapsed))
             .chain(std::iter::once((None, unfiled_notes, cx.global::<Store>().settings.unfiled_collapsed)))

@@ -1,0 +1,15 @@
+# a reply to Skeptic must use Skeptic's context.
+note: Room reply
+mode: ask
+type: This design uses one cache for all requests.
+select: one cache
+room: Skeptic
+ask: What fails first?
+settle
+activate: 1
+reply: The cache is shared across all servers.
+settle
+dump: answered
+expect: requests.find(r => r.input.task === "ask").input.ctx.mind.name === "Skeptic"
+expect: requests.find(r => r.input.task === "reply").input.ctx.mind.name === "Skeptic"
+quit

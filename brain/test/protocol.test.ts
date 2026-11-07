@@ -95,6 +95,17 @@ const ctx = (noteText = "", extra: object = {}) => ({
 const run = (id: string, input: object, s: object = settings) => ({ op: "run", id, settings: s, input });
 const ask = (id: string, d: object) => run(id, { task: "ask", ctx: ctx(fake(d)), target: "the words", question: "why?" });
 
+test("an oversized note fails explicitly before any model output", async () => {
+  const b = brain();
+  b.send(run("large", { task: "ask", ctx: ctx("é".repeat(140_000)), target: "the words", question: "why?" }));
+  const end = await b.end("large");
+  expect(end.ev).toBe("error");
+  expect(end.message).toContain("too large for one request");
+  expect(b.of("large")).toHaveLength(1);
+  b.send(ask("small", { result: "Still works." }));
+  expect((await b.end("small")).ev).toBe("done");
+});
+
 let brains: FakeBrain[] = [];
 function brain(env?: Record<string, string>) {
   const b = new FakeBrain(env);

@@ -1123,6 +1123,9 @@ impl Default for Settings {
 
 pub struct Store {
     dir: PathBuf,
+    profile: std::cell::RefCell<(bool, String, u64)>,
+    failed: std::cell::RefCell<BTreeMap<PathBuf, Vec<u8>>>,
+    problems: std::cell::RefCell<Vec<String>>,
     pub notes: Vec<Note>,
     pub folders: Vec<Folder>,
     pub minds: Vec<Mind>,
@@ -1280,13 +1283,14 @@ impl Store {
         let mut seen = HashSet::new();
         minds.retain(|m| !m.id.is_empty() && m.id != DEFAULT_MIND && seen.insert(m.id.clone()));
         minds.insert(0, Mind::inkling());
-        let settings = read_json::<Value>(&dir.join("settings.json"))
+        let settings: Settings = read_json::<Value>(&dir.join("settings.json"))
             .map(|v| merge_fields(v, "settings.json"))
             .unwrap_or_default();
-        let mut store = Self { dir, notes, folders, minds, settings };
+        let profile = std::cell::RefCell::new((settings.learns_about_me, settings.about_me.clone(), 0));
+        let mut store = Self { dir, profile, failed: Default::default(), problems: Default::default(), notes, folders, minds, settings };
         if store.notes.is_empty() {
             let welcome = crate::welcome::first_run_note(store.settings.default_mode);
-            store.save_note(&welcome);
+            store.try_save_note(&welcome)?;
             store.notes.push(welcome);
         }
         Ok(store)
@@ -1305,7 +1309,7 @@ impl Store {
     }
 
     pub fn save_note(&self, note: &Note) {
-        let _ = self.try_save_note(note);
+        let _ = self.keep_note(note);
     }
 
     /// Save a note and say whether it is on disk: the page tells the writer when it is not.
@@ -1313,10 +1317,47 @@ impl Store {
         save_json(&self.dir.join("notes").join(format!("{}.json", note.id)), note)
     }
 
-    pub fn delete_note(&mut self, id: &str) {
-        self.notes.retain(|n| n.id != id);
+    /// Unlike an import, an edit already exists in memory. Keep its newest bytes
+    /// until the disk accepts them; a later unchanged save must still retry it.
+    pub fn keep_note(&self, note: &Note) -> Result<()> {
+        self.keep_json(self.dir.join("notes").join(format!("{}.json", note.id)), note)
+    }
+
+    fn keep_json<T: Serialize + ?Sized>(&self, path: PathBuf, value: &T) -> Result<()> {
+        let bytes = serde_json::to_vec_pretty(value).context("serializing")?;
+        match write_atomic(&path, &bytes) {
+            Ok(()) => { self.failed.borrow_mut().remove(&path); Ok(()) },
+            Err(e) => {
+                let first = self.failed.borrow_mut().insert(path.clone(), bytes).is_none();
+                if first {
+                    let name = path.file_name().unwrap_or_default().to_string_lossy();
+                    self.problems.borrow_mut().push(format!("Changes to {name} aren’t saved yet. Inkling will retry: {e:#}"));
+                    log::error!("could not save {}: {e:#}", path.display());
+                }
+                Err(e)
+            }
+        }
+    }
+
+    pub fn retry_failed(&self) {
+        self.failed.borrow_mut().retain(|path, bytes| write_atomic(path, bytes).is_err());
+    }
+
+    pub fn take_save_problems(&self) -> Vec<String> {
+        std::mem::take(&mut *self.problems.borrow_mut())
+    }
+
+    pub fn delete_note(&mut self, id: &str) -> Result<()> {
         let path = self.dir.join("notes").join(format!("{id}.json"));
-        let _ = fs::remove_file(path);
+        match fs::remove_file(&path) {
+            Ok(()) => {},
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
+            Err(e) => return Err(e).with_context(|| format!("deleting {}", path.display())),
+        }
+        // A failed older save must never resurrect a successfully deleted note.
+        self.failed.borrow_mut().remove(&path);
+        self.notes.retain(|n| n.id != id);
+        Ok(())
     }
 
     /// Remove a folder. Its notes are kept and move to the top level.
@@ -1340,16 +1381,27 @@ impl Store {
     }
 
     pub fn save_folders(&self) {
-        let _ = save_json(&self.dir.join("folders.json"), &self.folders);
+        let _ = self.keep_json(self.dir.join("folders.json"), &self.folders);
     }
 
     pub fn save_minds(&self) {
         let custom: Vec<&Mind> = self.minds.iter().filter(|m| m.id != DEFAULT_MIND).collect();
-        let _ = save_json(&self.dir.join("minds.json"), &custom);
+        let _ = self.keep_json(self.dir.join("minds.json"), &custom);
+    }
+
+    /// Changes to consent or manually edited profile invalidate a learning result, even
+    /// when the writer toggles off and on before that result arrives.
+    pub fn profile_revision(&self) -> u64 {
+        let mut previous = self.profile.borrow_mut();
+        if previous.0 != self.settings.learns_about_me || previous.1 != self.settings.about_me {
+            *previous = (self.settings.learns_about_me, self.settings.about_me.clone(), previous.2 + 1);
+        }
+        previous.2
     }
 
     pub fn save_settings(&self) {
-        let _ = save_json(&self.dir.join("settings.json"), &self.settings);
+        self.profile_revision();
+        let _ = self.keep_json(self.dir.join("settings.json"), &self.settings);
     }
 
     pub fn dir(&self) -> &Path {
@@ -1363,6 +1415,10 @@ pub fn hash_text(s: &str) -> u64 {
     s.trim().hash(&mut h);
     h.finish()
 }
+
+#[cfg(test)]
+#[path = "store/robustness_tests.rs"]
+mod robustness_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1566,7 +1622,7 @@ mod tests {
         assert_eq!(ids, vec![original.clone(), format!("{original} copy"), "sneaky".to_string()]);
         let sneaky = store.note("sneaky").unwrap().clone();
         store.save_note(&sneaky);
-        store.delete_note(&format!("{original} copy"));
+        store.delete_note(&format!("{original} copy")).unwrap();
         assert!(!tmp.0.parent().unwrap().join("escaped.json").exists());
         assert_eq!(tmp.note_files(), vec![format!("{original}.json"), "sneaky.json".to_string()]);
     }
@@ -1623,8 +1679,8 @@ mod tests {
         assert!(reopened.folders.is_empty());
         assert_eq!(reopened.note(&filed.id).unwrap().folder, None);
 
-        store.delete_note(&welcome);
-        store.delete_note("no-such-note");
+        store.delete_note(&welcome).unwrap();
+        store.delete_note("no-such-note").unwrap();
         assert_eq!(store.notes.len(), 1);
         assert_eq!(tmp.note_files(), vec![format!("{}.json", filed.id)]);
     }

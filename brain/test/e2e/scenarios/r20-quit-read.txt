@@ -1,0 +1,9 @@
+# quitting an unfinished read must not persist a completed-read marker.
+note: Quit read
+mode: reads
+type: These new words have never been read. [[read>delay:10000]].
+wait: 3000
+dump: reading
+expect: d.reading !== null
+quit
+expect: note("Quit read").read_hashes.length === 0

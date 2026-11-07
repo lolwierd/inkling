@@ -155,6 +155,28 @@ enum EditKind {
 /// Edits of one kind closer together than this undo as one step.
 const COALESCE: Duration = Duration::from_millis(1200);
 const UNDO_LIMIT: usize = 300;
+// Full snapshots stay simple, but history must not multiply a large note by 300.
+// Keep at least the nearest step even when a single note exceeds this budget.
+const UNDO_BYTES: usize = 32 * 1024 * 1024;
+
+impl Snapshot {
+    fn bytes(&self) -> usize {
+        self.text.capacity() + self.kinds.capacity() * std::mem::size_of::<BlockKind>()
+            + self.marks.capacity() * std::mem::size_of::<MarkSpan>()
+            + self.anchors.capacity() * std::mem::size_of::<Anchor>()
+            + self.anchors.iter().map(|a| a.id.capacity()).sum::<usize>()
+    }
+}
+
+fn trim_history(history: &mut Vec<Snapshot>) {
+    let mut bytes: usize = history.iter().map(Snapshot::bytes).sum();
+    let mut drop = 0;
+    while history.len() - drop > 1 && (bytes > UNDO_BYTES || history.len() - drop > UNDO_LIMIT) {
+        bytes -= history[drop].bytes();
+        drop += 1;
+    }
+    if drop > 0 { history.drain(..drop); }
+}
 
 #[derive(Clone, Debug)]
 enum Drag {
@@ -754,9 +776,7 @@ impl State {
         );
         if !coalesce || self.undo.is_empty() {
             self.undo.push(self.snapshot());
-            if self.undo.len() > UNDO_LIMIT {
-                self.undo.remove(0);
-            }
+            trim_history(&mut self.undo);
         }
         self.redo.clear();
         self.last_edit = Some((now, kind));
@@ -1062,6 +1082,7 @@ impl State {
     fn undo(&mut self) -> Fx {
         let Some(s) = self.undo.pop() else { return Fx::default() };
         self.redo.push(self.snapshot());
+        trim_history(&mut self.redo);
         self.restore(s);
         self.last_edit = None;
         Fx::edited(self.line_of(self.cursor()))
@@ -1070,6 +1091,7 @@ impl State {
     fn redo(&mut self) -> Fx {
         let Some(s) = self.redo.pop() else { return Fx::default() };
         self.undo.push(self.snapshot());
+        trim_history(&mut self.undo);
         self.restore(s);
         self.last_edit = None;
         Fx::edited(self.line_of(self.cursor()))
@@ -3112,7 +3134,8 @@ fn layout_doc(snap: &DocSnapshot, width: Pixels, text_system: &WindowTextSystem,
         let end = start + line_text.len();
         let runs = if kind.is_code() { code_runs(snap, start, end, &st, &tokens[i]) } else { runs_for_line(snap, start, end, &st) };
         y += gap_before;
-        let same = |l: &LineBox| l.kind == kind && l.wrapped.text.as_ref() == line_text && l.runs == runs;
+        let same = |l: &LineBox| l.kind == kind && l.font_size == st.size && l.line_height == st.line_height
+            && l.indent == st.indent && l.wrapped.text.as_ref() == line_text && l.runs == runs;
         let carried = [i as isize, i as isize - shift]
             .into_iter()
             .filter(|&c| c >= 0)
@@ -5500,3 +5523,7 @@ mod tests {
         let _ = lay_out(&s, &ts, 300.);
     }
 }
+
+#[cfg(test)]
+#[path = "editor/robustness_tests.rs"]
+mod robustness_tests;

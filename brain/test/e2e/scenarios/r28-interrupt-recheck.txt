@@ -1,0 +1,14 @@
+# Steering a recheck cancels its result and clears its working needle.
+# fixture: running-plan
+mode: ask
+edit: hold 5:30 for the whole race => hold 4:55 for the whole race [[reply>resolved]] [[reply>delay:5000]]
+wait: 2600
+dump: checking
+expect: d.rechecking.length === 1
+activate: 1
+reply: Hold on, I want to discuss that first. [[reply>delay:100]]
+wait: 6000
+dump: steered
+expect: d.rechecking.length === 0
+expect: d.pending.length === 0
+quit

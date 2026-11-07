@@ -100,15 +100,39 @@ export function titleOf(page: string): string {
 const PAGE_TIMEOUT_MS = 10_000;
 const PAGE_MAX_BYTES = 4 * 1024 * 1024;
 
+/** Read at most the byte budget, including chunked/decompressed bodies. Cancel
+ * oversized bodies instead of retaining an unbounded string and slicing it later. */
+export async function boundedPage(res: Response, limit = PAGE_MAX_BYTES): Promise<string | null> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let at = 0;
+    for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
+    return new TextDecoder().decode(bytes);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 /** The page as it came, or `null` when it cannot be opened (a timeout, an error status, not text). */
 async function fetchPageForReal(url: string): Promise<string | null> {
   const signal = AbortSignal.timeout(PAGE_TIMEOUT_MS);
   try {
     const res = await fetch(url, { redirect: "follow", signal, headers: { "user-agent": "Mozilla/5.0 (Macintosh) Inkling/0.1 (checking a quote)", accept: "text/html,text/plain;q=0.9,*/*;q=0.5" } });
-    if (!res.ok) return null;
+    if (!res.ok) { await res.body?.cancel(); return null; }
     const type = res.headers.get("content-type") ?? "";
-    if (!/text\/|html|xml|json/i.test(type)) return null;
-    return (await res.text()).slice(0, PAGE_MAX_BYTES);
+    if (!/text\/|html|xml|json/i.test(type)) { await res.body?.cancel(); return null; }
+    return await boundedPage(res);
   } catch {
     return null;
   }

@@ -268,6 +268,11 @@ function nonEmpty(v: unknown, what: string): string {
  * for a correction it could not back. The usage then counts both.
  */
 async function run(id: string, settings: RunSettings, input: Task, signal: AbortController): Promise<{ data: unknown; usage: Usage }> {
+  // A fixed byte ceiling keeps large notes/history from producing an unbounded
+  // prompt. Reject explicitly: silently dropping context could change an answer.
+  if (new TextEncoder().encode(JSON.stringify(input)).byteLength > 256 * 1024) {
+    throw new ProviderError("other", "The note and conversation are too large for one request. Shorten the note or conversation and try again.");
+  }
   const web = settings.web === true && WEB_TASKS.has(input.task);
   try {
     return await runOnce(id, settings, input, signal, web);

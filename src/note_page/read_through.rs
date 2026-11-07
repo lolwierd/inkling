@@ -206,7 +206,6 @@ impl NotePage {
         // A paragraph that calls the mind by name is answered, as reading along does, and
         // the pass goes on while the answer streams in.
         for u in calls {
-            self.note.read_hashes.push(hash_text(&u.text));
             self.answer_call(u.line, u.text, cx);
         }
         let Some((i, rest)) = pick else { return self.finish_read_through(cx) };
@@ -217,8 +216,6 @@ impl NotePage {
             pass.reading = Some(hash);
             pass.total = pass.done + 1 + rest;
         }
-        self.note.read_hashes.push(hash);
-        self.schedule_save(cx);
         self.read_line(u.line, u.text, hash, cx);
         cx.notify();
     }

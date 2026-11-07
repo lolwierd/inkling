@@ -59,6 +59,7 @@ impl NotePage {
                 self.schedule_save(cx);
             }
         }
+        self.rechecking.remove(id);
         self.own_calls.remove(id);
         self.unanswered.remove(id);
     }

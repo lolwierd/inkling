@@ -1,0 +1,15 @@
+# leaving a thread of your own before its first line must not drop it.
+# fixture: beta
+note: Own empty
+mode: ask
+type: These are my words about one important question.
+select: one important question
+ask-yourself: Why do I think this?
+activate: 1
+call: Skeptic
+switch: Beta
+switch: Own empty
+settle
+dump: kept
+expect: d.threads.length === 1 && d.threads[0].msgs >= 1
+quit

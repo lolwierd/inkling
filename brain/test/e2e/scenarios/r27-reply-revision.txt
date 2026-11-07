@@ -1,0 +1,13 @@
+# An ordinary reply can finish after an edit; its resolution is for the old words.
+# fixture: running-plan
+mode: ask
+activate: 1
+reply: That settles it. [[reply>resolved]] [[reply>delay:5000]]
+wait: 100
+edit: hold 5:30 for the whole race => hold 6:30 for the whole race
+wait: 6500
+dump: current-words
+expect: requests.filter(r => r.input.task === "reply").length === 2
+expect: d.threads.find(t => t.id === "t1").status === "Open"
+expect: d.pending.length === 0
+quit

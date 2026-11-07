@@ -1,0 +1,11 @@
+# Disabling then re-enabling learning must not revive the old request.
+note: Learning consent
+chat: I work in the old role. [[learn>delay:5000]] [[learn>learn:Old role]]
+wait: 1000
+set: learn=off
+set: learn=on
+wait: 6000
+dump: after-consent
+expect: requests.filter(r => r.input.task === "learn").length === 1
+expect: settings.about_me === ""
+quit

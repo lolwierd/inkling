@@ -15,7 +15,8 @@ use std::{
     fs::OpenOptions,
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdout, Command, Stdio},
+    sync::mpsc::{self, Receiver, SyncSender},
     time::{Duration, Instant},
 };
 
@@ -155,7 +156,7 @@ impl Brain {
         self.state = BrainState::Starting;
         let launch = Launch::from_env();
         let spawned = launch.command().and_then(|cmd| Proc::spawn(cmd, &launch.log));
-        let (proc, stdout) = match spawned {
+        let (mut proc, stdout) = match spawned {
             Ok(v) => v,
             Err(e) => {
                 log::error!("brain: {e:#}");
@@ -165,8 +166,16 @@ impl Brain {
         };
         self.generation += 1;
         let generation = self.generation;
+        let failed = proc.failed.take().expect("new writer has an error receiver");
         self.proc = Some(proc);
         let (tx, rx) = async_channel::unbounded::<Option<Value>>();
+        let failure_tx = tx.clone();
+        std::thread::spawn(move || {
+            if let Ok(error) = failed.recv() {
+                log::warn!("brain: writing its input failed: {error}");
+                let _ = failure_tx.send_blocking(None);
+            }
+        });
         std::thread::spawn(move || {
             pump(stdout, |v| tx.send_blocking(Some(v)).is_ok());
             // `None` says the output closed; nothing the brain prints can look like it.
@@ -324,7 +333,11 @@ impl Brain {
         self.pending.remove(id);
         // A brain that is not running has nothing to cancel; don't start one to say so.
         if let Some(proc) = self.proc.as_mut() {
-            let _ = proc.send(&json!({"op": "cancel", "id": id}));
+            if proc.send(&json!({"op": "cancel", "id": id})).is_err() {
+                // A full/broken input cannot accept cancellation. Stop the process;
+                // EOF will fail every outstanding request outside this update.
+                let _ = proc.child.kill();
+            }
         }
     }
 
@@ -490,6 +503,7 @@ fn pump(stdout: impl Read, mut sink: impl FnMut(Value) -> bool) {
     }
 }
 
+#[cfg(test)]
 fn write_line(w: &mut impl Write, value: &Value) -> Result<()> {
     let mut line = serde_json::to_string(value)?;
     line.push('\n');
@@ -555,7 +569,8 @@ impl Launch {
 /// A running brain process.
 struct Proc {
     child: Child,
-    stdin: ChildStdin,
+    writer: SyncSender<Vec<u8>>,
+    failed: Option<Receiver<String>>,
     log: PathBuf,
     /// Where this run's stderr starts in the log.
     log_start: u64,
@@ -580,12 +595,26 @@ impl Proc {
             .spawn()
             .with_context(|| format!("starting the brain in {dir}"))?;
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("the brain has no stdout"))?;
-        let stdin = child.stdin.take().ok_or_else(|| anyhow!("the brain has no stdin"))?;
-        Ok((Proc { child, stdin, log: log_path.to_path_buf(), log_start }, stdout))
+        let mut stdin = child.stdin.take().ok_or_else(|| anyhow!("the brain has no stdin"))?;
+        let (writer, lines) = mpsc::sync_channel::<Vec<u8>>(32);
+        let (failed, errors) = mpsc::channel();
+        std::thread::spawn(move || {
+            while let Ok(line) = lines.recv() {
+                if let Err(e) = stdin.write_all(&line).and_then(|_| stdin.flush()) {
+                    let _ = failed.send(e.to_string());
+                    break;
+                }
+            }
+        });
+        Ok((Proc { child, writer, failed: Some(errors), log: log_path.to_path_buf(), log_start }, stdout))
     }
 
     fn send(&mut self, value: &Value) -> Result<()> {
-        write_line(&mut self.stdin, value)
+        let mut bytes = serde_json::to_vec(value)?;
+        // Bound queued memory, and report overload instead of blocking the UI on a pipe.
+        if bytes.len() > 2 * 1024 * 1024 { bail!("this request is too large; shorten the note or conversation before trying again"); }
+        bytes.push(b'\n');
+        self.writer.try_send(bytes).map_err(|e| anyhow!("the brain cannot accept this request: {e}"))
     }
 
     /// Its output closed: make sure it is gone, and say why it stopped.
@@ -606,10 +635,9 @@ impl Proc {
 
     /// Ask it to stop, give it a moment to stop its runtimes, then make sure.
     fn stop(self) {
-        let Proc { mut child, mut stdin, .. } = self;
-        let _ = stdin.write_all(b"{\"op\":\"shutdown\"}\n");
-        let _ = stdin.flush();
-        drop(stdin);
+        let Proc { mut child, writer, .. } = self;
+        let _ = writer.try_send(b"{\"op\":\"shutdown\"}\n".to_vec());
+        drop(writer);
         let deadline = Instant::now() + Duration::from_millis(300);
         while Instant::now() < deadline {
             if let Ok(Some(_)) = child.try_wait() {
@@ -1096,3 +1124,7 @@ exit 3"#,
         again.stop();
     }
 }
+
+#[cfg(test)]
+#[path = "brain/robustness_tests.rs"]
+mod robustness_tests;

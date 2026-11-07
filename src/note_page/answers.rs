@@ -393,7 +393,7 @@ impl NotePage {
     }
 
     /// The mind that asked a thread, to judge an answer to it as it would.
-    fn mind_of(&self, t: &Thread, cx: &App) -> Mind {
+    pub(super) fn mind_of(&self, t: &Thread, cx: &App) -> Mind {
         if t.mind_name.trim().is_empty() || t.mind_name == self.mind.name {
             return self.mind.clone();
         }

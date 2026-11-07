@@ -221,6 +221,7 @@ struct Indexed {
 /// each look re-indexes the notes saved since the last one and forgets deleted notes.
 #[derive(Default)]
 pub struct Index {
+    names: Vec<String>,
     notes: HashMap<String, Indexed>,
     /// In how many units of searchable notes each term appears.
     df: HashMap<String, u32>,
@@ -330,6 +331,12 @@ impl Index {
             .chain(["inkling".to_string()])
             .filter(|n| !n.is_empty())
             .collect();
+        if names != self.names {
+            self.notes.clear();
+            self.df.clear();
+            self.units = 0;
+            self.names = names.clone();
+        }
         let live: HashSet<&str> = notes.iter().map(|n| n.id.as_str()).collect();
         let gone: Vec<String> = self.notes.keys().filter(|id| !live.contains(id.as_str())).cloned().collect();
         for id in gone {
@@ -589,6 +596,24 @@ fn paragraph_at(note: &Note, range: &Range<usize>, quote: &str) -> Option<String
 
 // ----- visiting ends -----------------------------------------------------------------------
 
+/// Counts for all sidebar rows in one pass. A thread contributes at home and at
+/// most once at its far end, never through a transient visiting copy.
+pub fn open_counts(notes: &[Note]) -> HashMap<&str, usize> {
+    let mut counts = HashMap::new();
+    for note in notes {
+        let links: HashMap<_, _> = note.elsewhere.iter().map(|e| (e.thread.as_str(), e)).collect();
+        for thread in note.threads.iter().filter(|t| t.status == ThreadStatus::Open) {
+            let link = links.get(thread.id.as_str());
+            if link.is_some_and(|e| e.visiting) { continue; }
+            *counts.entry(note.id.as_str()).or_default() += 1;
+            if let Some(end) = link.filter(|e| e.note != note.id) {
+                *counts.entry(end.note.as_str()).or_default() += 1;
+            }
+        }
+    }
+    counts
+}
+
 /// The note at the other end of `e`, or `None` once it is deleted.
 pub fn other_note<'a>(notes: &'a [Note], e: &Elsewhere) -> Option<&'a Note> {
     notes.iter().find(|n| n.id == e.note)
@@ -718,6 +743,7 @@ pub fn send_home(note: &Note, notes: &mut [Note]) -> (Note, Vec<String>) {
 /// [`send_home`] on the store: saves each home note that changed, and returns `note` as it
 /// is to be saved, without its visiting ends.
 pub fn save_visitors_home(note: &Note, store: &mut Store) -> Note {
+    store.retry_failed();
     let (saved, changed) = send_home(note, &mut store.notes);
     for id in changed {
         if let Some(home) = store.note(&id) {
@@ -1126,3 +1152,7 @@ mod tests {
         assert_eq!(w[0]["text"], "Pick up the race bib on Friday 13 March at the harbour office.");
     }
 }
+
+#[cfg(test)]
+#[path = "between/robustness_tests.rs"]
+mod robustness_tests;

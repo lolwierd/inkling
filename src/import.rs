@@ -167,6 +167,7 @@ fn shows_line_breaks(root: &Path) -> bool {
 #[derive(Debug, Default, PartialEq)]
 pub struct Summary {
     pub imported: usize,
+    pub unsaved: usize,
     /// Notes the notebook already has word for word, in the same folder.
     pub already_here: usize,
     pub unreadable: usize,
@@ -178,6 +179,7 @@ impl Summary {
     pub fn message(&self, vault: &str) -> String {
         let notes = |n: usize| if n == 1 { "1 note".to_string() } else { format!("{n} notes") };
         let mut parts = vec![match (self.imported, self.already_here) {
+            (0, 0) if self.unsaved > 0 => format!("No notes imported from {vault}"),
             (0, 0) => format!("No notes found in {vault}"),
             (0, n) => format!("Nothing new in {vault}: {} already here", notes(n)),
             (n, _) => format!("Imported {} from {vault}", notes(n)),
@@ -191,6 +193,7 @@ impl Summary {
         if self.unreadable > 0 {
             parts.push(format!("{} could not be read", self.unreadable));
         }
+        if self.unsaved > 0 { parts.push(format!("{} could not be saved; try importing again", self.unsaved)); }
         parts.join("; ")
     }
 }
@@ -235,7 +238,10 @@ pub fn add_to_store(store: &mut Store, vault: Vault, mode: Mode) -> Summary {
         note.blocks = blocks;
         note.updated_at = modified.unwrap_or(now);
         note.created_at = created.unwrap_or(note.updated_at);
-        store.save_note(&note);
+        if store.try_save_note(&note).is_err() {
+            summary.unsaved += 1;
+            continue;
+        }
         store.notes.push(note);
         summary.imported += 1;
     }
@@ -1268,7 +1274,7 @@ mod tests {
         store.folders.push(Folder { local_directories: vec![], id: "mine".into(), name: "projects".into(), collapsed: false });
 
         let summary = add_to_store(&mut store, read_vault(&vault.0).unwrap(), Mode::WhenYouAsk);
-        assert_eq!(summary, Summary { imported: 3, already_here: 0, unreadable: 0, in_icloud: 1 });
+        assert_eq!(summary, Summary { imported: 3, unsaved: 0, already_here: 0, unreadable: 0, in_icloud: 1 });
         assert_eq!(summary.message("Vault"), "Imported 3 notes from Vault; 1 note only in iCloud");
 
         // "Projects" goes into the folder already called "projects"; the one below it is new and folded
@@ -1301,17 +1307,21 @@ mod tests {
         // a second import adds only what changed
         store.notes.iter_mut().find(|n| n.title == "Plan").unwrap().blocks.push(b(Paragraph, "Written in Inkling."));
         let again = add_to_store(&mut store, read_vault(&vault.0).unwrap(), Mode::WhenYouAsk);
-        assert_eq!(again, Summary { imported: 1, already_here: 2, unreadable: 0, in_icloud: 1 });
+        assert_eq!(again, Summary { imported: 1, unsaved: 0, already_here: 2, unreadable: 0, in_icloud: 1 });
         assert_eq!(store.folders.len(), 2);
         assert_eq!(store.notes.iter().filter(|n| n.title == "Plan").count(), 2);
     }
 
     #[std::prelude::v1::test]
     fn messages() {
-        let s = |imported, already_here, unreadable, in_icloud| Summary { imported, already_here, unreadable, in_icloud };
+        let s = |imported, already_here, unreadable, in_icloud| Summary { imported, already_here, unreadable, in_icloud, unsaved: 0 };
         assert_eq!(s(42, 0, 0, 0).message("Vault"), "Imported 42 notes from Vault");
         assert_eq!(s(1, 2, 0, 0).message("Vault"), "Imported 1 note from Vault; 2 already here");
         assert_eq!(s(0, 1, 0, 0).message("Vault"), "Nothing new in Vault: 1 note already here");
         assert_eq!(s(0, 0, 1, 2).message("Vault"), "No notes found in Vault; 2 notes only in iCloud; 1 could not be read");
     }
 }
+
+#[cfg(test)]
+#[path = "import/robustness_tests.rs"]
+mod robustness_tests;

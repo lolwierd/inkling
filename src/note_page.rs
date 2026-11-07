@@ -38,6 +38,7 @@ pub(crate) mod own;
 mod answers;
 mod write_in;
 mod thread_pane;
+mod lifecycle;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -609,6 +610,7 @@ struct Reading {
 }
 
 pub struct NotePage {
+    lifecycle: lifecycle::Lifecycle,
     pub editor: Entity<NoteEditor>,
     pub note: Note,
     mind: Mind,
@@ -760,11 +762,13 @@ impl NotePage {
         }));
         // ⌘Q right after typing would otherwise beat the save debounce.
         subs.push(cx.on_app_quit(|page, cx| {
+            page.leave_requests(cx);
             page.flush(cx);
             async {}
         }));
         let mind = cx.global::<Store>().mind(&note.mind_id);
         let mut page = Self {
+            lifecycle: Default::default(),
             editor,
             note,
             mind,
@@ -887,6 +891,8 @@ impl NotePage {
 
     /// Switch the page to another note, saving this one first.
     pub fn open(&mut self, note: Note, window: &mut Window, cx: &mut Context<Self>) {
+        if note.id == self.note.id { return; }
+        self.lifecycle.epoch += 1;
         self.leave_read_through(cx);
         // The read in flight will never land: leave its paragraph unread.
         if let Some(r) = self.reading.take() {
@@ -936,6 +942,12 @@ impl NotePage {
         // skips a thread the note does not have.)
         self.rechecks.clear();
         self.rechecking.clear();
+        self.answer_checks.clear();
+        self.lifecycle.calls.clear();
+        self.disputes.clear();
+        self.written_in = None;
+        self.goto = None;
+        self.settle_task = None;
         self.arrived.clear();
         self.drag = None;
         self.last_drag_end = None;
@@ -1004,7 +1016,7 @@ impl NotePage {
         self.note.updated_at = kept.unwrap_or_else(Utc::now);
         let note = crate::between::save_visitors_home(&self.note, cx.global_mut::<Store>());
         let store = cx.global_mut::<Store>();
-        let saved = store.try_save_note(&note);
+        let saved = store.keep_note(&note);
         store.settings.last_note = Some(note.id.clone());
         match store.notes.iter_mut().find(|n| n.id == note.id) {
             Some(n) => *n = note,
@@ -1408,13 +1420,7 @@ impl NotePage {
             let ed = self.editor.read(cx);
             due.iter().filter_map(|(id, _)| ed.anchors().iter().find(|a| &a.id == id).map(|a| ed.line_of(a.range.start))).collect()
         };
-        for line in &skip {
-            let text = self.editor.read(cx).line_text(*line);
-            let hash = hash_text(text.trim());
-            if !self.note.read_hashes.contains(&hash) {
-                self.note.read_hashes.push(hash);
-            }
-        }
+        lines.retain(|line| !skip.contains(line));
         self.consider(lines, cx);
         for (id, before) in due {
             self.recheck(&id, before, cx);
@@ -1470,6 +1476,8 @@ impl NotePage {
     /// one line saying why; if not, it says what is still missing and stays open.
     fn recheck(&mut self, id: &str, before: String, cx: &mut Context<Self>) {
         if self.pending.contains_key(id) {
+            // Keep the latest edit until the current request releases this thread.
+            self.rechecks.entry(id.to_string()).or_insert((Instant::now(), before));
             return;
         }
         let Some(t) = self.note.threads.iter().find(|t| t.id == id && t.status == ThreadStatus::Open).cloned() else { return };
@@ -1488,7 +1496,7 @@ impl NotePage {
         );
         let input = json!({
             "task": "reply",
-            "ctx": self.context(cx),
+            "ctx": self.context_with(&self.mind_of(&t, cx), cx),
             "quote": before,
             "messages": messages_wire(&t.messages),
             "message": message,
@@ -1500,6 +1508,12 @@ impl NotePage {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);
                 page.rechecking.remove(&tid);
+                // A result describes exactly the words sent, never a newer edit.
+                if !page.quote_is_current(&tid, &now_text, cx) {
+                    page.rechecks.entry(tid.clone()).or_insert((Instant::now(), now_text.clone()));
+                    cx.notify();
+                    return;
+                }
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
                 if let Some(t) = page.thread_mut(&tid) {
                     t.set_quote(&now_text);
@@ -1563,12 +1577,12 @@ impl NotePage {
                 .collect();
             (cursor_unit.start, candidates)
         };
-        let mut marked = false;
         let waits = self.note.mode == Mode::WhenYouAsk;
         let listens = !waits || self.listens_for_answers();
         for (line, text, writing_code, alone) in candidates {
             let hash = hash_text(&text);
-            let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash) || (waits && self.answer_checks.contains(&hash));
+            let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash)
+                || self.lifecycle.calls.values().any(|h| *h == hash) || (waits && self.answer_checks.contains(&hash));
             let verdict = if writing_code && !already {
                 Verdict::Later
             } else {
@@ -1582,22 +1596,13 @@ impl NotePage {
                     }
                 }
                 Verdict::Answer => {
-                    self.note.read_hashes.push(hash);
-                    marked = true;
                     self.answer_call(line, text, cx);
                 }
                 Verdict::Read if waits => self.read_for_answers(line, text, hash, cx),
                 Verdict::Read => {
-                    self.note.read_hashes.push(hash);
-                    marked = true;
                     self.read_line(line, text, hash, cx);
                 }
             }
-        }
-        // A silent read changes nothing else, so save the "already read" mark
-        // itself; otherwise a relaunch would read the paragraph again.
-        if marked {
-            self.schedule_save(cx);
         }
     }
 
@@ -1685,10 +1690,12 @@ impl NotePage {
             (s.model.clone(), if heavy { s.effort.clone() } else { s.effort_read.clone() })
         };
         let this = cx.entity().downgrade();
-        let note_id = self.note.id.clone();
+        let epoch = self.lifecycle.epoch;
         let on = Rc::new(RefCell::new(on));
         let finished = Rc::new(Cell::new(false));
+        let request = Rc::new(RefCell::new(String::new()));
         let deliver = {
+            let request = request.clone();
             let (this, finished) = (this.clone(), finished.clone());
             Rc::new(move |msg: BrainMsg, cx: &mut App| {
                 if finished.get() {
@@ -1699,8 +1706,10 @@ impl NotePage {
                 }
                 let Some(this) = this.upgrade() else { return };
                 this.update(cx, |page, cx| {
-                    if !this_note_only || page.note.id == note_id {
+                    if finished.get() { page.lifecycle.requests.remove(&*request.borrow()); }
+                    if !this_note_only || page.lifecycle.epoch == epoch {
                         (on.borrow_mut())(page, msg, cx);
+                        page.resume_rechecks(cx);
                     }
                 });
             })
@@ -1724,6 +1733,8 @@ impl NotePage {
                 })
             })
         };
+        *request.borrow_mut() = req.clone();
+        self.lifecycle.requests.insert(req.clone(), finished.clone());
         sending.set(false);
         // A brain that never answers would hold the read-along slot or a
         // thread's thinking dot forever: give up on the request after a while.
@@ -1738,8 +1749,9 @@ impl NotePage {
                 // The brain stops working on it either way; the page hears about it only
                 // for a request it still shows (learning about the writer shows nothing).
                 log::warn!("request {req_id} timed out after {}s", timeout.as_secs());
-                page.cancel_request(&req_id, cx);
-                if page.tracks(&req_id) {
+                // Stop the sidecar without invalidating the error delivery below.
+                Brain::global(cx).update(cx, |b, cx| b.cancel(&req_id, cx));
+                if !this_note_only || page.tracks(&req_id) {
                     let deliver = deliver.clone();
                     cx.defer(move |cx| {
                         deliver(BrainMsg::Error { kind: "timeout".into(), message: "the model took too long to answer".into() }, cx)
@@ -1759,7 +1771,8 @@ impl NotePage {
             || matches!(&self.chat_reply, ChatReply::Streaming { req: r, .. } if r == req)
     }
 
-    fn cancel_request(&self, req: &str, cx: &mut Context<Self>) {
+    fn cancel_request(&mut self, req: &str, cx: &mut Context<Self>) {
+        if let Some(finished) = self.lifecycle.requests.remove(req) { finished.set(true); }
         Brain::global(cx).update(cx, |b, cx| b.cancel(req, cx));
     }
 
@@ -1767,9 +1780,10 @@ impl NotePage {
     /// another brain request from inside a brain callback).
     fn later(&self, cx: &mut Context<Self>, f: impl FnOnce(&mut NotePage, &mut Context<NotePage>) + 'static) {
         let this = cx.entity().downgrade();
+        let epoch = self.lifecycle.epoch;
         cx.defer(move |cx| {
             if let Some(this) = this.upgrade() {
-                this.update(cx, f);
+                this.update(cx, |page, cx| { if page.lifecycle.epoch == epoch { f(page, cx); } });
             }
         });
     }
@@ -1854,6 +1868,8 @@ impl NotePage {
             BrainMsg::Done(v) => {
                 // the line it was sent as, moved with the lines added or taken away since
                 let line = page.reading.take().map_or(line, |r| r.line);
+                if !page.note.read_hashes.contains(&hash) { page.note.read_hashes.push(hash); }
+                page.schedule_save(cx);
                 if let Some(n) = v["repeats"].as_u64() {
                     log::info!("read held back: it makes let-stand point {n} again");
                 }
@@ -1906,6 +1922,7 @@ impl NotePage {
 
     fn answer_call(&mut self, line: usize, text: String, cx: &mut Context<Self>) {
         let Some(id) = self.add_thought(line, &text, &text, ThoughtKind::Answer, None, cx) else { return };
+        self.lifecycle.calls.insert(id.clone(), hash_text(&text));
         let input = json!({"task": "answer", "ctx": self.context(cx), "target": text});
         self.stream_into(id, input, cx);
     }
@@ -1963,6 +1980,7 @@ impl NotePage {
     }
 
     fn open_thread(&mut self, range: Range<usize>, kind: ThoughtKind, first: Option<String>, cx: &mut Context<Self>) -> String {
+        self.answer_checks.clear();
         let id = new_id();
         let quote = self.editor.read(cx).text()[range.clone()].to_string();
         let side = self.pick_side(&range, cx);
@@ -2014,6 +2032,7 @@ impl NotePage {
     /// A thread opened to hold an answer that never came (an error, or an empty
     /// reply) would sit in the margin as an empty card: take it away again.
     fn drop_if_empty(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.lifecycle.calls.remove(id);
         let empty = self.note.threads.iter().any(|t| t.id == id && t.messages.is_empty() && t.drawing.is_none());
         if !empty {
             return;
@@ -2065,6 +2084,7 @@ impl NotePage {
     fn stream_into(&mut self, thread: String, input: Value, cx: &mut Context<Self>) {
         let tid = thread.clone();
         let again = input.clone();
+        let read_hash = (input["task"] == "answer").then(|| hash_text(input["target"].as_str().unwrap_or_default()));
         self.unanswered.remove(&thread);
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Delta(d) => {
@@ -2083,6 +2103,11 @@ impl NotePage {
                     page.notice("Inkling came back with nothing to say. Try asking again.".into(), cx);
                 } else {
                     page.push_message(&tid, Role::Mind, text, cx);
+                    if let Some(hash) = read_hash {
+                        page.lifecycle.calls.remove(&tid);
+                        if !page.note.read_hashes.contains(&hash) { page.note.read_hashes.push(hash); }
+                        page.schedule_save(cx);
+                    }
                 }
             }
             BrainMsg::Error { kind, message } => {
@@ -2399,37 +2424,6 @@ impl NotePage {
         cx.notify();
     }
 
-    /// "Inkling learns about you": when a message says something lasting about
-    /// the writer, fold it into the about-you paragraph in the background.
-    fn maybe_learn(&mut self, message: &str, cx: &mut Context<Self>) {
-        let s = &cx.global::<Store>().settings;
-        if !s.learns_about_me {
-            return;
-        }
-        let lower = format!(" {} ", message.to_lowercase());
-        let personal = [" i ", " i'm ", " im ", " i am ", " my ", " i've ", " i'd ", " me ", " i work", " i study", " i prefer"]
-            .iter()
-            .any(|k| lower.contains(k));
-        if !personal || message.split_whitespace().count() < 4 {
-            return;
-        }
-        let about = s.about_me.clone();
-        let input = json!({"task": "learn", "aboutMe": if about.trim().is_empty() { Value::Null } else { Value::String(about) }, "message": message});
-        self.run_any_note(input, false, cx, |_, msg, cx| {
-            if let BrainMsg::Done(v) = msg {
-                if v["update"].as_bool() == Some(true) {
-                    let text = v["aboutMe"].as_str().unwrap_or("").trim().to_string();
-                    if !text.is_empty() {
-                        let store = cx.global_mut::<Store>();
-                        store.settings.about_me = text;
-                        store.save_settings();
-                        cx.emit(PageEvent::Learned);
-                    }
-                }
-            }
-        });
-    }
-
     fn send_reply(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_own(id) {
             return self.add_to_own(id, window, cx);
@@ -2448,7 +2442,7 @@ impl NotePage {
         let disputed = dispute.is_some();
         let input = json!({
             "task": "reply",
-            "ctx": self.context(cx),
+            "ctx": self.context_with(&self.mind_of(&t, cx), cx),
             "quote": t.quote,
             "messages": messages_wire(&t.messages),
             "message": dispute.unwrap_or(text.clone()),
@@ -2462,6 +2456,8 @@ impl NotePage {
     /// take the correction back.
     fn run_reply(&mut self, tid: String, input: Value, asked: String, disputed: bool, cx: &mut Context<Self>) {
         let id = tid.clone();
+        let quote = self.editor.read(cx).anchor(&tid)
+            .and_then(|a| self.editor.read(cx).text().get(a.range.clone())).unwrap_or_default().to_string();
         // what Try again sends, the dispute remembered (taken off again before it is sent)
         let mut again = input.clone();
         if disputed {
@@ -2480,7 +2476,7 @@ impl NotePage {
                 if disputed {
                     page.after_dispute(&tid, v["resolved"].as_bool() == Some(true), cx);
                 }
-                if v["resolved"].as_bool() == Some(true) {
+                if v["resolved"].as_bool() == Some(true) && page.quote_is_current(&tid, &quote, cx) {
                     if let Some(t) = page.thread_mut(&tid) {
                         t.tied_by = Some(crate::store::TiedBy::Reply);
                         t.set_status(ThreadStatus::Resolved);
@@ -2516,6 +2512,10 @@ impl NotePage {
     }
 
     fn set_status(&mut self, id: &str, status: ThreadStatus, cx: &mut Context<Self>) {
+        self.interrupt_thread(id, cx);
+        self.answer_checks.clear();
+        self.rechecks.remove(id);
+        self.rechecking.remove(id);
         self.before_status(id, status, cx);
         // a mind's open point is let stand, with what you typed in its tag's box as your reason
         let typed = self.replies.get(id).map(|i| i.read(cx).value().to_string()).unwrap_or_default();
@@ -5364,6 +5364,7 @@ impl Render for NotePage {
             let ed = self.editor.read(cx);
             let mut styles = HashMap::new();
             let mut open: Vec<(usize, String, Hsla)> = vec![];
+            let anchors: HashMap<_, _> = ed.anchors().iter().map(|a| (a.id.as_str(), a)).collect();
             for th in &self.note.threads {
                 if th.status == ThreadStatus::Dismissed {
                     continue;
@@ -5371,7 +5372,7 @@ impl Render for NotePage {
                 let color = color_of(th);
                 styles.insert(th.id.clone(), AnchorStyle { color, correction: th.kind == ThoughtKind::Correction, own: th.own });
                 if th.status == ThreadStatus::Open {
-                    if let Some(a) = ed.anchors().iter().find(|a| a.id == th.id) {
+                    if let Some(a) = anchors.get(th.id.as_str()) {
                         open.push((a.range.start, th.id.clone(), color));
                     }
                 }
@@ -5381,19 +5382,22 @@ impl Render for NotePage {
             open.sort_by_key(|a| a.0);
             let numbers: HashMap<String, usize> = open.iter().enumerate().map(|(i, (_, id, _))| (id.clone(), i + 1)).collect();
             let mut gutter = vec![];
+            let read: HashSet<_> = self.note.read_hashes.iter().copied().collect();
+            let mut unit_end = 1;
             for line in 1..ed.line_count() {
                 let range = ed.line_range(line);
-                if let Some(n) = open.iter().position(|(s, _, _)| *s >= range.start && *s <= range.end) {
+                let n = open.partition_point(|(s, _, _)| *s < range.start);
+                if n < open.len() && open[n].0 <= range.end {
                     gutter.push((line, GutterMark::Question { number: n + 1, color: open[n].2 }));
                     continue;
                 }
+                if line < unit_end { continue; }
                 let unit = ed.unit_of(line);
-                if unit.start != line {
-                    continue;
-                }
+                unit_end = unit.end;
+                if unit.start != line { continue; }
                 let text = ed.lines_text(unit);
                 let text = text.trim();
-                if !text.is_empty() && self.note.read_hashes.contains(&hash_text(text)) {
+                if !text.is_empty() && read.contains(&hash_text(text)) {
                     gutter.push((line, GutterMark::Read));
                 }
             }

@@ -1,0 +1,12 @@
+# an older learning result must not overwrite a newer one.
+note: Learning order
+chat: I work in the old role. [[learn>delay:8000]] [[learn>learn:Old role]]
+wait: 2500
+chat: I work in the new role. [[learn>delay:200]] [[learn>learn:New role]]
+wait: 9000
+dump: after-both
+expect: requests.filter(r => r.input.task === "learn").length === 2
+expect: requests.filter(r => r.input.task === "learn")[1].input.aboutMe === "Old role"
+# The fake brain appends each fact; the second update must fold in the first.
+expect: settings.about_me === "Old role New role"
+quit

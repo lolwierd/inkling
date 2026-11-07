@@ -204,6 +204,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `INKLING_JIGGLE=<ms>` | keep a covered window drawing |
 | `INKLING_LOG_JSON=1` | JSON log lines (`ms`, `level`, `target`, `msg`) |
 | `INKLING_FRAME_LOG=1` | log frames per second and the editor's layout cost (`perf:` lines), for performance work |
+| `INKLING_FIRST_LOOK=0` | the brain skips the small model's first look at a paragraph and reads every one in full |
 | `INKLING_OPEN=chat,sidebar,...` | panels open at launch |
 | `INKLING_SETTINGS_TAB=<pane>` | the pane Settings opens on (with `INKLING_OPEN=settings`) |
 | `INKLING_SETTINGS_RECORD=<action>`, `INKLING_SETTINGS_KEYS=settings:<keys>,main:<keys>`, `INKLING_SETTINGS_SEARCH=<text>` | drive the shortcut recorder without clicks: listen for an action's keys, press keys in Settings or the note, fill the search |

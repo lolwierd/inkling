@@ -336,6 +336,41 @@ describe("what each task sends back", () => {
     expect((await b.end("r")).data).toEqual({ speak: true, kind: "question", quote: "one Redis counter", text: "What happens at the boundary?", sketch: true });
   });
 
+  describe("the first look", () => {
+    const target = "We’ll keep one Redis counter per user and reset it every minute.";
+    const speaks = thought(true, "one Redis counter", "What happens at the boundary?");
+
+    test("a paragraph the small model turns away is never read in full", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...speaks, gate: { look: false } })), target }));
+      const done = await b.end("r");
+      expect(done.data).toEqual({ speak: false });
+      expect(done.usage.model).toBe("haiku");
+      expect(b.stderr).toContain("the first look found nothing worth a full read");
+    });
+
+    test("one it lets through is read in full, and the usage counts both", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...speaks, gate: { look: true } })), target }));
+      const done = await b.end("r");
+      expect(done.data).toMatchObject({ speak: true, quote: "one Redis counter" });
+      expect(done.usage.model).toBe("haiku + claude-opus-5-5");
+    });
+
+    test("no first look when the writer's model is the small one, for Read it through, or for a selection", async () => {
+      const b = brain();
+      const no = { ...speaks, gate: { look: false } };
+      b.send(run("h", { task: "read", ctx: ctx(fake(no)), target }, { model: "claude-haiku-5-5" }));
+      expect((await b.end("h")).data).toMatchObject({ speak: true });
+      // reading it through, the note rides in the system prompt: the directive goes with the paragraph
+      b.send(run("t", { task: "read", ctx: ctx(), target: target + " " + fake(no), through: true }));
+      expect((await b.end("t")).data).toMatchObject({ speak: true });
+      b.send(run("p", { task: "probe", ctx: ctx(fake({ ...no, structured: { kind: "question", quote: "one Redis counter", text: "Why one?", sketch: false } })), target }));
+      const probed = await b.end("p");
+      expect(probed.data, JSON.stringify(probed)).toMatchObject({ text: "Why one?" });
+    });
+  });
+
   test("read that stays silent", async () => {
     const b = brain();
     b.send(run("r", { task: "read", ctx: ctx(fake(thought(false, "", ""))), target: "Fine." }));

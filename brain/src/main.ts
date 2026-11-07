@@ -28,6 +28,9 @@ import {
   RELATE_SCHEMA,
   answersBlock,
   answersOnlyPrompt,
+  GATE_SCHEMA,
+  GATE_SYSTEM,
+  gatePrompt,
   openThreadNumbers,
   settlePrompt,
   SETTLE_SCHEMA,
@@ -263,6 +266,28 @@ function nonEmpty(v: unknown, what: string): string {
 
 // ----- running tasks ------------------------------------------------------------
 
+/** The model for the first look at a paragraph: Claude Code's name for its small fast one. */
+const GATE_MODEL = "haiku";
+
+/**
+ * The first look at a paragraph a read is about to send: the small model, with no tools,
+ * sees the paragraph and the note around it and says whether it is worth a full read.
+ * Null when there is no first look (the writer's model is already the small one, or
+ * INKLING_FIRST_LOOK=0) or it failed: then the full read decides, as before.
+ */
+async function firstLook(ctx: Context, target: string, settings: RunSettings, signal: AbortController): Promise<{ look: boolean; usage: Usage } | null> {
+  if (process.env.INKLING_FIRST_LOOK === "0" || (settings.model && /haiku/i.test(settings.model))) return null;
+  try {
+    const { data, usage } = await runStructured<unknown>(GATE_SYSTEM, gatePrompt(ctx, target), GATE_SCHEMA, { model: GATE_MODEL }, signal, onLimit);
+    // only a plain no turns a paragraph away
+    return { look: !(isObject(data) && data.look === false), usage };
+  } catch (e) {
+    if (signal.signal.aborted) throw e;
+    log(`first look failed (${e instanceof ProviderError ? e.kind : "other"}: ${e instanceof Error ? e.message : String(e)}); reading in full`);
+    return null;
+  }
+}
+
 /** The tasks that may open local files and Claude Code memories; the rest get no tools. */
 const FILE_TASKS: ReadonlySet<string> = new Set(["read", "probe", "ask", "answer", "reply", "chat"]);
 
@@ -323,13 +348,20 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
       // (Answer in the note); a note that waits to be asked only asks that.
       const answering = input.task === "read" && openThreadNumbers(input.ctx).length > 0;
       if (input.task === "read" && input.answersOnly && !answering) return { data: { speak: false }, usage: { ms: 0 } };
+      // Reading along, the small model looks first, and most paragraphs stop there.
+      const first = input.task === "read" && !input.answersOnly && !through ? await firstLook(input.ctx, input.target, settings, signal) : null;
+      if (first && !first.look) {
+        log(`read ${id}: the first look found nothing worth a full read`);
+        return { data: { speak: false }, usage: first.usage };
+      }
       const [system, prompt, schema] =
         input.task === "probe"
           ? [sys, probePrompt(input.ctx, input.target, web), PROBE_SCHEMA]
           : input.answersOnly
             ? [sys, answersOnlyPrompt(input.ctx, input.target), THOUGHT_WITH_ANSWERS_SCHEMA]
             : [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through) + answersBlock(input.ctx), answering ? THOUGHT_WITH_ANSWERS_SCHEMA : THOUGHT_SCHEMA];
-      const { data, usage, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, access);
+      const { data, usage: own, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, access);
+      const usage = first ? addUsage(first.usage, own) : own;
       const d = structured(data);
       // Answer in the note: the open threads this paragraph answers, whatever else the read says.
       const answers = answering ? pickAnswers(d.answers, input.ctx.threads, input.target) : [];

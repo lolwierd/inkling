@@ -29,7 +29,7 @@ feature changes. The shortcuts below are the default bindings.
 | Fix the words, the thread settles | edit the words an open thread is about: it reads them again and ties off when the problem is gone |
 | Answer in the note | write the answer anywhere in the note: the thread's mind checks it, the thread ties off, and a knot sews in after your words; point at the knot to see what it answers, click it to open the thread, whose tag says "Answered in your note"; an explanation you asked for counts once it is in your own words; Reopen if it is not the answer |
 | Your first sentence | in a new notebook, the first sentence you write always gets a question |
-| Reads along, or waits to be asked | per note, in the sentence above the title (Inkling reads along); the default is a setting |
+| Reads along, or waits to be asked | per note, in the sentence above the title (Inkling reads along); the default is a setting. Reading along, Claude's small model looks at each finished paragraph first and only sends on the ones worth a full read |
 | Read it through | the mode menu's last item, or ⇧⌘R: every paragraph it has not read, top to bottom, once, by the same rules as reading along; the needle works down the gutter, a pill at the top of the window says how far it has got, and threads arrive as it goes; Stop or ⇧⌘R again stops it, and the next pass goes on from there |
 | Tell Inkling what a note is for | the brief, above the title; every read and answer takes it into account |
 | Learns about you | About you in Settings; it can learn from your replies (switch) |

@@ -21,6 +21,8 @@ export interface Directive {
   pages?: Record<string, string>;
   // resultError only for a call that can look things up (it has tools); others succeed
   webOnce?: boolean;
+  // what the first look at a paragraph answers (main.ts firstLook); without it, look
+  gate?: unknown;
 }
 
 /** Pages the fake web serves, filled from the directives played so far (test/fake-brain.ts). */
@@ -34,7 +36,11 @@ function directiveOf(prompt: unknown): Directive {
 }
 
 export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any }) {
-  const d = directiveOf(prompt);
+  const directive = directiveOf(prompt);
+  // The first look at a paragraph gets its own answer, so a read's directive still plays
+  // for the full read that follows it.
+  const firstLook = typeof options?.systemPrompt === "string" && options.systemPrompt.startsWith("You screen paragraphs");
+  const d: Directive = firstLook ? { structured: directive.gate ?? { look: true }, delayMs: directive.gate !== undefined ? directive.delayMs : undefined } : directive;
   for (const [url, text] of Object.entries(d.pages ?? {})) fakePages.set(url, text);
   const signal: AbortSignal | undefined = options?.abortController?.signal;
   const aborted = () => Boolean(signal?.aborted) && !d.ignoreAbort;

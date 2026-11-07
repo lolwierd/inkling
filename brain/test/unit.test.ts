@@ -550,3 +550,25 @@ describe("what a read's prompt holds", () => {
     expect(often).toContain("Speak by your When to speak rule");
   });
 });
+
+describe("the first look's prompt", () => {
+  test("the note around the paragraph, the open questions, and the reader's rule", async () => {
+    const { gatePrompt, around } = await import("../src/prompts.ts");
+    const long = "a".repeat(5000) + " The target sentence is here. " + "b".repeat(2000);
+    const near = around(long, "The target sentence is here.");
+    expect(near.startsWith("…") && near.endsWith("…")).toBe(true);
+    expect(near).toContain("The target sentence is here.");
+    expect(near.length).toBeLessThan(3000 + 800 + 40);
+    expect(around("short note", "missing")).toBe("short note");
+    const mind = { name: "Editor", description: "", howItThinks: "", voice: "plain" as const, frequency: "rarely" as const };
+    const threads = [
+      { quote: "four days", messages: [{ role: "mind" as const, text: "Why four?" }], resolved: false },
+      { quote: "done", messages: [{ role: "mind" as const, text: "Tied off." }], resolved: true },
+    ];
+    const p = gatePrompt({ noteTitle: "Plan", noteText: "I run four days a week.", brief: null, mind, aboutMe: null, threads, now: "", letStand: [] }, "I run four days a week.");
+    expect(p).toContain("- «four days»: Why four?");
+    expect(p).not.toContain("Tied off.");
+    expect(p).toContain("The full reader speaks by this rule: Speak only when something is clearly wrong");
+    expect(p).toContain("When unsure, set it to true");
+  });
+});

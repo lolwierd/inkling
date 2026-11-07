@@ -50,7 +50,7 @@ The full list is in [`design/capabilities.md`](design/capabilities.md).
 
 The app (Rust, [GPUI](https://www.gpui.rs)) draws the page and stores your notes. The brain (TypeScript, Bun) calls Claude through the Agent SDK. They talk in JSON lines over stdin and stdout.
 
-About two seconds after you stop typing, the app sends each paragraph you finished to the brain. Each read includes the whole note and its threads, what you told Inkling the note is for, what it has learned about you, and the points you let stand. A paragraph isn't read again until you change it. A note that waits to be asked only checks whether a paragraph answers an open thread. After a read, a local search of your other notes can add one more call with up to three related passages.
+About two seconds after you stop typing, the app sends each paragraph you finished to the brain. Claude's small model (Haiku) looks at it first, with the text around it, and most paragraphs stop there. If it sees something worth asking, the full read goes to the model you picked, with the whole note and its threads, what you told Inkling the note is for, what it has learned about you, and the points you let stand. A paragraph isn't read again until you change it. A note that waits to be asked only checks whether a paragraph answers an open thread. After a read, a local search of your other notes can add one more call with up to three related passages.
 
 The brain can read and search local files and your Claude Code memories, with Read, Glob and Grep only. Web search is only for things you ask, and you can turn it off in Settings > Model. A cited page is kept only if the brain finds the quoted words on it.
 

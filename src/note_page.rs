@@ -4229,9 +4229,16 @@ impl NotePage {
                     .gap(px(12.))
                     .child(
                         ui::ghost_button(SharedString::from(format!("res-{id_res}")), if tied { "Reopen" } else { "Resolve" }, &t)
-                            .keyed_as("tag:resolve", 4., thread_color, cx, move |this, _, cx| {
+                            .keyed_as("tag:resolve", 4., thread_color, cx, move |this, window, cx| {
+                                // Resolve clears the active tag; do not let this click open it again.
+                                cx.stop_propagation();
                                 let st = if tied { ThreadStatus::Open } else { ThreadStatus::Resolved };
-                                this.set_status(&id_res, st, cx)
+                                this.set_status(&id_res, st, cx);
+                                if tied {
+                                    this.activate(Some(id_res.clone()), window, cx);
+                                } else {
+                                    this.restore_focus(window, cx);
+                                }
                             }),
                     )
                     .child(

@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 process.env.INKLING_DATA_DIR = join(tmpdir(), "inkling-brain-unit-test");
 
-const { accountStatus, childEnv, classify, installedClaude, runStructured, runText, setQueryForTests, ProviderError } = await import("../src/claude.ts");
+const { accountStatus, addUsage, childEnv, classify, installedClaude, runStructured, runText, setQueryForTests, usageLine, ProviderError } = await import("../src/claude.ts");
 const { cleanSvg, clip, findQuote, snapQuote } = await import("../src/output.ts");
 const { relatePrompt, replyPrompt, readPrompt } = await import("../src/prompts.ts");
 const { fakeQuery } = await import("./fake-sdk.ts");
@@ -498,5 +498,15 @@ describe("answers in the note", () => {
     const bare = settlePrompt(ctx([]), "q", [], target, undefined, []);
     expect(bare).toContain("(nothing said in it yet)");
     expect(bare).not.toContain("The words that may settle it");
+  });
+});
+
+describe("usage", () => {
+  test("two calls for one request add up", () => {
+    const a = { ms: 900, model: "haiku", inputTokens: 300, outputTokens: 10, costUsd: 0.001, turns: 1 };
+    const b = { ms: 2100, model: "sonnet", inputTokens: 4000, cacheReadTokens: 3000, outputTokens: 60, costUsd: 0.02, turns: 2, tools: { Grep: 1 } };
+    const u = addUsage(a, b);
+    expect(u).toEqual({ ms: 3000, model: "haiku + sonnet", inputTokens: 4300, cacheReadTokens: 3000, outputTokens: 70, costUsd: 0.021, turns: 3, tools: { Grep: 1 } });
+    expect(usageLine("read", "r7", u)).toBe("usage read r7: 3.0 s, haiku + sonnet, in 4300 (cache read 3000, write 0), out 70, $0.0210, 3 turns, tools Grep×1");
   });
 });

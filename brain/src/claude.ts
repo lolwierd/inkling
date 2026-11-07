@@ -191,6 +191,7 @@ async function drain(
   let limitRejected = false;
   const found: Found[] = [];
   let searches = 0;
+  const tools: Record<string, number> = {};
   for await (const m of q) {
     switch (m.type) {
       case "user": {
@@ -206,6 +207,12 @@ async function drain(
       case "assistant": {
         const err = (m as any).error;
         if (typeof err === "string") assistantError = err;
+        const blocks = (m as any).message?.content;
+        if (Array.isArray(blocks)) {
+          for (const b of blocks) {
+            if (b?.type === "tool_use" && typeof b.name === "string" && b.name !== "StructuredOutput") tools[b.name] = (tools[b.name] ?? 0) + 1;
+          }
+        }
         break;
       }
       case "stream_event": {
@@ -229,7 +236,15 @@ async function drain(
       }
       case "result": {
         const r = m as any;
-        const usage: Usage = { ms: Date.now() - started, model, costUsd: r.total_cost_usd, ...tokens(r.usage), ...(searches ? { searches } : {}) };
+        const usage: Usage = {
+          ms: Date.now() - started,
+          model,
+          costUsd: r.total_cost_usd,
+          ...tokens(r.usage),
+          ...(searches ? { searches } : {}),
+          ...(typeof r.num_turns === "number" ? { turns: r.num_turns } : {}),
+          ...(Object.keys(tools).length ? { tools } : {}),
+        };
         // Where a call that looked things up spent its tokens, per model, for the log.
         if (searches && r.modelUsage) {
           const per = Object.entries(r.modelUsage as Record<string, any>).map(
@@ -251,6 +266,42 @@ async function drain(
     }
   }
   throw new ProviderError("other", "the model stopped without a result");
+}
+
+/** Two calls made for one request, counted as one: time, tokens, cost, turns and tools add up. */
+export function addUsage(a: Usage, b: Usage): Usage {
+  const sum = (x?: number, y?: number) => (x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0));
+  const tools: Record<string, number> = { ...(a.tools ?? {}) };
+  for (const [k, n] of Object.entries(b.tools ?? {})) tools[k] = (tools[k] ?? 0) + n;
+  const out: Usage = {
+    ms: a.ms + b.ms,
+    model: [a.model, b.model].filter(Boolean).join(" + ") || undefined,
+    costUsd: sum(a.costUsd, b.costUsd),
+    inputTokens: sum(a.inputTokens, b.inputTokens),
+    outputTokens: sum(a.outputTokens, b.outputTokens),
+    cacheReadTokens: sum(a.cacheReadTokens, b.cacheReadTokens),
+    cacheWriteTokens: sum(a.cacheWriteTokens, b.cacheWriteTokens),
+    searches: sum(a.searches, b.searches),
+    turns: sum(a.turns, b.turns),
+    tools: Object.keys(tools).length ? tools : undefined,
+  };
+  for (const k of Object.keys(out) as (keyof Usage)[]) if (out[k] === undefined) delete out[k];
+  return out;
+}
+
+/** One request's usage as a line for brain.log: what each task costs, measured. */
+export function usageLine(task: string, id: string, u: Usage): string {
+  const parts = [`${(u.ms / 1000).toFixed(1)} s`];
+  if (u.model) parts.push(u.model);
+  if (u.inputTokens !== undefined || u.cacheReadTokens !== undefined) {
+    parts.push(`in ${u.inputTokens ?? 0} (cache read ${u.cacheReadTokens ?? 0}, write ${u.cacheWriteTokens ?? 0})`);
+  }
+  if (u.outputTokens !== undefined) parts.push(`out ${u.outputTokens}`);
+  if (u.costUsd !== undefined) parts.push(`$${u.costUsd.toFixed(4)}`);
+  if (u.turns !== undefined) parts.push(`${u.turns} turn${u.turns === 1 ? "" : "s"}`);
+  if (u.tools) parts.push("tools " + Object.entries(u.tools).map(([k, n]) => `${k}×${n}`).join(" "));
+  if (u.searches) parts.push(`${u.searches} search${u.searches === 1 ? "" : "es"}`);
+  return `usage ${task} ${id}: ${parts.join(", ")}`;
 }
 
 /** The token counts on a result, as numbers, when the runtime reports them. */

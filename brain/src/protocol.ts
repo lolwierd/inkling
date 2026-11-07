@@ -138,4 +138,7 @@ export interface Usage {
   cacheWriteTokens?: number;
   /** Web searches the call made. */
   searches?: number;
+  /** Model turns the runtime took, and the tools it called by name (the structured answer's own tool left out). */
+  turns?: number;
+  tools?: Record<string, number>;
 }

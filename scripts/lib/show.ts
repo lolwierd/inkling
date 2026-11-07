@@ -50,7 +50,7 @@ export function show(dir: string, what: string, json: boolean): number {
     const brain = readBrainLog(join(dir, "brain.log"));
     if (json) out.brain = brain;
     else {
-      console.log("== brain (fake brain traffic; the real brain logs only problems)");
+      console.log("== brain (fake brain traffic; the real brain logs problems and one usage line per request)");
       for (const b of brain) {
         const d = b.data;
         if (b.dir === "recv") {

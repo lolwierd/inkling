@@ -4,7 +4,7 @@
 // `done` or `error` event; after a cancel it is never `done`.
 
 import { createInterface } from "node:readline";
-import { accountStatus, ProviderError, runStructured, runText, WebSpent, type LimitInfo } from "./claude.ts";
+import { accountStatus, addUsage, ProviderError, runStructured, runText, usageLine, WebSpent, type LimitInfo } from "./claude.ts";
 import { cleanSvg, clip, findQuote, pickAnswers, snapQuote } from "./output.ts";
 import {
   answerPrompt,
@@ -280,7 +280,7 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
     if (!web || !(e instanceof WebSpent) || signal.signal.aborted) throw e;
     log(`${input.task} ${id}: ${e.message}; answering without the web`);
     const again = await runOnce(id, settings, input, signal, false);
-    return { data: again.data, usage: { ...again.usage, costUsd: (again.usage.costUsd ?? 0) + e.spentUsd } };
+    return { data: again.data, usage: addUsage({ ms: 0, costUsd: e.spentUsd }, again.usage) };
   }
 }
 
@@ -448,6 +448,7 @@ async function handleRun(req: Json) {
     name = input.task;
     const { data, usage } = await run(id, settings(req.settings), input, signal);
     if (signal.signal.aborted) throw new ProviderError("cancelled", "cancelled");
+    log(usageLine(name, id, usage));
     emit({ ev: "done", id, data, usage });
   } catch (e) {
     const err = e instanceof ProviderError ? e : new ProviderError("other", e instanceof Error ? e.message : String(e));

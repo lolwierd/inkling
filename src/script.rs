@@ -117,6 +117,7 @@
 //! press: 900, 300           # the left button goes down there; `point:` steps then drag
 //! release                   # the button comes up where the pointer is
 //! point: 640, 300           # move the pointer there (`hover: n` rests it on thread n's tag)
+//! wheel: 640, 300, -200     # scroll at a point by this many pixels (negative goes down)
 //! size: 900x620             # resize the window to this width and height
 //! set: appearance=dark      # also size=small|default|large, ink=madder|indigo|…,
 //!                           # lettering=own|notes, pointer=on|off
@@ -198,6 +199,8 @@ pub enum Step {
     Click(f32, f32),
     /// The pointer moves to a point in the window (dragging, after `press`).
     Pointer(f32, f32),
+    /// Scroll at a point by a vertical pixel delta.
+    Wheel(f32, f32, f32),
     /// A menu bar item, `Menu > Item`, chosen as the menu would choose it.
     Menu(String, String),
     /// Let thread n stand, with the words typed into its tag's box first as the reason.
@@ -388,6 +391,14 @@ pub fn parse(src: &str) -> Vec<Step> {
                         return None;
                     }
                 },
+                "wheel" => {
+                    let values: Vec<f32> = arg.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+                    if values.len() != 3 {
+                        log::warn!("script: wheel needs `x, y, delta`: {l:?}");
+                        return None;
+                    }
+                    Step::Wheel(values[0], values[1], values[2])
+                }
                 "follow" => Step::Follow(n()),
                 "delete" => Step::Delete(arg),
                 "undo-delete" => Step::UndoDelete,

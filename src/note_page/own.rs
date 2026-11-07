@@ -104,12 +104,15 @@ impl NotePage {
     pub(super) fn add_to_own(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(input) = self.replies.get(id).cloned() else { return };
         let text = input.read(cx).value().trim().to_string();
-        if text.is_empty() || self.pending.contains_key(id) {
+        if text.is_empty() {
             return;
         }
+        let answering = self.own_calls.get(id).cloned();
+        let minds = self.callable_minds(cx);
+        self.interrupt_thread(id, cx);
         input.update(cx, |i, cx| i.set_value("", window, cx));
         self.push_message(id, Role::You, text.clone(), cx);
-        if let Some(mind) = called_mind(&text, &self.callable_minds(cx)) {
+        if let Some(mind) = called_mind(&text, &minds).or_else(|| minds.into_iter().find(|m| Some(&m.name) == answering.as_ref())) {
             self.maybe_learn(&text, cx);
             self.call_into_own(id, mind, cx);
         }
@@ -216,9 +219,10 @@ impl NotePage {
     /// One message in a tag. In your own thread your lines are set as your words are, in
     /// your lettering and ink, and a called mind's answer comes under its name in its
     /// thread; in a mind's thread, as before.
-    pub(super) fn thread_message(&self, thread: &Thread, m: &Message, t: &Theme, cx: &App) -> AnyElement {
+    pub(super) fn thread_message(&self, thread: &Thread, key: &str, m: &Message, t: &Theme, cx: &App) -> AnyElement {
+        let key = format!("thread-{}-{key}", thread.id);
         if !thread.own {
-            return self.message_view(m, t, false).into_any_element();
+            return self.message_view(key, m, t).into_any_element();
         }
         match m.role {
             Role::You => div()
@@ -226,7 +230,7 @@ impl NotePage {
                 .text_size(px(ts::TITLE))
                 .line_height(px(21.))
                 .text_color(ink(t))
-                .child(m.text.clone())
+                .child(thread_pane::markdown(key, &m.text, t))
                 .into_any_element(),
             Role::Mind => {
                 let name = thread.author(m);
@@ -236,7 +240,7 @@ impl NotePage {
                     .flex_col()
                     .gap(px(2.))
                     .child(div().text_size(px(ts::SMALL)).font_weight(FontWeight::SEMIBOLD).text_color(color).truncate().child(name))
-                    .child(self.message_view(m, t, false))
+                    .child(self.message_view(key, m, t))
                     .into_any_element()
             }
         }

@@ -47,6 +47,8 @@ this list when a feature lands or goes; the key is the default binding.
 | Move a tag | drag it by the tab or the top row; it keeps its place |
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |
+| Long threads | the conversation scrolls inside a bounded tag; its header, reply box and actions stay visible; messages render Markdown, including links, lists, emphasis and code |
+| Steer an answer | send another message while the mind is answering to redirect it immediately; the interrupted words stay in the history and the replacement uses your new direction |
 | Threads of your own | Add to it: a line for you, sent nowhere; Ask Inkling on the tag, or a line that starts with a mind's name, calls that mind in for one answer; only you tie it off or cut it, and editing its words starts no reread; the minds see it as yours and do not ask it back |
 | Write it in | when your reply ties a thread off, its tag offers to put the reply, word for word, under the paragraph it is about, for you to rework; it becomes the thread's answer, with its knot; Undo in the toast, or ⌘Z |
 | Tie off | Resolve: the knot is tied and joins the border at the top of the page |

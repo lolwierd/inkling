@@ -487,6 +487,13 @@ fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
                 *HELD.lock().unwrap_or_else(|e| e.into_inner()) = Some((*x, *y));
             }
         }
+        Step::Wheel(x, y, dy) => {
+            window.dispatch_event(PlatformInput::Scroll(ScrollEvent {
+                position: point(px(*x), px(*y)),
+                delta: ScrollDelta::Pixels(point(px(0.), px(*dy))),
+                ..Default::default()
+            }), cx);
+        }
         Step::Press(x, y) => {
             let position = point(px(*x), px(*y));
             window.dispatch_event(move_to(position), cx);
@@ -793,7 +800,7 @@ impl AppView {
                     }
                     // Input goes to the window as the platform would send it, outside any
                     // view's update, so the views it reaches can update themselves.
-                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) | Step::Press(..) | Step::Release => {
+                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) | Step::Wheel(..) | Step::Press(..) | Step::Release => {
                         cx.update(|window, cx| window_step(&step, window, cx)).is_ok()
                     }
                     _ => this.update_in(cx, |app, window, cx| app.script_step(step, window, cx)).is_ok(),

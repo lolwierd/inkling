@@ -1,0 +1,22 @@
+# A steering line calls the same mind back without requiring its name again.
+# fixture: running-plan
+# env: FAKE_DELTA_MS=500
+select: Sunday is the long run.
+ask-yourself: How should I build distance?
+activate: 3
+call: Skeptic
+wait: 400
+dump: streaming
+expect: d.pending.length === 1
+reply: Focus on recovery days instead.
+settle
+dump: steered
+expect: d.pending.length === 0
+expect: d.threads[2].msgs === 4
+expect: requests.filter(r => r.input.task === "ask").length === 2
+expect: requests.filter(r => r.input.task === "ask")[1].input.history.at(-1).text === "Focus on recovery days instead."
+expect: notes[0].threads[2].messages[1].text.endsWith("*Interrupted.*")
+expect: notes[0].threads[2].messages[1].mind === "Skeptic"
+expect: notes[0].threads[2].messages[3].mind === "Skeptic"
+expect: events.some(e => e.ev === "error" && e.kind === "cancelled")
+quit

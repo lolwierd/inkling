@@ -1,0 +1,20 @@
+# Sending while answering cancels the old reply, including its pending resolve.
+# fixture: running-plan
+# tags: smoke
+activate: 1
+reply: Explain the pace. [[delay:5000]] [[resolved]]
+wait: 300
+dump: answering
+expect: d.pending.length === 1
+reply: Focus on the weekly distance instead.
+settle
+wait: 5100
+dump: steered
+expect: d.pending.length === 0
+expect: d.threads[0].status === "Open"
+expect: d.threads[0].msgs === 4
+expect: requests.filter(r => r.input.task === "reply").length === 2
+expect: requests.filter(r => r.input.task === "reply")[1].input.messages.at(-1).text.includes("Explain the pace")
+expect: events.some(e => e.ev === "error" && e.kind === "cancelled")
+expect: notes[0].threads[0].messages.at(-1).text.includes("weekly distance")
+quit

@@ -1,0 +1,59 @@
+{
+  "id": "00000000-0000-4000-8000-0000000000a1",
+  "title": "Sub-50 10k by March",
+  "folder": null,
+  "blocks": [
+    {
+      "kind": "title",
+      "text": "Sub-50 10k by March"
+    },
+    {
+      "kind": "paragraph",
+      "text": "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes."
+    },
+    {
+      "kind": "paragraph",
+      "text": "The plan is to run four days a week and hold 5:30 per km on every run, so my legs learn race pace. If I hold 5:30 for the whole race, I’ll come in just under 50."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Sunday is the long run. I’ll add a kilometre every week until I reach 16."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Strength work twice a week, mostly calves and hips, because that’s where it fell apart last year."
+    },
+    {
+      "kind": "paragraph",
+      "text": ""
+    }
+  ],
+  "marks": [],
+  "brief": null,
+  "mode": "thinks_with_you",
+  "mind_id": "inkling",
+  "threads": [
+    {
+      "id": "t1",
+      "start": 261,
+      "end": 325,
+      "quote": "If I hold 5:30 for the whole race, I’ll come in just under 50.",
+      "kind": "correction",
+      "status": "open",
+      "side": "right",
+      "mind_name": "Inkling",
+      "created_at": "2026-11-06T12:00:00Z",
+      "messages": [
+        {
+          "role": "mind",
+          "text": "## Compare the same thing\n\nA **cold boot** and a *snapshot restore* measure different paths. Use the same start and finish for both.\n\n- Start at the request\n- End at the first command\n- Report p50 and p99\n\nRead the [measurement guide](https://example.com/measurement). Keep `systemd-analyze` as a separate number.\n\n```rust\nfn boot_ms() -> u32 {\n    firmware + kernel + services\n}\n```\n\n> Measure what the person waiting actually experiences.\n\n| Path | Start |\n| --- | --- |\n| Cold | Request |\n| Restore | Request |\n\n### Trial 1\n\nRun the cold start and restore with the same image and region. Keep the raw observations so the tail is visible.\n\n### Trial 2\n\nRun the cold start and restore with the same image and region. Keep the raw observations so the tail is visible.\n\n### Trial 3\n\nRun the cold start and restore with the same image and region. Keep the raw observations so the tail is visible.\n\n### Trial 4\n\nRun the cold start and restore with the same image and region. Keep the raw observations so the tail is visible.\n\n### Trial 5\n\nRun the cold start and restore with the same image and region. Keep the raw observations so the tail is visible.",
+          "at": "2026-11-06T12:00:00Z"
+        }
+      ]
+    }
+  ],
+  "chat": [],
+  "read_hashes": [],
+  "created_at": "2026-11-06T12:00:00Z",
+  "updated_at": "2026-11-06T12:00:00Z"
+}

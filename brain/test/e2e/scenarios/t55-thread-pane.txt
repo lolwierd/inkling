@@ -1,0 +1,38 @@
+# Long Markdown histories scroll inside the tag; its composer stays visible.
+# fixture: thread-pane
+# tags: smoke
+activate: 1
+wait: 800
+dump: initial
+expect: d.panels.t1[3] <= 560
+expect: d.conversations.t1.max > 500
+wheel: 1110, 430, 5000
+wait: 300
+dump: top
+expect: d.conversations.t1.scrolled === 0
+expect: d.scrolled === dumps.initial.scrolled
+expect: Math.abs(d.panels.t1[3] - dumps.initial.panels.t1[3]) < 2
+shot: markdown-light
+wheel: 1110, 430, -160
+wait: 300
+dump: scrolled
+expect: d.conversations.t1.scrolled > 100
+expect: d.conversations.t1.scrolled < d.conversations.t1.max
+expect: d.scrolled === dumps.initial.scrolled
+reply: Compare both paths. [[delay:5000]]
+wait: 500
+shot: steering
+reply: Show only the difference.
+settle
+wait: 500
+dump: answered
+expect: d.conversations.t1.max - d.conversations.t1.scrolled < 2
+size: 900x620
+set: appearance=dark
+wait: 1000
+dump: smaller
+expect: d.panels.t1[3] <= 548
+expect: d.panels.t1[1] >= 40
+expect: d.panels.t1[1] + d.panels.t1[3] <= 620
+shot: markdown-dark-small
+quit

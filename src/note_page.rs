@@ -37,6 +37,7 @@ mod read_through;
 pub(crate) mod own;
 mod answers;
 mod write_in;
+mod thread_pane;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -689,6 +690,7 @@ pub struct NotePage {
     last_drag_end: Option<std::time::Instant>,
     /// Natural height of each unfolded tag, measured, to unfold toward.
     panel_heights: Heights,
+    conversations: HashMap<String, thread_pane::Conversation>,
     /// Each tab's bounds in the window at the last paint: where its panel has room to open.
     tab_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     /// The side each tag's panel opened on at the last frame (true: to the right), so a
@@ -814,6 +816,7 @@ impl NotePage {
             drag: None,
             last_drag_end: None,
             panel_heights: Rc::new(RefCell::new(HashMap::new())),
+            conversations: HashMap::new(),
             tab_bounds: Rc::new(RefCell::new(HashMap::new())),
             panel_sides: HashMap::new(),
             sheet_bounds: Rc::new(Cell::new(None)),
@@ -942,6 +945,7 @@ impl NotePage {
         self.copied = None;
         self.numbers.clear();
         self.panel_heights.borrow_mut().clear();
+        self.conversations.clear();
         self.tab_bounds.borrow_mut().clear();
         self.panel_bounds.borrow_mut().clear();
         self.mark_bounds.borrow_mut().clear();
@@ -1994,6 +1998,11 @@ impl NotePage {
     }
 
     fn push_message(&mut self, id: &str, role: Role, text: String, cx: &mut Context<Self>) {
+        if role == Role::You {
+            if let Some(conversation) = self.conversations.get(id) {
+                conversation.scroll.scroll_to_bottom();
+            }
+        }
         if let Some(t) = self.thread_mut(id) {
             t.messages.push(Message::new(role, text));
         }
@@ -2426,9 +2435,10 @@ impl NotePage {
         }
         let Some(input) = self.replies.get(id).cloned() else { return };
         let text = input.read(cx).value().trim().to_string();
-        if text.is_empty() || self.pending.contains_key(id) {
+        if text.is_empty() {
             return;
         }
+        self.interrupt_thread(id, cx);
         input.update(cx, |i, cx| i.set_value("", window, cx));
         let Some(t) = self.note.threads.iter().find(|t| t.id == id).cloned() else { return };
         self.push_message(id, Role::You, text.clone(), cx);
@@ -2491,7 +2501,14 @@ impl NotePage {
                 }
                 cx.notify();
             }
-            BrainMsg::Delta(_) => {}
+            BrainMsg::Delta(d) => {
+                match page.pending.get_mut(&tid) {
+                    Some((_, Pending::Streaming(s))) => s.push_str(&d),
+                    Some(p) => p.1 = Pending::Streaming(d),
+                    None => {}
+                }
+                cx.notify();
+            }
         });
         self.pending.insert(id, (req, Pending::Thinking));
         cx.notify();
@@ -3197,6 +3214,9 @@ impl NotePage {
                 .map(|(id, b)| (short(id), json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()])))
                 .collect(),
         );
+        state["conversations"] = Value::Object(self.conversations.iter().map(|(id, c)| {
+            (short(id), json!({"scrolled": -c.scroll.offset().y.as_f32(), "max": c.scroll.max_offset().y.as_f32()}))
+        }).collect());
         if let (Some(c), Some(s)) = (self.column_bounds.get(), self.sheet_bounds.get()) {
             let top = s.origin.y.as_f32() + 50.;
             state["column"] = json!([c.origin.x.as_f32(), top, c.size.width.as_f32(), (c.origin.y + c.size.height).as_f32() - top]);
@@ -3751,7 +3771,7 @@ impl NotePage {
         }
     }
 
-    fn message_view(&self, m: &Message, t: &Theme, align_right: bool) -> Div {
+    fn message_view(&self, key: String, m: &Message, t: &Theme) -> Div {
         let p = t.p;
         match m.role {
             // Inkling's words are for reading: ink, not thread.
@@ -3760,8 +3780,7 @@ impl NotePage {
                 .text_size(px(ts::BODY))
                 .line_height(px(20.))
                 .text_color(p.ink)
-                .when(align_right, |d| d.text_right())
-                .child(m.text.clone()),
+                .child(thread_pane::markdown(key, &m.text, t)),
             // your reply wraps under itself, beside "You", inside the tag
             Role::You => div()
                 .flex()
@@ -3770,9 +3789,8 @@ impl NotePage {
                 .text_size(px(ts::UI))
                 .line_height(px(18.))
                 .text_color(p.graphite)
-                .when(align_right, |d| d.text_right())
                 .child(div().flex_none().text_color(p.faint).child("You"))
-                .child(div().flex_1().min_w(px(0.)).child(m.text.clone())),
+                .child(div().flex_1().min_w(px(0.)).child(thread_pane::markdown(key, &m.text, t))),
         }
     }
 
@@ -4019,6 +4037,9 @@ impl NotePage {
         let id = thread.id.clone();
         let is_active = self.active.as_deref() == Some(id.as_str());
         let pending = self.pending.get(&id).map(|(_, s)| s.clone());
+        let streaming = match &pending { Some(Pending::Streaming(s)) => s.len(), _ => 0 };
+        let conversation_scroll = self.conversations.entry(id.clone()).or_default().update(thread.messages.len(), streaming, is_active);
+        let panel_limit = (self.viewport.height.as_f32() - CHROME_H - 32.).clamp(200., 560.);
         // an asked thread starts with your question and its answer; replies are what follows
         let replies = thread.messages.len().saturating_sub(if thread.kind == ThoughtKind::Ask { 2 } else { 1 });
         let mind = thread.asker();
@@ -4116,23 +4137,25 @@ impl NotePage {
                 )
                 .children(self.numbers.get(&id).map(|n| div().flex_none().text_size(px(ts::SMALL)).text_color(p.faint).child(n.to_string()))),
         );
+        let header = body;
+        let mut body = div().flex().flex_col().gap(px(8.));
         if tied && !is_active {
             let first = thread.messages.first().map(|m| m.text.clone()).unwrap_or_default();
             let short: String = first.chars().take(64).collect::<String>() + if first.chars().count() > 64 { "\u{2026}" } else { "" };
             body = body.child(div().text_size(px(ts::UI)).line_height(px(18.)).text_color(p.faint).child(short));
         } else {
             // Folded, a tag shows what it says: a question's question, an asked mind's answer.
-            let messages: Vec<&Message> = if is_active {
-                thread.messages.iter().collect()
+            let messages: Vec<(usize, &Message)> = if is_active {
+                thread.messages.iter().enumerate().collect()
             } else if thread.kind == ThoughtKind::Ask {
-                thread.messages.iter().rev().find(|m| m.role == Role::Mind).or(thread.messages.first()).into_iter().collect()
+                thread.messages.iter().enumerate().rev().find(|(_, m)| m.role == Role::Mind).or(thread.messages.first().map(|m| (0, m))).into_iter().collect()
             } else {
-                thread.messages.iter().take(1).collect()
+                thread.messages.iter().enumerate().take(1).collect()
             };
             // a thread between notes quotes the other end under what it asks
             let mut far = self.far_end_block(thread, thread_color, cx);
-            for m in messages {
-                body = body.child(self.thread_message(thread, m, &t, cx));
+            for (index, m) in messages {
+                body = body.child(self.thread_message(thread, &index.to_string(), m, &t, cx));
                 if let Some(w) = self.working_block(thread, m, thread_color, is_active, width - 30., cx) {
                     body = body.child(w);
                 }
@@ -4140,7 +4163,7 @@ impl NotePage {
             }
             body = body.children(far);
             if let Some(Pending::Streaming(s)) = &pending {
-                body = body.child(self.thread_message(thread, &self.partial(&id, s.clone()), &t, cx));
+                body = body.child(self.thread_message(thread, "stream", &self.partial(&id, s.clone()), &t, cx));
             }
             body = body.children(is_active.then(|| self.answer_row(thread, thread_color, cx)).flatten());
             if let Some(d) = self.drawing_block(&id, width - 36., cx) {
@@ -4194,10 +4217,28 @@ impl NotePage {
                 );
             }
         }
+        // Only the conversation scrolls. Leave room for the header, composer, and
+        // the actions even when their labels wrap in a narrow margin.
+        let conversation = div()
+            .id(SharedString::from(format!("conversation-{id}")))
+            .relative()
+            .min_h(px(0.))
+            .max_h(px(panel_limit - if is_active { 150. } else { 50. }))
+            .overflow_y_scroll()
+            .track_scroll(&conversation_scroll)
+            .child(body.pr(px(5.)));
+        let conversation = div().relative().child(conversation).child(
+            gpui_kit::component::scroll::Scrollbar::vertical(&conversation_scroll)
+                .mode(gpui_kit::component::scroll::ScrollbarMode::Always)
+                .styles(move |styles| styles
+                    .track(|style| style.bg(gpui_kit::transparent_black()))
+                    .thumb(move |style| style.bg(p.faint.opacity(0.35))))
+        );
+        let mut body = header.child(conversation);
         if is_active {
             if let Some(input) = self.replies.get(&id).cloned() {
                 let id_send = id.clone();
-                let can_send = pending.is_none() && !input.read(cx).value().trim().is_empty();
+                let can_send = !input.read(cx).value().trim().is_empty();
                 body = body.child(
                     div()
                         .flex()
@@ -4218,8 +4259,9 @@ impl NotePage {
                                 .p(px(2.))
                                 .m(px(-2.))
                                 .rounded(px(4.))
-                                .child(icon("send", 13., if can_send { p.ink } else { p.faint }))
-                                // nothing to send, or an answer on its way: quiet, as the chat's arrow is
+                                .when(pending.is_none(), |d| d.child(icon("send", 13., if can_send { p.ink } else { p.faint })))
+                                .when(pending.is_some(), |d| d.text_size(px(ts::SMALL)).text_color(p.ink).child("Steer"))
+                                // Sending while an answer runs redirects it immediately.
                                 .when(!can_send, |d| d.opacity(0.6))
                                 .when(can_send, |d| {
                                     d.cursor_pointer()

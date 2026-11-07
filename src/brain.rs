@@ -219,6 +219,9 @@ impl Brain {
             return;
         }
         let Some(ev) = line else {
+            // Writer failure and stdout EOF can report the same stop. Retire this
+            // process before callbacks, so later events cannot replace its failure.
+            self.generation += 1;
             // Its output closed: it has stopped. Everyone still waiting hears why.
             let why = self.proc.take().map(Proc::reap).unwrap_or_else(|| "the brain stopped".into());
             log::warn!("brain: {why}");

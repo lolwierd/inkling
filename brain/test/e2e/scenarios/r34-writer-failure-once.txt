@@ -1,0 +1,12 @@
+# Writer failure followed by stdout EOF must preserve the first failure's diagnostics.
+# env: INKLING_BRAIN_ENTRY=test/e2e/closed-input.ts
+note: Broken input
+mode: ask
+type: These are the words to ask about.
+select: These are the words to ask about.
+probe
+wait: 1500
+dump: failed
+expect: d.pending.length === 0
+expect: (() => { const stopped = log.filter(l => l.target === "inkling::brain" && l.msg.startsWith("brain: the brain stopped")); return stopped.length > 0 && stopped.every(l => l.msg.includes("Error: closed input fixture")); })()
+quit

@@ -1,0 +1,20 @@
+# An answers-only check holds the read slot but does not fulfill an explicit full pass.
+note: Answer check then full read
+mode: reads
+type: We should keep every cached result until the whole request finishes.
+settle
+mode: ask
+type: We should discard the cache after each individual request finishes [[read>delay:5000]].
+wait: 2800
+dump: answers-only
+expect: d.reading !== null && d.read_hashes === 1 && d.threads.length === 1
+read-through
+dump: requested-pass
+expect: d.read_through !== null && d.read_through.total === 1
+settle: 20000
+dump: fully-read
+expect: d.read_through === null && d.reading === null && d.read_hashes === 2
+expect: d.threads.length === 2
+expect: requests.filter(r => r.input.task === "read" && r.input.answersOnly === true).length === 1
+expect: requests.filter(r => r.input.task === "read" && r.input.through === true).length === 1
+quit

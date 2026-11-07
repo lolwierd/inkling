@@ -1,0 +1,32 @@
+# Confirming an answer does not fulfill an explicit pass, whether the pass starts
+# during the initial check or during the confirmation itself.
+note: Pending answer confirmation
+mode: reads
+type: We should keep every cached result until the whole request finishes.
+settle
+mode: ask
+type: We should discard the cache after each individual request finishes [[read>delay:5000]] [[answers:1]] [[settle>delay:5000]] [[settle>unsettled]].
+wait: 2800
+read-through
+dump: requested-pass
+expect: d.read_through !== null && d.read_through.total === 1
+settle: 25000
+dump: fully-read
+expect: d.read_through === null && d.reading === null && d.read_hashes === 2
+expect: requests.filter(r => r.input.task === "read" && r.input.through === true && r.input.ctx.noteTitle === "Pending answer confirmation").length === 1
+expect: requests.some(r => r.input.task === "settle")
+note: Ask during confirmation
+mode: reads
+type: We should keep every cached result until the whole request finishes.
+settle
+mode: ask
+type: We should discard the cache after each individual request finishes [[answers:1]] [[settle>delay:5000]] [[settle>unsettled]].
+wait: 3000
+dump: confirming
+expect: d.reading === null && d.rechecking.length === 1 && d.read_hashes === 1
+read-through
+settle: 20000
+dump: full-second-read
+expect: d.read_through === null && d.reading === null && d.read_hashes === 2
+expect: requests.filter(r => r.input.task === "read" && r.input.through === true && r.input.ctx.noteTitle === "Ask during confirmation").length === 1
+quit

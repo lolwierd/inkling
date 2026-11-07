@@ -681,7 +681,7 @@ pub struct NotePage {
     /// at again at the next pause. (The thread's own quote follows the words on save.)
     rechecks: HashMap<String, (std::time::Instant, String)>,
     /// Threads being looked at again right now (the needle works beside them).
-    rechecking: HashMap<String, u64>,
+    rechecking: HashMap<String, lifecycle::Recheck>,
     settle_task: Option<Task<()>>,
     /// Minds a script seats for its next ask.
     pending_room: Vec<String>,
@@ -1504,7 +1504,7 @@ impl NotePage {
         });
         let input = self.between_reply(&t, input, cx);
         let tid = id.to_string();
-        self.rechecking.insert(tid.clone(), paragraph_hash);
+        self.rechecking.insert(tid.clone(), lifecycle::Recheck::Edit(paragraph_hash));
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);

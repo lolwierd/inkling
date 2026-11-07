@@ -3,6 +3,11 @@
 use super::*;
 use std::collections::VecDeque;
 
+pub(super) enum Recheck {
+    Edit(u64),
+    Answer(u64),
+}
+
 #[derive(Default)]
 pub(super) struct Lifecycle {
     pub epoch: u64,
@@ -16,7 +21,12 @@ pub(super) struct Lifecycle {
 impl NotePage {
     pub(super) fn paragraph_in_flight(&self, hash: u64) -> bool {
         self.reading.as_ref().is_some_and(|r| r.hash == hash)
-            || self.rechecking.values().any(|h| *h == hash)
+            || self.rechecking.values().any(|r| matches!(r, Recheck::Answer(h) if *h == hash))
+            || self.thread_read_in_flight(hash)
+    }
+
+    pub(super) fn thread_read_in_flight(&self, hash: u64) -> bool {
+        self.rechecking.values().any(|r| matches!(r, Recheck::Edit(h) if *h == hash))
             || self.lifecycle.calls.values().any(|h| *h == hash)
     }
 

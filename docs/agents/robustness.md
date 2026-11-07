@@ -30,6 +30,10 @@ A completed recheck records the paragraph hash captured when it started, never a
 newer paragraph that happened to exist when its answer arrived.
 Read it through uses the same in-flight reservations as reading along, including
 calls by name and edit rechecks. Starting another pass cannot duplicate that work.
+It waits for the global read slot instead of omitting that paragraph: an answers-only
+check does not fulfill an explicit request to read the paragraph through. Edit rechecks
+and answer confirmations have distinct reservation kinds: confirming an answer does
+not substitute for reading the paragraph, either.
 
 Queued learning messages carry the profile revision under which they were submitted.
 A stale result discards only older queued work; messages submitted after the reset
@@ -58,6 +62,8 @@ blocking the UI. Cancellation kills an unresponsive process if its input cannot
 accept the cancellation. Shutdown attempts a graceful exit for at most 300 ms,
 then kills and reaps the process. The OS/process scheduler can add latency to that
 deadline; it is not a real-time guarantee.
+The first terminal event retires the process generation, so a writer failure followed
+by stdout EOF cannot replace the diagnostic or accept a buffered event from that process.
 
 The real brain rejects a task whose serialized input exceeds 256 KiB before
 calling the SDK. It reports that the note/conversation is too large rather than
@@ -132,7 +138,7 @@ ordering reproducible; it cannot make model answers deterministic.
 ## Reproduce validation
 
 Use `scripts/dev check`, then `scripts/dev e2e` for the complete app suite. The new
-race scenarios are `r18` through `r32`; `u33` also exercises the concurrently added
+race scenarios are `r18` through `r35`; `u33` also exercises the concurrently added
 folder/menu functionality. `cargo test robustness_tests -- --test-threads=1 --nocapture`
 runs the persistence/layout/pipe tests and prints the algorithm measurements.
 

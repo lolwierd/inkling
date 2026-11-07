@@ -264,11 +264,15 @@ pub struct Message {
     /// your own thread. Empty otherwise.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mind: String,
+    /// What the mind looked at for it: the files it opened and the pages it fetched, shown
+    /// under its words in the tag. Empty when it looked at nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub looked: Vec<String>,
 }
 
 impl Message {
     pub fn new(role: Role, text: impl Into<String>) -> Self {
-        Self { role, text: text.into(), at: Utc::now(), check: None, mind: String::new() }
+        Self { role, text: text.into(), at: Utc::now(), check: None, mind: String::new(), looked: vec![] }
     }
 }
 
@@ -288,6 +292,20 @@ pub struct Check {
     /// A page that says so: a search in the same call returned it and the quoted words
     /// are on it (`brain/src/web.ts`). Only with "Look things up on the web" on.
     pub source: Option<Source>,
+    /// A local file that says so: the mind opened it in the same call and the quoted words
+    /// are in it (`brain/src/files.ts`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<FileSource>,
+}
+
+/// A local file a correction cites, with the line its quoted words start on.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct FileSource {
+    pub path: String,
+    pub line: u32,
+    /// The words quoted from the file, as they are in it.
+    pub passage: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -1558,9 +1576,15 @@ mod tests {
             words: vec![Passage { words: "run four days a week".into(), note: None }],
             taken_back: true,
             source: Some(Source { url: "https://en.wikipedia.org/wiki/10K_run".into(), title: "10K run".into(), domain: "en.wikipedia.org".into(), passage: "a 10 km race".into() }),
+            file: Some(FileSource { path: "/repo/plan.md".into(), line: 3, passage: "ten weeks from 8 km".into() }),
         });
+        m.looked = vec!["/repo/plan.md".into()];
         let back: Message = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert_eq!(back.check, m.check);
+        assert_eq!(back.looked, m.looked);
+        // a message from before either is read with neither
+        let old: Message = serde_json::from_str(r#"{"role": "mind", "text": "x"}"#).unwrap();
+        assert!(old.looked.is_empty() && old.check.is_none());
     }
 
     #[std::prelude::v1::test]

@@ -181,6 +181,7 @@ impl NotePage {
                     if let Some(t) = page.thread_mut(&tid) {
                         t.messages.push(m);
                     }
+                    page.attach_looked(&tid, &v, cx);
                     page.schedule_save(cx);
                 }
                 cx.notify();

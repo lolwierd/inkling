@@ -57,6 +57,34 @@ fn source_link(key: &str, src: &crate::store::Source, ink: Hsla, t: &Theme, cx: 
         .into_any_element()
 }
 
+/// A file of yours a correction cites, as the tag shows it: its name and line, which shows
+/// the file in the Finder (never opens it: a file can be a program). The brain made sure the
+/// mind opened it and the words are in it.
+fn file_link(key: &str, f: &crate::store::FileSource, ink: Hsla, t: &Theme, cx: &mut Context<NotePage>) -> AnyElement {
+    let p = t.p;
+    let path = f.path.clone();
+    let tip = format!("{}, line {}. Show in Finder.", f.path, f.line);
+    div()
+        .id(SharedString::from(format!("file-{key}")))
+        .flex()
+        .items_center()
+        .gap_x(px(4.))
+        .text_size(px(ts::SMALL))
+        .line_height(px(17.))
+        .cursor_pointer()
+        .text_color(ink)
+        .hover(move |s| s.text_color(p.ink))
+        .child(div().child(working::file_place(f)))
+        .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+        .on_click(cx.listener(move |_, _, _, cx| {
+            cx.stop_propagation();
+            if let Err(e) = std::process::Command::new("open").arg("-R").arg(&path).spawn() {
+                log::warn!("show {path} in Finder: {e}");
+            }
+        }))
+        .into_any_element()
+}
+
 fn tabular() -> FontFeatures {
     FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)]))
 }
@@ -70,6 +98,43 @@ impl NotePage {
             m.check = Some(check);
         }
         self.schedule_save(cx);
+    }
+
+    /// What the mind looked at for its newest message in thread `id`, from its answer's
+    /// `looked` (the files it opened, the pages it fetched).
+    pub(super) fn attach_looked(&mut self, id: &str, answer: &Value, cx: &mut Context<Self>) {
+        let looked: Vec<String> = answer["looked"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).take(8).collect())
+            .unwrap_or_default();
+        if looked.is_empty() {
+            return;
+        }
+        if let Some(m) = self.thread_mut(id).and_then(|t| t.messages.iter_mut().rev().find(|m| m.role == Role::Mind)) {
+            m.looked = looked;
+        }
+        self.schedule_save(cx);
+    }
+
+    /// The line under a mind's message that says what it looked at, faint, with every path
+    /// and address in its tooltip. Nothing when it looked at nothing.
+    pub(super) fn looked_line(&self, m: &Message, key: &str, cx: &App) -> Option<AnyElement> {
+        if m.looked.is_empty() {
+            return None;
+        }
+        let p = Theme::get(cx).p;
+        let tip = m.looked.join("\n");
+        Some(
+            div()
+                .id(SharedString::from(format!("looked-{key}")))
+                .mt(px(2.))
+                .text_size(px(ts::META))
+                .line_height(px(15.))
+                .text_color(p.faint)
+                .child(format!("Looked at {}", working::looked_words(&m.looked)))
+                .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                .into_any_element(),
+        )
     }
 
     /// "· taken back" in the tag's top row, in place of "· tied off".
@@ -95,8 +160,10 @@ impl NotePage {
             "Working"
         } else if !c.words.is_empty() {
             "In your note"
-        } else {
+        } else if c.source.is_some() {
             "Source"
+        } else {
+            "In your files"
         };
         let mut head = div()
             .flex()
@@ -182,6 +249,13 @@ impl NotePage {
             }
             block = block.child(div().text_color(ink).when(back, |d| d.line_through()).child(format!("\u{201c}{}\u{201d}", src.passage)));
             block = block.child(source_link(&key, src, ink, &t, cx));
+        }
+        if let Some(f) = &c.file {
+            if label != "In your files" {
+                block = block.child(div().mt(px(2.)).text_size(px(ts::META)).text_color(p.faint).child("In your files"));
+            }
+            block = block.child(div().text_color(ink).when(back, |d| d.line_through()).child(format!("\u{201c}{}\u{201d}", f.passage)));
+            block = block.child(file_link(&key, f, ink, &t, cx));
         }
         Some(block.into_any_element())
     }

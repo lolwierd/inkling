@@ -76,6 +76,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
       margin.rs  stitch.rs  drawing.rs            output.ts  snap quotes, clean SVG
                                                   working.ts a correction's check, re-worked
                                                   web.ts     sources only when real, links
+                                                  files.ts   a file a correction cites, made sure of
     brain.rs  ⇄ JSON lines on stdin/stdout ⇄      protocol.ts the wire types
   store.rs: notes/<id>.json, settings.json, minds.json, folders.json in INKLING_DATA_DIR
 ```

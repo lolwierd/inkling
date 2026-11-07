@@ -1,10 +1,10 @@
 //! Show its working: a correction carries a check you can do yourself, a sum made from your
-//! own numbers or your own words from elsewhere in the note. The brain makes sure of it
+//! own numbers or your own words from elsewhere in the note, a page, or a file of yours. The brain makes sure of it
 //! before it leaves (`brain/src/working.ts`); this is the app's side without GPUI: reading
 //! the check off the wire, the words it is written in for Copy, exports and the minds, and
 //! where the words it rests on are now. The tag draws it in `note_page/show_working.rs`.
 
-use crate::store::{Check, Given, Message, Passage, Source, SumLine};
+use crate::store::{Check, FileSource, Given, Message, Passage, Source, SumLine};
 use serde_json::Value;
 use std::ops::Range;
 
@@ -26,7 +26,40 @@ pub fn from_wire(v: &Value) -> Option<Check> {
         let domain = text(&s["domain"]).unwrap_or_default();
         Some(Source { title: text(&s["title"]).unwrap_or_else(|| domain.clone()), url, domain, passage })
     });
-    (!sum.is_empty() || !words.is_empty() || source.is_some()).then(|| Check { sum, givens, words, taken_back: false, source })
+    // a file the brain made sure of: the mind opened it, its words are in it
+    let file = obj.get("file").filter(|f| f.is_object()).and_then(|f| {
+        let path = text(&f["path"]).filter(|p| p.starts_with('/'))?;
+        let passage = text(&f["passage"])?;
+        let line = f["line"].as_u64().filter(|l| *l >= 1).unwrap_or(1) as u32;
+        Some(FileSource { path, line, passage })
+    });
+    (!sum.is_empty() || !words.is_empty() || source.is_some() || file.is_some()).then(|| Check { sum, givens, words, taken_back: false, source, file })
+}
+
+/// A file's place as the tag shows it: its name and line, `README.md:12`.
+pub fn file_place(f: &FileSource) -> String {
+    let name = std::path::Path::new(&f.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| f.path.clone());
+    format!("{name}:{}", f.line)
+}
+
+/// What a message looked at, as the line under it says it: a file by its name, a page by
+/// its site. `/repo/README.md` and `https://www.example.org/x` read `README.md, example.org`.
+pub fn looked_words(looked: &[String]) -> String {
+    let short = |s: &String| {
+        if let Some(rest) = s.strip_prefix("https://").or_else(|| s.strip_prefix("http://")) {
+            let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+            host.strip_prefix("www.").unwrap_or(host).to_string()
+        } else {
+            std::path::Path::new(s).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| s.clone())
+        }
+    };
+    let mut seen: Vec<String> = vec![];
+    for s in looked.iter().map(short) {
+        if !seen.contains(&s) {
+            seen.push(s);
+        }
+    }
+    seen.join(", ")
 }
 
 /// `=`, or `≈` when the result is rounded.
@@ -56,6 +89,9 @@ pub fn parts(c: &Check) -> Vec<(String, String)> {
     }
     if let Some(s) = &c.source {
         out.push((format!("Source{back}"), format!("{} ({}, {}: {})", quoted(&s.passage), s.title, s.domain, s.url)));
+    }
+    if let Some(f) = &c.file {
+        out.push((format!("File{back}"), format!("{} ({}, line {})", quoted(&f.passage), f.path, f.line)));
     }
     out
 }
@@ -111,6 +147,8 @@ pub fn summary(c: &Check) -> String {
         format!("sum:{}", c.sum.len())
     } else if !c.words.is_empty() {
         format!("words:{}", c.words.len())
+    } else if c.file.is_some() {
+        "file:1".to_string()
     } else {
         format!("source:{}", c.source.is_some() as usize)
     };
@@ -144,6 +182,19 @@ mod tests {
         assert_eq!(from_wire(&json!({})), None);
         assert_eq!(from_wire(&Value::Null), None);
         assert_eq!(from_wire(&json!("5:30 × 10 = 55:00")), None);
+    }
+
+    #[std::prelude::v1::test]
+    fn a_file_of_yours_is_a_check_and_says_its_place() {
+        let c = from_wire(&json!({"file": {"path": "/repo/README.md", "line": 12, "passage": "lives on the runner for seven days"}})).expect("a file alone is a check");
+        let f = c.file.clone().unwrap();
+        assert_eq!(file_place(&f), "README.md:12");
+        assert_eq!(summary(&c), "file:1");
+        assert_eq!(text_lines(&c), vec!["File: \u{201c}lives on the runner for seven days\u{201d} (/repo/README.md, line 12)"]);
+        // a path that is not absolute, or no words, is no check
+        assert_eq!(from_wire(&json!({"file": {"path": "README.md", "passage": "words"}})), None);
+        assert_eq!(from_wire(&json!({"file": {"path": "/repo/README.md", "passage": " "}})), None);
+        assert_eq!(looked_words(&["/repo/README.md".into(), "https://www.example.org/a?b".into(), "/other/README.md".into()]), "README.md, example.org");
     }
 
     #[std::prelude::v1::test]

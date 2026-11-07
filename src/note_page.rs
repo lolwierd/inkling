@@ -1532,6 +1532,7 @@ impl NotePage {
                 }
                 if !body.is_empty() {
                     page.push_message(&tid, Role::Mind, body, cx);
+                    page.attach_looked(&tid, &v, cx);
                 }
                 if v["resolved"].as_bool() == Some(true) {
                     if let Some(t) = page.thread_mut(&tid) {
@@ -1892,6 +1893,7 @@ impl NotePage {
                     let sketch = v["sketch"].as_bool() == Some(true);
                     if let Some(id) = page.add_thought(line, &target, &quote, kind, Some(body), cx) {
                         page.attach_check(&id, &v["check"], cx);
+                        page.attach_looked(&id, &v, cx);
                         page.arrived.insert(id.clone(), std::time::Instant::now());
                         if sketch {
                             page.later(cx, move |page, cx| page.request_drawing(&id, None, cx));
@@ -2118,6 +2120,7 @@ impl NotePage {
                     page.notice("Inkling came back with nothing to say. Try asking again.".into(), cx);
                 } else {
                     page.push_message(&tid, Role::Mind, text, cx);
+                    page.attach_looked(&tid, &v, cx);
                     if let Some(hash) = read_hash {
                         page.lifecycle.calls.remove(&tid);
                         if !page.note.read_hashes.contains(&hash) { page.note.read_hashes.push(hash); }
@@ -2243,6 +2246,7 @@ impl NotePage {
                     }
                 }
                 page.push_message(&tid, Role::Mind, body, cx);
+                page.attach_looked(&tid, &v, cx);
                 page.attach_check(&tid, &v["check"], cx);
                 if v["sketch"].as_bool() == Some(true) {
                     let id = tid.clone();
@@ -2394,6 +2398,7 @@ impl NotePage {
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
                 if !body.is_empty() {
                     page.push_message(&tid, Role::Mind, body, cx);
+                    page.attach_looked(&tid, &v, cx);
                 }
                 let id = tid.clone();
                 page.later(cx, move |page, cx| page.request_drawing(&id, None, cx));
@@ -2487,6 +2492,7 @@ impl NotePage {
                     page.notice("Inkling came back with nothing to say. Try again.".into(), cx);
                 } else {
                     page.push_message(&tid, Role::Mind, body, cx);
+                    page.attach_looked(&tid, &v, cx);
                 }
                 if disputed {
                     page.after_dispute(&tid, v["resolved"].as_bool() == Some(true), cx);
@@ -3191,12 +3197,12 @@ impl NotePage {
             "marks": marks,
             "ropes": ropes,
             "slots": slots.iter().map(|s| json!({"id": short(&s.id), "side": format!("{:?}", s.side), "anchor": s.anchor_top.as_f32(), "top": s.top.as_f32(), "h": s.height.as_f32()})).collect::<Vec<_>>(),
-            "threads": self.note.threads.iter().map(|t| json!({
+            "threads": self.note.threads.iter().map(|t| { let mut v = json!({
                 "id": short(&t.id), "kind": format!("{:?}", t.kind), "status": format!("{:?}", t.status), "side": format!("{:?}", t.side),
                 "quote": t.quote, "msgs": t.messages.len(), "drawing": t.drawing.is_some(), "own": t.own,
                 "ending": format!("{:?}", t.ending()), "reason": t.reason, "before": t.first_quote,
                 "check": t.messages.iter().find_map(|m| m.check.as_ref()).map(crate::working::summary),
-            })).collect::<Vec<_>>(),
+            }); v["looked"] = json!(t.messages.iter().flat_map(|m| m.looked.iter()).count()); v }).collect::<Vec<_>>(),
             "anchors": ed.anchors().iter().map(|a| json!({"id": short(&a.id), "range": [a.range.start, a.range.end], "open": a.open})).collect::<Vec<_>>(),
             "read_hashes": self.note.read_hashes.len(),
             "left_alone": self.note.left_alone.len(),
@@ -4125,6 +4131,9 @@ impl NotePage {
                 body = body.child(self.thread_message(thread, &index.to_string(), m, &t, cx));
                 if let Some(w) = self.working_block(thread, m, thread_color, is_active, width - 30., cx) {
                     body = body.child(w);
+                }
+                if is_active {
+                    body = body.children(self.looked_line(m, &format!("{id}-{index}"), cx));
                 }
                 body = body.children(far.take());
             }

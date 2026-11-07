@@ -54,6 +54,10 @@
 //                                  a search hit with the words on its page is shown; a URL
 //                                  no [[found]] returned (made up), or a page without the
 //                                  words (a miss), falls back to the rest of the check
+//   [[file:PATH|PASSAGE|FILE TEXT]]  a correction cites a local file it opened, checked by
+//                                  the real brain's rules (src/files.ts); FILE TEXT is what
+//                                  the brain finds in it. Words not in it fall back.
+//   [[looked:PATH]]       read, probe, reply: what the mind looked at (repeatable)
 //   [[answers:2]]         read: the paragraph answers thread 2 (its number in the margin, as
 //                         the real brain is told), quoting its first six words; [[answers:2,3]]
 //   [[settle>unsettled]]  settle: the thread's mind says the paragraph does not settle it (by
@@ -79,6 +83,8 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { withWorking } from "../../src/working.ts";
+import { verifyFile } from "../../src/files.ts";
+import { normalize } from "node:path";
 import { verifySource, WEB_TASKS } from "../../src/web.ts";
 
 type Any = Record<string, any>;
@@ -229,8 +235,10 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
       const text = has("empty") ? "" : `[${id}] ${task === "read" ? "Read" : "Probe"}: what about “${clean(quote)}”?`;
       if (task === "read" && !text.trim()) return { data: { speak: false, ...answered } };
       const thought = { speak: true as const, kind: has("correction") ? ("correction" as const) : ("question" as const), quote, text, sketch: has("sketch") };
-      const checked = ["sum", "given", "words", "question", "nocheck", "source"].some(has);
-      if (thought.kind !== "correction" || !checked) return { data: { ...thought, ...answered } };
+      const lookedAt = p.ds.filter((d) => d.name === "looked").map((d) => (d.arg ?? "").trim()).filter(Boolean);
+      const looked = lookedAt.length ? { looked: lookedAt } : {};
+      const checked = ["sum", "given", "words", "question", "nocheck", "source", "file"].some(has);
+      if (thought.kind !== "correction" || !checked) return { data: { ...thought, ...answered, ...looked } };
       // The check goes through the real brain's rules, against the text without directives.
       const all = (name: string) => p.ds.filter((d) => d.name === name).map((d) => d.arg ?? "");
       const check = {
@@ -244,11 +252,17 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
       const bare = (v: unknown) => (typeof v === "string" ? v.replace(/\[\[[^\]]*\]\]/g, "") : "");
       const ctx = input.ctx ?? {};
       const writer = { title: bare(ctx.noteTitle), note: bare(ctx.noteText), brief: ctx.brief ? bare(ctx.brief) : null, target: bare(target), quote: bare(quote) };
-      const settle = (cited: Parameters<typeof withWorking>[4]): Answer => {
-        const settled = withWorking(thought, { check: has("nocheck") ? undefined : check, question: arg("question") ?? "" }, writer, (why) => log(why), cited);
-        if (settled) return { data: { ...settled, ...answered } };
+      const settle = (cited: Parameters<typeof withWorking>[4], filed: Parameters<typeof withWorking>[5] = null): Answer => {
+        const settled = withWorking(thought, { check: has("nocheck") ? undefined : check, question: arg("question") ?? "" }, writer, (why) => log(why), cited, filed);
+        if (settled) return { data: { ...settled, ...answered, ...looked } };
         return task === "read" ? { data: { speak: false, ...answered } } : { error: ["bad_output", "a correction came without a check or a question"] };
       };
+      const file = arg("file");
+      if (file !== null) {
+        const [path, passage, ...body] = file.split("|");
+        const at = normalize(path.trim());
+        return settle(null, verifyFile({ path: at, passage: (passage ?? "").trim() }, [at, ...lookedAt], (q) => (q === at ? body.join("|") : null)));
+      }
       const source = arg("source");
       if (source === null) return settle(null);
       // What this call's searches returned (nothing with the web off), and the pages behind them.
@@ -277,6 +291,7 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
           text: has("empty") ? "" : `[${id}] Reply to “${clean(input.message ?? "").slice(0, 50)}” (history ${Array.isArray(input.messages) ? input.messages.length : "?"})`,
           resolved: has("resolved") && !has("unresolved"),
           redraw: has("redraw"),
+          ...(p.ds.some((d) => d.name === "looked") ? { looked: p.ds.filter((d) => d.name === "looked").map((d) => (d.arg ?? "").trim()) } : {}),
         },
       };
     case "ask": {

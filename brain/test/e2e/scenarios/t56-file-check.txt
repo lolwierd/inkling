@@ -1,0 +1,14 @@
+# A correction can cite a file of yours that the mind opened: the tag shows the words from
+# the file, under In your files, with the file's name and line, and says what the mind
+# looked at. Words that are not in the file fall back to the question.
+# tags: working
+note: Cache
+type: [[correction]][[quote:for a week]][[looked:/repo/README.md]][[file:/repo/README.md|lives on the runner for seven days|The cache lives on the runner for seven days, then it is evicted.]][[question:How long does the cache live?]] The cache lives on the runner for a week.
+settle
+dump: filed
+expect: d.threads.length === 1 && d.threads[0].kind === "Correction" && d.threads[0].check === "file:1" && d.threads[0].looked === 1
+type:  [[correction]][[quote:every night]][[file:/repo/README.md|it is rebuilt every single night|The cache lives on the runner for seven days, then it is evicted.]][[question:When is it rebuilt?]] It is rebuilt every night.
+settle
+dump: missed
+expect: d.threads.length === 2 && d.threads[1].kind === "Question" && d.threads[1].check === null
+quit

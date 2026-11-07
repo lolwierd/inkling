@@ -418,6 +418,13 @@ describe("what each task sends back", () => {
       const probed = [{ id: "t9", quote: "about two minutes", messages: [{ role: "mind", text: `Measured how? ${fake({ structured: { notes: fresh } })}` }], resolved: false }];
       b.send(run("f", { task: "read", ctx: ctx("", { mind: other, threads: probed }), target: third, through: true, pass: "p4", ahead: [] }));
       expect((await b.end("f")).data).toMatchObject({ speak: true, text: "A different point" });
+      // a reply since in a thread the call knew about means a new call too
+      const known = [{ id: "t5", quote: "The cache lives", messages: [{ role: "mind", text: "How long?" }], resolved: false }];
+      b.send(run("g", { task: "read", ctx: ctx("", { mind: other, threads: known }), target: `${second} ${fake({ structured: { notes: [] } })}`, through: true, pass: "p5", ahead: [third] }));
+      expect((await b.end("g")).data).toEqual({ speak: false });
+      const replied = [{ ...known[0], messages: [...known[0].messages, { role: "you", text: `A week. ${fake({ structured: { notes: fresh } })}` }] }];
+      b.send(run("h", { task: "read", ctx: ctx("", { mind: other, threads: replied }), target: third, through: true, pass: "p5", ahead: [] }));
+      expect((await b.end("h")).data).toMatchObject({ speak: true, text: "A different point" });
       // so do other linked directories, and a point let stand since
       for (const [id, extra] of [["c", { localDirectories: ["/repo-b"] }], ["d", { letStand: [{ quote: "around 90 percent", point: "Measured how?", kind: "question", mind: "Inkling", reason: null }] }]] as const) {
         const more = [{ paragraph: 1, kind: "question", quote: "about two minutes", text: `Read again (${id})`, sketch: false, repeats: 0 }];

@@ -160,6 +160,9 @@ export async function verifySource(raw: unknown, found: Found[], open: FetchPage
   if (page === null) return { why: `${hit.url} could not be opened` };
   const onPage = findQuote(passage, pageText(page));
   if (!onPage) return { why: `the passage is not on ${hit.url}` };
+  // a quote like "first words … last words" finds everything between: keep it a passage
+  const quoted = onPage.split(/\s+/u).filter(Boolean).length;
+  if (quoted > 40) return { why: `the passage it found on ${hit.url} has ${quoted} words` };
   // the page's own title reads better than a search's (which can be a section's name)
   const title = titleOf(page) || hit.title || domainOf(hit.url);
   return { source: { url: hit.url, title, domain: domainOf(hit.url), passage: onPage.replace(/\s+/gu, " ").trim() } };

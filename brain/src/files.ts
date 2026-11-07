@@ -49,6 +49,9 @@ export function verifyFile(raw: unknown, opened: string[], read: ReadFile = read
   if (text === null) return { why: `${at} could not be read` };
   const inFile = findQuote(passage, text);
   if (!inFile) return { why: `the passage is not in ${at}` };
+  // a quote like "first words … last words" finds everything between: keep it a passage
+  const found = inFile.split(/\s+/u).filter(Boolean).length;
+  if (found > 40) return { why: `the passage it found in ${at} has ${found} words` };
   const line = text.slice(0, Math.max(0, text.indexOf(inFile))).split("\n").length;
   return { file: { path: at, line, passage: inFile.replace(/\s+/gu, " ").trim() } };
 }

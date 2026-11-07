@@ -576,5 +576,9 @@ describe("a file a correction cites", () => {
     expect(verifyFile({ path: "/repo/README.md", passage: "lives on the runner for nine days" }, ["/repo/README.md"], read)).toEqual({ why: "the passage is not in /repo/README.md" });
     expect(verifyFile({ path: "/repo/gone.md", passage }, ["/repo/gone.md"], read)).toEqual({ why: "/repo/gone.md could not be read" });
     expect(lookedAt(["/a", "/b", "/a"], ["https://x.org"])).toEqual(["/a", "/b", "https://x.org"]);
+    // a quote with … between its ends must not find the whole file between them
+    const long = `The cache lives on the runner ${"and then more words ".repeat(200)}until it is evicted at last.`;
+    const elided = verifyFile({ path: "/repo/long.md", passage: "The cache lives on the runner … until it is evicted at last." }, ["/repo/long.md"], () => long);
+    expect(elided).toMatchObject({ why: expect.stringContaining("words") });
   });
 });

@@ -162,7 +162,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 - Failed edit/settings writes retain the newest bytes for retry. Imports count only
   notes actually saved. Deletion removes the disk file before removing the note from
   memory and clears any queued older save, so retry cannot resurrect it.
-- One read in flight per page (`reading`); reads time out after 120 s, other tasks after 600 s.
+- One read in flight per page (`reading`); `send_task` allows 120 s for light requests
+  (including reads and replies), or 600 s when its `heavy` flag is set.
 - The page never calls back into an entity it is updating: brain callbacks are deferred
   (`send_task`, `later`). GPUI panics on a nested update of the same entity.
 - Store files load tolerantly: missing fields default, unknown ones are ignored, one bad

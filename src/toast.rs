@@ -7,7 +7,7 @@
 //! crossfade in 120 ms and it does not rise again. A new kind rises into the stack, above
 //! the ones already there, so nothing that is being read moves.
 //!
-//! Motion (design/explorations, "Toasts"): in over 180 ms rising 8 px, out over 160 ms
+//! Motion: in over 180 ms rising 8 px, out over 160 ms
 //! dropping 4 px; with reduced motion, fades only. A toast stays 3 s, 8 s when it offers
 //! Undo, and 12 s for a problem, which can also be closed (its ×, or a click anywhere on
 //! it). The pointer on a toast holds it.

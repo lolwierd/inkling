@@ -7,8 +7,7 @@
 //!
 //! The page keeps one [`Back`] and swaps its contents for [`view`] while it shows; the
 //! sheet, its border and the linen stay. The pure parts (the [`Entry`] model, dates, the
-//! turn's timing, the Markdown) are tested below. Design: `design/features/let-it-stand.md`,
-//! sections 1.2, 1.3 and 7.
+//! turn's timing, the Markdown) are tested below.
 
 use chrono::{DateTime, Datelike, Local, TimeZone, Utc};
 use gpui_kit::component::input::{Input, InputEvent, InputState};

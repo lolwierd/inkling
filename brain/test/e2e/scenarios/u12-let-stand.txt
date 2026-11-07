@@ -1,6 +1,6 @@
 # Let it stand: a mind's point let stand with the words in its box as the reason; Undo puts it
 # back on its words; every later read and probe carries the point, and the same point does not
-# come back, though a new one on the same words still lands (design/features/let-it-stand.md).
+# come back, though a new one on the same words still lands.
 # fixture: running-plan
 wait: 1500
 stand: 2 I start at 8 km, and the race is ten weeks out.

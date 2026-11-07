@@ -1,5 +1,5 @@
 //! Answers in the note: a thread tied off by words you wrote in the note, which its knot
-//! points to (`design/features/answer-in-the-note.md`). The page side (the knot, the tag's
+//! points to. The page side (the knot, the tag's
 //! "Answered in your note", the checks it sends) is `note_page/answers.rs`; this file holds
 //! the rules the app checks on its own, before a paragraph may tie a thread off. The brain's
 //! read names candidates and the thread's own mind confirms (`settle`); these can only say no.

@@ -1,4 +1,4 @@
-# Small things from the polish pass (design/qa/ui-polish.md), each checked where it can be.
+# Small things from the polish pass, each checked where it can be.
 # A question that gets no answer (here the brain stops on it) says why in its tag, under
 # your words, with Try again, which sends the question again. (Every brain in this run
 # stops on its first request, so the second try fails too and says so again.)

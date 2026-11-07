@@ -203,7 +203,7 @@ async function call(settings: object, input: object) {
   return { id, e, ms: Date.now() - t0 };
 }
 
-// Let it stand: the running plan, with points the writer let stand (design/features/let-it-stand.md).
+// Let it stand: the running plan, with points the writer let stand.
 const PLAN = [
   "Sub-50 10k by March",
   "Last year I ran the city 10k in 56:40. I went out too fast and walked twice after the 7 km mark. This year I want to finish under 50 minutes.",
@@ -579,7 +579,7 @@ const scenarios: Record<string, () => Promise<unknown>> = {
     const r = await call(LIGHT, { task: "learn", aboutMe: null, message: "I'm a backend engineer." });
     return r;
   },
-  // Answer in the note (design/features/answer-in-the-note.md): a read names the open
+  // Answer in the note: a read names the open
   // threads its paragraph answers, and the thread's mind confirms, strictly.
   async read_answers() {
     const r = await call(LIGHT, { task: "read", ctx: planCtx(ANSWER), target: ANSWER });

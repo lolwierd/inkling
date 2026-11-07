@@ -3,7 +3,6 @@
 //! back to what it was doing. The needle works down the gutter and threads arrive as each
 //! paragraph is read. A pass lives only on the open page: nothing about it is saved, and
 //! what it read is recorded where reading along records it (`read_hashes`, threads).
-//! design/features/read-it-through.md
 
 use super::*;
 
@@ -65,7 +64,7 @@ pub(crate) fn count(units: &[Unit], read: &[u64], left_alone: &[u64], imported: 
     units.iter().filter(|u| next_for(u, read, left_alone, imported) != Next::Skip).count()
 }
 
-// ----- the words on screen (design/features/read-it-through.md, "Every word on screen") --
+// ----- the words on screen --
 
 pub(crate) const NOTHING_NEW: &str = "Nothing new to read.";
 

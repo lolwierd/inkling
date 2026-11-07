@@ -1,5 +1,5 @@
 //! Threads between notes, as the page shows them: a thread that also quotes words in
-//! another note (`design/features/threads-between-notes.md`).
+//! another note.
 //!
 //! Its tab carries a second loop beside the first. Unfolded, its tag says `between notes`
 //! and quotes the other words in the writer's typeface, on a seam in the thread's colour,

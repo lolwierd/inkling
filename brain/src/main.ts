@@ -37,7 +37,7 @@ import type { Context, ElsewhereEnd, Event, Frequency, LetStandPoint, Passage, R
 import { withWorking } from "./working.ts";
 import { keepFoundLinks, verifySource, WEB_TASKS, type Found } from "./web.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.3";
 const running = new Map<string, AbortController>();
 
 function emit(e: Event) {

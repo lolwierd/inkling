@@ -11,9 +11,7 @@ runs the fifth.
 | Parity | `brain/test/parity.test.ts` | the protocol, the app's requests and the fake brain list the same tasks | `bun test test/parity.test.ts` |
 | Scenarios | `brain/test/e2e/scenarios/*.txt` | the real app, window and all, driven by a script, with the fake brain; checked by `expect:` lines | `scripts/dev e2e [names]` |
 
-Two more exist for people, not for every change: `brain/test/live.ts` (the real model;
-only when the owner asks) and `design/tools/demo_*.txt` (scripts that stage the demo
-note for screenshots and the video).
+Run `brain/test/live.ts` only when explicitly asked to use the real model.
 
 ## Anatomy of a scenario
 

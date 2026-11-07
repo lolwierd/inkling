@@ -1,11 +1,7 @@
 # What Inkling can do
 
-Every user-facing capability, taken from the code on 6 Nov 2026 and kept up as features
-land. The welcome guide (`src/welcome.rs`) must cover all of it. The walkthrough film
-(`design/video/`) does not: since 7 Nov it shows only the core of using a note (writing,
-reading along, a thread from your words, a correction's working, tying off, asking about a
-selection), at the owner's request; `design/video/coverage.md` lists what it shows. Update
-this list when a feature lands or goes; the key is the default binding.
+Update this list and the welcome guide (`src/welcome.rs`) when a user-facing
+feature changes. The shortcuts below are the default bindings.
 
 ## Writing
 

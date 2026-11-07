@@ -2,12 +2,13 @@
 // classification, the child environment, and the SDK drain against a fake SDK.
 // Run: bun test test/unit.test.ts
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.INKLING_DATA_DIR = join(tmpdir(), "inkling-brain-unit-test");
 
-const { accountStatus, childEnv, classify, runStructured, runText, setQueryForTests, ProviderError } = await import("../src/claude.ts");
+const { accountStatus, childEnv, classify, installedClaude, runStructured, runText, setQueryForTests, ProviderError } = await import("../src/claude.ts");
 const { cleanSvg, clip, findQuote, snapQuote } = await import("../src/output.ts");
 const { relatePrompt, replyPrompt, readPrompt } = await import("../src/prompts.ts");
 const { fakeQuery } = await import("./fake-sdk.ts");
@@ -15,6 +16,36 @@ setQueryForTests(fakeQuery as any);
 
 const settings = { model: "claude-opus-5-5", effort: "low" as const };
 const fake = (d: object) => `[[fake ${JSON.stringify(d)}]]`;
+
+test("finds native, Homebrew, and custom Claude installs and reports missing executables", () => {
+  const home = mkdtempSync(join(tmpdir(), "inkling-claude-"));
+  try {
+    const shellBin = join(home, "bin");
+    const nativeBin = join(home, ".local", "bin");
+    const brewBin = join(home, "homebrew", "bin");
+    mkdirSync(shellBin);
+    mkdirSync(nativeBin, { recursive: true });
+    mkdirSync(brewBin, { recursive: true });
+    const shellClaude = join(shellBin, "claude");
+    const nativeClaude = join(nativeBin, "claude");
+    const brewClaude = join(brewBin, "claude");
+    writeFileSync(shellClaude, "#!/bin/sh\n", { mode: 0o755 });
+    symlinkSync(shellClaude, brewClaude);
+    symlinkSync(shellClaude, nativeClaude);
+    expect(installedClaude({}, home, [brewBin])).toBe(nativeClaude);
+    expect(installedClaude({ INKLING_CLAUDE_PATH: shellClaude }, home, [brewBin])).toBe(shellClaude);
+
+    rmSync(nativeClaude);
+    symlinkSync(join(home, "missing"), nativeClaude);
+    expect(installedClaude({}, home, [brewBin])).toBe(brewClaude);
+    expect(installedClaude({ PATH: shellBin }, home, [brewBin])).toBe(shellClaude);
+    expect(() => installedClaude({}, home, [])).toThrow("Claude Code was not found");
+    expect(() => installedClaude({ INKLING_CLAUDE_PATH: nativeClaude }, home, [brewBin]))
+      .toThrow("INKLING_CLAUDE_PATH must point to an executable");
+  } finally {
+    rmSync(home, { recursive: true });
+  }
+});
 
 describe("snapQuote", () => {
   const src = "We’ll keep one Redis counter per user and  reset it every minute.";
@@ -174,7 +205,7 @@ describe("classify", () => {
     ['API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', "overloaded"],
     ["Repeated 529 Overloaded errors", "overloaded"],
     // Request ids and other digits must not look like status codes.
-    ["API Error: 500 Internal server error (request_id req_0114013b4290)", "other"],
+    ["API Error: 500 Internal server error (request_id req_test123)", "other"],
     ["The author of this note is not here", "other"],
     ["Claude Code process exited with code 1", "other"],
     ["Claude Code process aborted by user", "other"],
@@ -188,7 +219,7 @@ describe("childEnv", () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
     expect(env.HOME).toBe("/h");
-    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("inkling/0.1.0");
+    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("inkling/0.1.3");
   });
   test("keeps them with INKLING_USE_API_KEY=1", () => {
     const env = childEnv({ ANTHROPIC_API_KEY: "sk-test", INKLING_USE_API_KEY: "1" });

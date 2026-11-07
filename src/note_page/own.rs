@@ -3,7 +3,7 @@
 //! one is you; its words get seed stitches rather than a running stitch, so it differs in
 //! shape too. No mind answers in it unless you call one: the tag's Ask button, or a line
 //! that starts with a mind's name. Only you tie it off or cut it: editing its words starts
-//! no reread. The design: `design/features/threads-of-your-own.md`.
+//! no reread.
 //!
 //! A child of `note_page`, so it reaches the page's state without widening it; the page
 //! itself only hands over to the functions here.

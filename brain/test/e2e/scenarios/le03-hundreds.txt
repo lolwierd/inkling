@@ -1,6 +1,6 @@
 # Hundreds of open threads (forty notes in four folders, 200 open): the list draws only the
 # rows in view, Page Down reaches the last row, typing two words narrows to one, Return goes
-# there. (Screenshots: design/features/shots/loose-ends-*.jpg, taken with scripts/dev shot.)
+# there.
 # fixture: loose-ends-many
 # tags: loose-ends
 wait: 1500

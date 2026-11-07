@@ -123,7 +123,7 @@ const WEB_PROSE =
  *  ride at its end. Every read of the pass sends the same note, and the runtime caches the
  *  system prompt, so from the second read on the note comes from the cache instead of
  *  being written again with each paragraph (measured: about a quarter of the cost on a
- *  sixty-paragraph note; design/features/read-it-through.md). */
+ *  sixty-paragraph note). */
 export function throughSystemPrompt(ctx: Context): string {
   return [systemPrompt(ctx), "", "The note you are reading through, with its margin:", noteBlock(ctx)].join("\n");
 }
@@ -460,7 +460,7 @@ export const LEARN_SCHEMA = {
   properties: { update: { type: "boolean" }, aboutMe: { type: "string" } },
 } as const;
 
-// ----- answers in the note (design/features/answer-in-the-note.md) --------------------
+// ----- answers in the note --------------------
 
 /** A thread words in the note can still answer: open, and never the writer's own. */
 export function isOpen(t: Context["threads"][number]): boolean {

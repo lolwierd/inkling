@@ -1,6 +1,0 @@
-# tie off thread 1, then snip thread 2 (run with INKLING_SLOWMO=8 to watch it)
-wait: 2500
-resolve: 1
-wait: 9000
-dismiss: 2
-wait: 20000

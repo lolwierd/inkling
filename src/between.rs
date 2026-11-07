@@ -1,4 +1,4 @@
-//! Threads between notes, the data side (design: `design/features/threads-between-notes.md`).
+//! Threads between notes, the data side.
 //!
 //! Two jobs. **Finding** words in other notes that a paragraph may disagree with: a local
 //! index of every paragraph in the notebook, kept in memory and never sent anywhere, scores

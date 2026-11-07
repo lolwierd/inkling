@@ -39,7 +39,7 @@ const HELP = `scripts/dev <command> [options]
       --timeout S              stop the app after S seconds (default 120)
   show DIR [notes|dumps|brain|log|all] [--json]
                                what a run left: notes and threads, dumps, brain traffic, log
-  lint [--json]                banned words (the Riddled rule) in app and brain strings,
+  lint [--json]                Inkling terminology in app and brain strings,
                                AGENTS.md map drift, unknown scenario steps, bad expects
   fixtures                     list notebook fixtures
   worktree NAME                new branch + worktree in .worktrees/NAME with the main

@@ -16,6 +16,8 @@ pub(super) struct Lifecycle {
     pub calls: HashMap<String, u64>,
     learning: bool,
     learn_queue: VecDeque<(u64, String)>,
+    /// Wakes the page when the Claude plan's hold ends (`wake_after_hold`).
+    hold_wake: Option<Task<()>>,
 }
 
 impl NotePage {
@@ -38,8 +40,25 @@ impl NotePage {
 
     /// A paused edit that met a busy thread is retried when that request ends. Remove
     /// it before deferring, so two deltas cannot schedule the same recheck.
+    /// The Claude plan refused calls: when its hold ends, pick up what waited for it, the
+    /// paragraphs left unread, the rechecks and the learning, without waiting for you to
+    /// type again. One wake at a time.
+    pub(super) fn wake_after_hold(&mut self, cx: &mut Context<Self>) {
+        if self.lifecycle.hold_wake.is_some() { return; }
+        let Some(left) = crate::brain::hold_left() else { return };
+        self.lifecycle.hold_wake = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(left + Duration::from_secs(1)).await;
+            let _ = this.update(cx, |page, cx| {
+                page.lifecycle.hold_wake = None;
+                page.after_read(cx);
+                page.resume_rechecks(cx);
+                page.next_learning(cx);
+            });
+        }));
+    }
+
     pub(super) fn resume_rechecks(&mut self, cx: &mut Context<Self>) {
-        if self.typing_recently() { return; }
+        if self.typing_recently() || crate::brain::holding() { return; }
         let ready: Vec<_> = self.rechecks.keys().filter(|id| !self.pending.contains_key(*id)).cloned().collect();
         for id in ready {
             let Some((_, before)) = self.rechecks.remove(&id) else { continue };
@@ -67,8 +86,12 @@ impl NotePage {
     }
 
     fn next_learning(&mut self, cx: &mut Context<Self>) {
+        if self.lifecycle.learning { return; }
         // Learning waits, queued, while the Claude plan is refusing calls.
-        if self.lifecycle.learning || Brain::global(cx).read(cx).holding() { return; }
+        if crate::brain::holding() {
+            self.wake_after_hold(cx);
+            return;
+        }
         let store = cx.global::<Store>();
         if !store.settings.learns_about_me {
             self.lifecycle.learn_queue.clear();

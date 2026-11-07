@@ -531,6 +531,10 @@ describe("a point let stand, on the same words", () => {
     expect(sameWordsAs("a week", "question", points)).toBe(0); // too few words to say
     expect(sameWordsAs("the long run on Sunday", "question", points)).toBe(0);
     expect(sameWordsAs("", "question", points)).toBe(0);
+    // whole words only: a number or a word inside another is not the same words
+    expect(sameWordsAs("10", "correction", [{ quote: "100", kind: "correction" }])).toBe(0);
+    expect(sameWordsAs("war", "question", [{ quote: "software", kind: "question" }])).toBe(0);
+    expect(sameWordsAs("100", "correction", [{ quote: "100", kind: "correction" }])).toBe(1);
   });
 });
 

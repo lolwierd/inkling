@@ -231,7 +231,9 @@ export function sameWordsAs(quote: string, kind: string, points: { quote: string
     const theirs = words(p.quote);
     if (theirs.length === 0) return false;
     const [short, long] = mine.length <= theirs.length ? [mine, theirs] : [theirs, mine];
-    if (long.join(" ").includes(short.join(" ")) && short.length >= Math.min(3, long.length)) return true;
+    // the shorter quote's words, in order, as a run of whole words inside the longer one
+    const run = long.some((_, at) => short.every((w, k) => long[at + k] === w));
+    if (run && short.length >= Math.min(3, long.length)) return true;
     const shared = short.filter((w) => long.includes(w)).length;
     return short.length >= 3 && shared / long.length >= 0.6;
   });

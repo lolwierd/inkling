@@ -1409,13 +1409,6 @@ impl NotePage {
             let ed = self.editor.read(cx);
             ed.line_of(ed.cursor())
         };
-        // The Claude plan said no: what you wrote stays unread until it resets.
-        if Brain::global(cx).read(cx).holding() {
-            for line in [cursor_line, edited] {
-                if !self.waiting.contains(&line) { self.waiting.push(line); }
-            }
-            return;
-        }
         // Look at the line being written now, the line that was edited, and the
         // ones kept from before: after Enter the finished paragraph is the
         // edited one; after a paste or a dictated sentence it is the one under
@@ -1484,6 +1477,12 @@ impl NotePage {
     /// Inkling reads them again. If the edit answers it, the thread ties itself off with
     /// one line saying why; if not, it says what is still missing and stays open.
     fn recheck(&mut self, id: &str, before: String, cx: &mut Context<Self>) {
+        // The Claude plan said no: the look again waits for it to reset.
+        if crate::brain::holding() {
+            self.rechecks.entry(id.to_string()).or_insert((Instant::now(), before));
+            self.wake_after_hold(cx);
+            return;
+        }
         if self.pending.contains_key(id) {
             // Keep the latest edit until the current request releases this thread.
             self.rechecks.entry(id.to_string()).or_insert((Instant::now(), before));
@@ -1592,6 +1591,9 @@ impl NotePage {
         };
         let waits = self.note.mode == Mode::WhenYouAsk;
         let listens = !waits || self.listens_for_answers();
+        // The Claude plan said no: a paragraph waits, unread, until it resets; a call by
+        // name still goes, because you asked.
+        let held = crate::brain::holding();
         for (line, text, writing_code, alone) in candidates {
             let hash = hash_text(&text);
             let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash)
@@ -1610,6 +1612,12 @@ impl NotePage {
                 }
                 Verdict::Answer => {
                     self.answer_call(line, text, cx);
+                }
+                Verdict::Read if held => {
+                    if !self.waiting.contains(&line) && self.waiting.len() < MAX_WAITING {
+                        self.waiting.push(line);
+                    }
+                    self.wake_after_hold(cx);
                 }
                 Verdict::Read if waits => self.read_for_answers(line, text, hash, cx),
                 Verdict::Read => {

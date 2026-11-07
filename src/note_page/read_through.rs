@@ -42,6 +42,26 @@ pub(crate) struct Unit {
     pub calls: bool,
 }
 
+/// What a pass sends ahead with each read, at most: what the brain's one call reads with
+/// the paragraph being read (`THROUGH_BATCH` and `THROUGH_CHARS` in brain/src/prompts.ts).
+/// More would only make the request larger: the next call reads the rest.
+const AHEAD_PARAGRAPHS: usize = 39;
+const AHEAD_CHARS: usize = 24_000;
+
+/// The paragraphs a pass will read after `u`, as many as one call of the brain reads.
+fn ahead_of(u: &Unit, rest: &[Unit], read: &[u64], left_alone: &[u64], imported: bool) -> Vec<String> {
+    let mut chars = u.text.len();
+    rest.iter()
+        .filter(|r| next_for(r, read, left_alone, imported) == Next::Read)
+        .take(AHEAD_PARAGRAPHS)
+        .take_while(|r| {
+            chars += r.text.len();
+            chars <= AHEAD_CHARS
+        })
+        .map(|r| r.text.clone())
+        .collect()
+}
+
 /// What a pass does with a unit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Next {
@@ -214,9 +234,7 @@ impl NotePage {
             }
         }
         // what the pass will read after this one, for the brain's one call
-        let ahead: Vec<String> = pick.map_or(vec![], |(i, _)| {
-            units[i + 1..].iter().filter(|u| next_for(u, read, alone, imported) == Next::Read).map(|u| u.text.clone()).collect()
-        });
+        let ahead: Vec<String> = pick.map_or(vec![], |(i, _)| ahead_of(&units[i], &units[i + 1..], read, alone, imported));
         // A paragraph that calls the mind by name is answered, as reading along does, and
         // the pass goes on while the answer streams in.
         for u in calls {
@@ -458,5 +476,17 @@ mod tests {
             "Read it through stopped after 6 of 14. You\u{2019}ve reached your Claude usage limit for now. Try again later."
         );
         assert_eq!(failure_words(0, 14, "Claude is overloaded right now. Try again in a moment."), "Couldn\u{2019}t read it through. Claude is overloaded right now. Try again in a moment.");
+    }
+
+    #[std::prelude::v1::test]
+    fn what_a_pass_sends_ahead_is_what_one_call_reads() {
+        let unit = |text: String| Unit { line: 1, end: 2, text, code_alone: false, writing: false, calls: false };
+        let para = |i: usize| unit(format!("Paragraph {i} says something the pass will read in full."));
+        let rest: Vec<Unit> = (0..100).map(para).collect();
+        assert_eq!(ahead_of(&para(999), &rest, &[], &[], false).len(), AHEAD_PARAGRAPHS);
+        // long paragraphs stop at the characters one call reads
+        let long: Vec<Unit> = (0..10).map(|i| unit(format!("{i} {}", "word ".repeat(1_000)))).collect();
+        let sent = ahead_of(&para(0), &long, &[], &[], false);
+        assert!(sent.len() < 10 && sent.iter().map(String::len).sum::<usize>() <= AHEAD_CHARS);
     }
 }

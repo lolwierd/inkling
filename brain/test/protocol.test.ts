@@ -352,6 +352,14 @@ describe("what each task sends back", () => {
       expect(done.data).toMatchObject({ kind: "correction", check: { file: { path: readme, line: 3, passage: "lives on the runner for seven days" } }, looked: [readme] });
     });
 
+    test("a read that came back as an error is not opened: it backs nothing and is not listed", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...correction({ path: readme, passage: "lives on the runner for seven days" }), readsFail: [readme] })), target }));
+      const done = await b.end("r");
+      expect(done.data).toMatchObject({ kind: "question", text: "How long does the cache live?" });
+      expect(done.data.looked).toBeUndefined();
+    });
+
     test("a file it did not open, or words not in it, make the correction its question", async () => {
       const b = brain();
       b.send(run("a", { task: "read", ctx: ctx(fake(correction({ path: readme, passage: "lives on the runner for seven days" }))), target }));

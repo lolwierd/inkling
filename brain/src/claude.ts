@@ -214,9 +214,21 @@ async function drain(
   let searches = 0;
   const tools: Record<string, number> = {};
   const opened: Opened = { files: [], pages: [] };
+  // a Read or WebFetch counts as opened only once its result comes back without an error
+  const asked = new Map<string, { files: boolean; value: string }>();
   for await (const m of q) {
     switch (m.type) {
       case "user": {
+        const results = (m as any).message?.content;
+        if (Array.isArray(results)) {
+          for (const r of results) {
+            const use = r?.type === "tool_result" && typeof r.tool_use_id === "string" ? asked.get(r.tool_use_id) : undefined;
+            if (!use) continue;
+            asked.delete(r.tool_use_id);
+            if (r.is_error === true) continue;
+            (use.files ? opened.files : opened.pages).push(use.value);
+          }
+        }
         // a tool's result: a search's hits are what a source may cite
         const hits = foundIn((m as any).tool_use_result);
         if (Array.isArray((m as any).tool_use_result?.results)) searches += 1;
@@ -233,8 +245,8 @@ async function drain(
         if (Array.isArray(blocks)) {
           for (const b of blocks) {
             if (b?.type === "tool_use" && typeof b.name === "string" && b.name !== "StructuredOutput") tools[b.name] = (tools[b.name] ?? 0) + 1;
-            if (b?.type === "tool_use" && b.name === "Read" && typeof b.input?.file_path === "string") opened.files.push(b.input.file_path);
-            if (b?.type === "tool_use" && b.name === "WebFetch" && typeof b.input?.url === "string") opened.pages.push(b.input.url);
+            if (b?.type === "tool_use" && typeof b.id === "string" && b.name === "Read" && typeof b.input?.file_path === "string") asked.set(b.id, { files: true, value: b.input.file_path });
+            if (b?.type === "tool_use" && typeof b.id === "string" && b.name === "WebFetch" && typeof b.input?.url === "string") asked.set(b.id, { files: false, value: b.input.url });
           }
         }
         break;

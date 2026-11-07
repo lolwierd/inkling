@@ -61,14 +61,33 @@ pub struct Brain {
     /// The models this brain's Claude Code reported, in its order; None until it says.
     pub models: Option<Vec<ModelChoice>>,
     pub limit: Option<Limit>,
-    /// Until when (unix seconds) the calls nobody asked for wait: the Claude plan said no.
-    held_until: Option<i64>,
     pub last_error: Option<String>,
     _reader: Option<Task<()>>,
 }
 
 /// How long the calls nobody asked for wait after a refusal that gave no reset time.
 const HOLD_SECS: i64 = 300;
+
+/// Until when (unix seconds) the calls nobody asked for wait, because the Claude plan said
+/// no; 0 when nothing is held. Kept outside the Brain entity: a page asks from inside brain
+/// callbacks, while the Brain is being updated, and reading the entity then panics.
+static HELD_UNTIL: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+fn hold(until: Option<i64>) {
+    HELD_UNTIL.store(until.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The Claude plan refused a call and has not reset yet: reads, rechecks and learning
+/// wait instead of failing on every pause. What you ask for still goes.
+pub fn holding() -> bool {
+    hold_left().is_some()
+}
+
+/// How long the hold has left, while there is one.
+pub fn hold_left() -> Option<std::time::Duration> {
+    let left = HELD_UNTIL.load(std::sync::atomic::Ordering::Relaxed) - chrono::Utc::now().timestamp();
+    (left > 0).then(|| std::time::Duration::from_secs(left as u64))
+}
 
 /// Until when to hold after the plan refused at `now`: its reset time when it is still to
 /// come, or a few minutes. Nothing is held while the plan allows calls.
@@ -156,7 +175,6 @@ impl Brain {
                 account: None,
                 models: None,
                 limit: None,
-                held_until: None,
                 last_error: None,
                 _reader: None,
             };
@@ -261,8 +279,8 @@ impl Brain {
                     self.last_error = Some(message.clone());
                 }
                 // A request refused for the plan's limit, with or without a limit event.
-                if kind == "rate_limit" && !self.holding() {
-                    self.held_until = hold_until(self.limit.as_ref(), true, chrono::Utc::now().timestamp());
+                if kind == "rate_limit" && !holding() {
+                    hold(hold_until(self.limit.as_ref(), true, chrono::Utc::now().timestamp()));
                 }
                 self.pending.deliver(&id, BrainMsg::Error { kind, message }, cx);
                 cx.notify();
@@ -285,18 +303,12 @@ impl Brain {
                 cx.notify();
             }
             Event::Limit(limit) => {
-                self.held_until = hold_until(Some(&limit), limit.status == "rejected", chrono::Utc::now().timestamp());
+                hold(hold_until(Some(&limit), limit.status == "rejected", chrono::Utc::now().timestamp()));
                 self.limit = Some(limit);
                 cx.notify();
             }
             Event::Unknown => {}
         }
-    }
-
-    /// The Claude plan refused a call and has not reset yet: reads, rechecks and learning
-    /// wait instead of failing on every pause. What you ask for still goes.
-    pub fn holding(&self) -> bool {
-        self.held_until.is_some_and(|t| t > chrono::Utc::now().timestamp())
     }
 
     /// Write one request, starting the brain first if it is not running.

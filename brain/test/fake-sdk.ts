@@ -23,9 +23,11 @@ export interface Directive {
   webOnce?: boolean;
   // what the first look at a paragraph answers (main.ts firstLook); without it, look
   gate?: unknown;
-  // files the model opens with Read, and pages it fetches, before it answers
+  // files the model opens with Read, and pages it fetches, before it answers; a read that
+  // comes back as an error (denied, missing)
   reads?: string[];
   fetches?: string[];
+  readsFail?: string[];
 }
 
 /** Pages the fake web serves, filled from the directives played so far (test/fake-brain.ts). */
@@ -68,13 +70,20 @@ export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any 
       });
       throw abortError();
     }
-    for (const [i, path] of (d.reads ?? []).entries()) {
+    const toolResult = (id: string, error: boolean) => ({
+      type: "user",
+      parent_tool_use_id: null,
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: error ? "File does not exist." : "the text", ...(error ? { is_error: true } : {}) }] },
+    });
+    for (const [i, path] of [...(d.reads ?? []), ...(d.readsFail ?? [])].entries()) {
       await step();
       yield { type: "assistant", message: { content: [{ type: "tool_use", id: `read-${i}`, name: "Read", input: { file_path: path } }] } };
+      yield toolResult(`read-${i}`, i >= (d.reads ?? []).length);
     }
     for (const [i, url] of (d.fetches ?? []).entries()) {
       await step();
       yield { type: "assistant", message: { content: [{ type: "tool_use", id: `fetch-${i}`, name: "WebFetch", input: { url, prompt: "quote it" } }] } };
+      yield toolResult(`fetch-${i}`, false);
     }
     for (const [i, s] of (d.searches ?? []).entries()) {
       await step();

@@ -313,7 +313,14 @@ function looked(opened: Opened): { looked?: string[] } {
 
 /** What the one call of a Read it through pass said about each paragraph it read, by the
  * paragraph's words, until the pass reaches it; dropped half an hour after the call. */
-const passes = new Map<string, { at: number; made: string; opened: Opened; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
+const passes = new Map<string, { at: number; made: string; threads: Set<string>; opened: Opened; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
+
+/** A thread on `target` that was not in the margin when the pass's call was made: added by
+ * something other than the pass (Find a loose thread, reading along), which the stored
+ * result knows nothing about. The pass's own threads land on paragraphs it has read. */
+function newThreadOn(ctx: Context, target: string, had: Set<string>): boolean {
+  return ctx.threads.some((t) => t.id && !had.has(t.id) && t.quote.trim() !== "" && target.includes(t.quote.trim()));
+}
 
 /** What a pass's one call was made from, apart from the margin's threads (which the pass
  * itself adds): the note's words, the mind, the brief, the profile, the linked directories,
@@ -346,7 +353,7 @@ async function throughRead(
   const key = input.target.trim();
   const made = madeFrom(input.ctx, settings);
   const pass = passes.get(input.pass);
-  const known = pass?.made === made ? pass.by.get(key) : undefined;
+  const known = pass?.made === made && !newThreadOn(input.ctx, input.target, pass.threads) ? pass.by.get(key) : undefined;
   if (pass && known) {
     pass.by.delete(key);
     log(`read ${id}: from the pass's one call`);
@@ -382,7 +389,8 @@ async function throughRead(
   log(`read ${id}: read it through in one call, ${batch.length} paragraph(s), ${notes.length} note(s)`);
   const mine = by.get(key) ?? { d: { speak: false }, answers: [] };
   by.delete(key);
-  passes.set(input.pass, { at: now, made, opened, by });
+  const threads = new Set(input.ctx.threads.flatMap((t) => (t.id ? [t.id] : [])));
+  passes.set(input.pass, { at: now, made, threads, opened, by });
   return { ...mine, usage, opened };
 }
 

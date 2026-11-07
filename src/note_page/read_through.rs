@@ -47,6 +47,9 @@ pub(crate) struct Unit {
 /// More would only make the request larger: the next call reads the rest.
 const AHEAD_PARAGRAPHS: usize = 39;
 const AHEAD_CHARS: usize = 24_000;
+/// The largest request the brain takes (`run` in brain/src/main.ts), less some room: what
+/// goes ahead never makes a read too large that would have fitted without it.
+const REQUEST_ROOM: usize = 256 * 1024 - 4 * 1024;
 
 /// The paragraphs a pass will read after `u`, as many as one call of the brain reads.
 fn ahead_of(u: &Unit, rest: &[Unit], read: &[u64], left_alone: &[u64], imported: bool) -> Vec<String> {
@@ -59,6 +62,20 @@ fn ahead_of(u: &Unit, rest: &[Unit], read: &[u64], left_alone: &[u64], imported:
             chars <= AHEAD_CHARS
         })
         .map(|r| r.text.clone())
+        .collect()
+}
+
+/// As much of `ahead` as fits in the request `input` will be, in order: the note already
+/// rides in it, so a long note leaves less room (none, when it alone nearly fills it).
+fn fit_ahead(input: &Value, ahead: &[String]) -> Vec<String> {
+    let mut size = serde_json::to_vec(input).map_or(usize::MAX, |v| v.len()) + "\"ahead\":[],".len();
+    ahead
+        .iter()
+        .take_while(|p| {
+            size += serde_json::to_vec(p).map_or(usize::MAX, |v| v.len()) + 1;
+            size <= REQUEST_ROOM
+        })
+        .cloned()
         .collect()
 }
 
@@ -265,7 +282,7 @@ impl NotePage {
         input["through"] = json!(true);
         if let Some(p) = &self.read_through {
             input["pass"] = json!(p.id);
-            input["ahead"] = json!(p.ahead);
+            input["ahead"] = json!(fit_ahead(input, &p.ahead));
         }
     }
 
@@ -488,5 +505,23 @@ mod tests {
         let long: Vec<Unit> = (0..10).map(|i| unit(format!("{i} {}", "word ".repeat(1_000)))).collect();
         let sent = ahead_of(&para(0), &long, &[], &[], false);
         assert!(sent.len() < 10 && sent.iter().map(String::len).sum::<usize>() <= AHEAD_CHARS);
+    }
+
+    #[std::prelude::v1::test]
+    fn what_goes_ahead_fits_in_the_request() {
+        let ahead: Vec<String> = (0..39).map(|i| format!("{i} {}", "word ".repeat(120))).collect();
+        // a short note: all of it goes
+        let small = json!({"task": "read", "ctx": {"noteText": "short"}, "target": "t"});
+        assert_eq!(fit_ahead(&small, &ahead).len(), 39);
+        // a note that nearly fills the request leaves room for some, and the whole stays under it
+        let big = json!({"task": "read", "ctx": {"noteText": "x".repeat(REQUEST_ROOM - 10_000)}, "target": "t"});
+        let fits = fit_ahead(&big, &ahead);
+        assert!(!fits.is_empty() && fits.len() < 39);
+        let mut sent = big.clone();
+        sent["ahead"] = json!(fits);
+        assert!(serde_json::to_vec(&sent).unwrap().len() <= REQUEST_ROOM);
+        // one that fills it leaves none
+        let full = json!({"task": "read", "ctx": {"noteText": "x".repeat(REQUEST_ROOM)}, "target": "t"});
+        assert!(fit_ahead(&full, &ahead).is_empty());
     }
 }

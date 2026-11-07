@@ -62,7 +62,11 @@ impl NotePage {
     }
 
     pub(super) fn resume_rechecks(&mut self, cx: &mut Context<Self>) {
-        if self.typing_recently() || crate::brain::holding() { return; }
+        if crate::brain::holding() {
+            if !self.rechecks.is_empty() { self.wake_after_hold(cx); }
+            return;
+        }
+        if self.typing_recently() { return; }
         let ready: Vec<_> = self.rechecks.keys().filter(|id| !self.pending.contains_key(*id)).cloned().collect();
         for id in ready {
             let Some((_, before)) = self.rechecks.remove(&id) else { continue };

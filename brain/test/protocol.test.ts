@@ -408,6 +408,16 @@ describe("what each task sends back", () => {
       const again = [{ paragraph: 1, kind: "question", quote: "around 90 percent", text: "From the second mind", sketch: false, repeats: 0 }];
       b.send(run("b", { task: "read", ctx: ctx("", { mind: other }), target: second, through: true, pass: "p3", ahead: [`${third} ${fake({ structured: { notes: again } })}`] }));
       expect((await b.end("b")).data).toMatchObject({ speak: true, text: "From the second mind" });
+      // a thread something else hung on the paragraph since (Find a loose thread) means a new call
+      // the pass reads the second and third paragraphs in one call, and says nothing about the third
+      b.send(run("e", { task: "read", ctx: ctx("", { mind: other }), target: `${second} ${fake({ structured: { notes: [] } })}`, through: true, pass: "p4", ahead: [third] }));
+      expect((await b.end("e")).data).toEqual({ speak: false });
+      // then Find a loose thread hangs a question on the third; the pass's read of it makes a
+      // new call (its answer rides in the margin, where the new thread is), not the stored silence
+      const fresh = [{ paragraph: 1, kind: "question", quote: "Misses cost", text: "A different point", sketch: false, repeats: 0 }];
+      const probed = [{ id: "t9", quote: "about two minutes", messages: [{ role: "mind", text: `Measured how? ${fake({ structured: { notes: fresh } })}` }], resolved: false }];
+      b.send(run("f", { task: "read", ctx: ctx("", { mind: other, threads: probed }), target: third, through: true, pass: "p4", ahead: [] }));
+      expect((await b.end("f")).data).toMatchObject({ speak: true, text: "A different point" });
       // so do other linked directories, and a point let stand since
       for (const [id, extra] of [["c", { localDirectories: ["/repo-b"] }], ["d", { letStand: [{ quote: "around 90 percent", point: "Measured how?", kind: "question", mind: "Inkling", reason: null }] }]] as const) {
         const more = [{ paragraph: 1, kind: "question", quote: "about two minutes", text: `Read again (${id})`, sketch: false, repeats: 0 }];

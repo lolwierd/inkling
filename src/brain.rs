@@ -61,8 +61,22 @@ pub struct Brain {
     /// The models this brain's Claude Code reported, in its order; None until it says.
     pub models: Option<Vec<ModelChoice>>,
     pub limit: Option<Limit>,
+    /// Until when (unix seconds) the calls nobody asked for wait: the Claude plan said no.
+    held_until: Option<i64>,
     pub last_error: Option<String>,
     _reader: Option<Task<()>>,
+}
+
+/// How long the calls nobody asked for wait after a refusal that gave no reset time.
+const HOLD_SECS: i64 = 300;
+
+/// Until when to hold after the plan refused at `now`: its reset time when it is still to
+/// come, or a few minutes. Nothing is held while the plan allows calls.
+fn hold_until(limit: Option<&Limit>, refused: bool, now: i64) -> Option<i64> {
+    if !refused {
+        return None;
+    }
+    Some(limit.and_then(|l| l.resets_at).filter(|t| *t > now).unwrap_or(now + HOLD_SECS))
 }
 
 /// Effort levels from least to most, as the SDK names them.
@@ -142,6 +156,7 @@ impl Brain {
                 account: None,
                 models: None,
                 limit: None,
+                held_until: None,
                 last_error: None,
                 _reader: None,
             };
@@ -245,6 +260,10 @@ impl Brain {
                 if kind != "cancelled" {
                     self.last_error = Some(message.clone());
                 }
+                // A request refused for the plan's limit, with or without a limit event.
+                if kind == "rate_limit" && !self.holding() {
+                    self.held_until = hold_until(self.limit.as_ref(), true, chrono::Utc::now().timestamp());
+                }
                 self.pending.deliver(&id, BrainMsg::Error { kind, message }, cx);
                 cx.notify();
             }
@@ -266,11 +285,18 @@ impl Brain {
                 cx.notify();
             }
             Event::Limit(limit) => {
+                self.held_until = hold_until(Some(&limit), limit.status == "rejected", chrono::Utc::now().timestamp());
                 self.limit = Some(limit);
                 cx.notify();
             }
             Event::Unknown => {}
         }
+    }
+
+    /// The Claude plan refused a call and has not reset yet: reads, rechecks and learning
+    /// wait instead of failing on every pause. What you ask for still goes.
+    pub fn holding(&self) -> bool {
+        self.held_until.is_some_and(|t| t > chrono::Utc::now().timestamp())
     }
 
     /// Write one request, starting the brain first if it is not running.
@@ -684,7 +710,7 @@ fn crash_reason(stderr: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Account, BrainMsg, Event, Launch, Limit, Pending, Proc, crash_reason, parse_event, pump, write_line};
+    use super::{Account, BrainMsg, Event, HOLD_SECS, Launch, Limit, Pending, Proc, crash_reason, hold_until, parse_event, pump, write_line};
     use serde_json::{Value, json};
     use std::{
         cell::RefCell,
@@ -781,6 +807,12 @@ mod tests {
             Event::Limit(Limit { status: "rejected".into(), resets_at: Some(1762430400), utilization: None, kind: None })
         );
         assert_eq!(ev(r#"{"ev":"limit"}"#), Event::Limit(Limit::default()));
+        // A refusal holds until its reset, or a few minutes when the reset is unknown or past.
+        let at = |resets_at| Limit { status: "rejected".into(), resets_at, ..Limit::default() };
+        assert_eq!(hold_until(Some(&at(Some(2_000))), true, 1_000), Some(2_000));
+        assert_eq!(hold_until(Some(&at(Some(500))), true, 1_000), Some(1_000 + HOLD_SECS));
+        assert_eq!(hold_until(None, true, 1_000), Some(1_000 + HOLD_SECS));
+        assert_eq!(hold_until(Some(&at(Some(2_000))), false, 1_000), None);
         // The brain cannot fake its own exit, and odd lines are ignored.
         assert_eq!(ev(r#"{"ev":"exit"}"#), Event::Unknown);
         assert_eq!(ev(r#"{"id":"r1"}"#), Event::Unknown);

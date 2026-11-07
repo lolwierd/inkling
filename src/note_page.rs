@@ -1409,6 +1409,13 @@ impl NotePage {
             let ed = self.editor.read(cx);
             ed.line_of(ed.cursor())
         };
+        // The Claude plan said no: what you wrote stays unread until it resets.
+        if Brain::global(cx).read(cx).holding() {
+            for line in [cursor_line, edited] {
+                if !self.waiting.contains(&line) { self.waiting.push(line); }
+            }
+            return;
+        }
         // Look at the line being written now, the line that was edited, and the
         // ones kept from before: after Enter the finished paragraph is the
         // edited one; after a paste or a dictated sentence it is the one under

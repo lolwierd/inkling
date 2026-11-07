@@ -67,7 +67,8 @@ impl NotePage {
     }
 
     fn next_learning(&mut self, cx: &mut Context<Self>) {
-        if self.lifecycle.learning { return; }
+        // Learning waits, queued, while the Claude plan is refusing calls.
+        if self.lifecycle.learning || Brain::global(cx).read(cx).holding() { return; }
         let store = cx.global::<Store>();
         if !store.settings.learns_about_me {
             self.lifecycle.learn_queue.clear();

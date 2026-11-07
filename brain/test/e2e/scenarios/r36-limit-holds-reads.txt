@@ -1,0 +1,16 @@
+# The plan refuses a read: what you write next stays unread, with no second toast, until it
+# resets. What you ask for still goes.
+note: Limit
+type: The first paragraph runs into the usage limit for this plan [[error:rate_limit]].
+wait: 2700
+dump: refused
+expect: d.error.includes("usage limit") && tasks.filter(t => t === "read").length === 1
+type:  The second paragraph is written while the limit holds, so it waits.
+wait: 2700
+dump: held
+expect: tasks.filter(t => t === "read").length === 1 && d.threads.length === 0
+select: The second paragraph
+probe
+wait: 600
+expect: tasks.filter(t => t === "probe").length === 1
+quit

@@ -4,7 +4,7 @@
 
 # Inkling
 
-Inkling is a Mac notebook that asks you questions. You write, and it reads along. When a line doesn't add up, it pulls a thread out of those exact words into the margin and hangs a question or a correction on it. It never writes your notes for you. The thinking is still yours to do, and Inkling notices when some of it is missing.
+Inkling is a Mac notebook that asks you questions. You write, and it reads along. When a line doesn't add up, it pulls a thread out of those exact words into the margin and hangs a question or a correction on it. The page is yours, and the margin is Inkling's. Its job is to notice when some of the thinking is missing.
 
 It runs on your own Claude subscription, through the Claude Code login you already have. Your notebook is a folder of plain files on your Mac. What goes to Claude is the text Inkling needs to read or answer, plus any local files and Claude Code memories it looks at along the way.
 
@@ -38,7 +38,7 @@ Everything it can do is listed in [`design/capabilities.md`](design/capabilities
 
 ## What it believes
 
-The beliefs behind Inkling are written out in [`design/manifesto.md`](design/manifesto.md). The short version: you find out what you think by writing it down yourself, so Inkling never writes your notes for you. The most useful thing a reader can do is ask a good question in the right place, right beside the words, and leave the answer to you. Most of what you write needs no comment, which is why Inkling's silence is worth something. And deciding that your words should stand counts as an answer too.
+The beliefs behind Inkling are written out in [`design/manifesto.md`](design/manifesto.md). The short version: you find out what you think by writing it down yourself, so Inkling does the reading and leaves the writing to you. The most useful thing a reader can do is ask a good question in the right place, right beside the words, and leave the answer to you. Most of what you write needs no comment, which is why Inkling's silence is worth something. And deciding that your words should stand counts as an answer too.
 
 ## Install and run
 

@@ -262,7 +262,7 @@ function nonEmpty(v: unknown, what: string): string {
 // ----- running tasks ------------------------------------------------------------
 
 /**
- * A task that may look things up runs with the web; if that spends its cap or its turns,
+ * A task that may look things up runs with the web; if that runs out of turns,
  * it runs again without it (one turn, no tools), so it still ends as an answer: a question,
  * for a correction it could not back. The usage then counts both.
  */

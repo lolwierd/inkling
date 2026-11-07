@@ -452,10 +452,10 @@ describe("what each task sends back", () => {
       expect((await b.end("r")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
     });
 
-    test("a call that spends its cap answers again without the web, and counts both", async () => {
+    test("a call that runs out of turns answers again without the web, and counts both", async () => {
       const b = brain();
-      // the first call stops on the budget; the second (no tools) answers as a question
-      b.send(run("p", { task: "probe", ctx: ctx(fake({ resultError: { subtype: "error_max_budget_usd", isError: true }, budgetOnce: true, structured: { kind: "question", quote: "450 metres tall", text: "Where did 450 come from?", sketch: false } }) + "\n" + target), target }, web));
+      // the first call runs out of turns; the second (no tools) answers as a question
+      b.send(run("p", { task: "probe", ctx: ctx(fake({ resultError: { subtype: "error_max_turns", isError: true }, webOnce: true, structured: { kind: "question", quote: "450 metres tall", text: "Where did 450 come from?", sketch: false } }) + "\n" + target), target }, web));
       const done = await b.end("p");
       expect(done.data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
       expect(b.stderr).toContain("answering without the web");
@@ -467,14 +467,14 @@ describe("what each task sends back", () => {
       expect((await b.end("a")).data.text).toBe(`It is 330 m (${TOWER}); see too.`);
     });
 
-    test("the tools: the web's two when it is on, none when it is off", async () => {
+    test("the tools: the web's two when it is on, none when it is off; no spending cap", async () => {
       const b = brain();
       const echo = (id: string, input: object, s: object) => {
         b.send(run(id, input, s));
         return b.end(id).then((e) => JSON.parse(e.data.text ?? "{}"));
       };
       const chat = await echo("c", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, web);
-      expect(chat).toMatchObject({ tools: ["WebSearch", "WebFetch"], allowedTools: ["WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: 2.5 });
+      expect(chat).toMatchObject({ tools: ["WebSearch", "WebFetch"], allowedTools: ["WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: null });
       expect(chat.prompt).toContain("Link only to a page your search returned");
       const off = await echo("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, settings);
       expect(off).toMatchObject({ tools: [], maxTurns: 1, maxBudgetUsd: null });

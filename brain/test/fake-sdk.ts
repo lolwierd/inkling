@@ -19,8 +19,8 @@ export interface Directive {
   searches?: { query: string; results: { title: string; url: string }[] }[];
   // pages the brain's own page fetch finds (url -> page text); any other URL cannot be opened
   pages?: Record<string, string>;
-  // resultError only for a call that can look things up (it has a budget); others succeed
-  budgetOnce?: boolean;
+  // resultError only for a call that can look things up (it has tools); others succeed
+  webOnce?: boolean;
 }
 
 /** Pages the fake web serves, filled from the directives played so far (test/fake-brain.ts). */
@@ -86,14 +86,14 @@ export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any 
       yield { type: "assistant", error: d.assistantError, message: { content: [{ type: "text", text: d.resultError?.result ?? "API Error" }] } };
     }
     await step();
-    if (d.resultError && (!d.budgetOnce || options?.maxBudgetUsd !== undefined)) {
+    if (d.resultError && (!d.webOnce || (options?.tools?.length ?? 0) > 0)) {
       yield {
         type: "result",
         subtype: d.resultError.subtype,
         is_error: d.resultError.isError ?? true,
         errors: d.resultError.errors ?? [],
         result: d.resultError.result,
-        total_cost_usd: d.budgetOnce ? options?.maxBudgetUsd ?? 0 : 0,
+        total_cost_usd: d.webOnce ? 1.5 : 0,
       };
       return;
     }

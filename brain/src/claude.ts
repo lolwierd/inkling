@@ -16,9 +16,9 @@ export class ProviderError extends Error {
 }
 
 /**
- * A call that could look things up spent its cap (`WEB_BUDGET_USD`) or its turns before
- * answering. The brain answers again without the web, so it ends as an answer (a question,
- * for a correction it could not back), never as an error. `spentUsd` is what it cost.
+ * A call that could look things up ran out of turns (`WEB_TURNS`) before answering. The
+ * brain answers again without the web, so it ends as an answer (a question, for a
+ * correction it could not back), never as an error. `spentUsd` is what it cost.
  */
 export class WebSpent extends ProviderError {
   constructor(message: string, public spentUsd: number) {
@@ -70,23 +70,20 @@ export function childEnv(source: Record<string, string | undefined> = process.en
 }
 
 const STRUCTURED_TURNS = 3;
-/** With the web: a search or two, a page read, the answer, and its retries. */
+/**
+ * With the web: a search or two, a page read, the answer, and its retries. The only limit
+ * on a call that searches: it stops a call going round in circles, not one that costs.
+ * There is no cap on what it spends, as it runs on the owner's Claude plan.
+ */
 const WEB_TURNS = 8;
 /** The SDK's own tools for looking things up; nothing else is ever turned on. */
 export const WEB_TOOLS = ["WebSearch", "WebFetch"];
-/**
- * The most a call that can look things up may spend, in USD at API prices: one search with
- * its answer measured about $1.55 on 7 Nov 2026 (Opus 5.5), so this leaves room for one.
- */
-export const WEB_BUDGET_USD = 2.5;
-
 function baseOptions(system: string, settings: RunSettings, signal: AbortController, web = false): Options {
   const opts: Options = {
     systemPrompt: system,
     tools: web ? WEB_TOOLS : [],
     // Allowed without asking: there is nobody to ask, and these two only read the web.
     allowedTools: web ? WEB_TOOLS : [],
-    ...(web ? { maxBudgetUsd: WEB_BUDGET_USD } : {}),
     settingSources: [],
     maxTurns: web ? WEB_TURNS : 1,
     persistSession: false,
@@ -198,8 +195,8 @@ async function drain(
         if (r.subtype !== "success" || r.is_error) {
           const errors = Array.isArray(r.errors) ? r.errors.filter(Boolean).join("; ") : "";
           const msg = String(errors || r.result || r.subtype || "the model returned an error");
-          // looking things up ran past its cap or its turns: answer again without the web
-          if (web && (r.subtype === "error_max_budget_usd" || r.subtype === "error_max_turns")) {
+          // looking things up ran out of turns: answer again without the web
+          if (web && r.subtype === "error_max_turns") {
             throw new WebSpent(`looking it up stopped (${r.subtype}, $${Number(r.total_cost_usd ?? 0).toFixed(2)})`, Number(r.total_cost_usd ?? 0));
           }
           throw new ProviderError(resultKind(r.subtype, assistantError, limitRejected, structured, msg), msg);

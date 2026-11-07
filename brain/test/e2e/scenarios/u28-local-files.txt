@@ -2,9 +2,11 @@
 wait: 1500
 dump: inherited
 expect: d.local_directories.join() === "/tmp/project-a" && d.directories_inherited
+expect: d.header.meta.join(" · ") === "Work · linked to project-a · Tell Inkling"   // the folder gives the note its files
 set: note-directories=/tmp/project-b
 dump: overridden
 expect: d.local_directories.join() === "/tmp/project-b" && !d.directories_inherited
+expect: d.header.meta.join(" · ") === "Work · linked to project-b · Use folder setting · Tell Inkling"
 set: folder-directories=/tmp/project-c
 dump: folder-changed
 expect: d.local_directories.join() === "/tmp/project-b"

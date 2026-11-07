@@ -7,11 +7,11 @@ back-show: 1
 wait: 750
 dump: shown
 expect: d.active === "t1" && d.unfolded.includes("t1") && d.threads[0].status === "Resolved"
-click: 1040, 490
+click: 1040, 518
 wait: 750
 dump: reopened
 expect: d.active === "t1" && d.unfolded.includes("t1") && d.anchors[0].open
-click: 1040, 490
+click: 1040, 518
 wait: 2200
 dump: resolved
 expect: d.active === null && d.threads[0].status === "Resolved" && !d.anchors[0].open

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rearranged the header above a note's title into two lines. The first says what the note has been given: its folder, the directories it is linked to, and Tell Inkling. The second reads as a sentence, such as "Inkling reads along", with the open threads on the right, marked with the same knot as the gutter. A note linked to nothing no longer shows Files; File > Link Files to This Note… links one.
+
 ## 0.1.3
 
 - Added local file and Claude Code memory context, with folder mappings inherited by notes and optional note overrides.

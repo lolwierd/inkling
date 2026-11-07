@@ -326,6 +326,15 @@ pub fn small_dot(color: Hsla, size: f32) -> Div {
     div().flex_none().size(px(size)).rounded_full().bg(color)
 }
 
+/// A French knot the size of a dot, beside words: the gutter's mark for a paragraph with a
+/// question, so a count of open threads carries the mark of what it counts.
+pub fn knot(color: Hsla, size: f32) -> AnyElement {
+    canvas(|_, _, _| (), move |bounds, _, window, _| crate::stitch::french_knot(window, bounds.center(), px(size / 2.), color, 1.))
+        .flex_none()
+        .size(px(size))
+        .into_any_element()
+}
+
 /// The wordmark: "inkling" in Fraunces Display, its first i in your thread and dotted
 /// with a French knot, as the Initial mark marks the app the way linen was marked as
 /// someone's own. The smallest piece of ink in the name is where Inkling lives.

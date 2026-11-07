@@ -139,7 +139,7 @@ pub fn first_run_note(mode: Mode) -> Note {
         (P, "Turn over, above the title (\u{21e7}\u{2318}B), shows the back of the note: every thread it has had, how each one ended, and your reasons, with Reopen to bring one back. One thread on this page is already let stand, and the back says why."),
         (H2, "Reading along"),
         (P, "Inkling reads each paragraph when you pause, and a small stitch in the gutter marks what it has read. Most of the time it says nothing. A question that comes while you are mid-sentence waits, folded, until you stop."),
-        (P, "Tell Inkling, above the title, says what a note is for, and every read takes it into account. Beside it, Reads along can become Waits to be asked: then Inkling stays quiet until you call it, select words, or open the chat."),
+        (P, "Tell Inkling, above the title, says what a note is for, and every read takes it into account. Under it, the header says who reads the note and how: Inkling reads along, or waits to be asked, and then stays quiet until you call it, select words, or open the chat."),
         (P, "The last item in that menu, Read it through (\u{21e7}\u{2318}R), reads every paragraph not read yet, top to bottom, once. Threads arrive as it goes, and \u{21e7}\u{2318}R again stops it."),
         (H2, "Asking"),
         (P, "Select some words and a small menu appears. Find a loose thread (\u{2318}\u{21b5}) picks the one thing in them most worth a question. Ask Inkling takes your own question. Sketch it answers with a drawing, stitched out step by step; click a sketch to see it large. The same menu turns a line into a heading, a list, a quote, a callout or code."),

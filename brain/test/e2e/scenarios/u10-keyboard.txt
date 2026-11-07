@@ -10,13 +10,15 @@
 wait: 1500
 set: appearance=light
 caret: end
+dump: header
+expect: d.header.meta.join() === "Tell Inkling" && d.header.row.join(" | ") === "Inkling reads along | 2 loose threads | Hide threads | Turn over"
 key: shift-tab
 dump: header-last
 expect: d.focus === "header:turn-over"   // the header's last control, after Hide threads
 key: shift-tab shift-tab shift-tab shift-tab shift-tab
 dump: tell
-expect: d.focus === "header:tell"
-key: tab
+expect: d.focus === "header:tell"   // the first line's, before the mind and the mode
+key: tab tab
 key: enter
 dump: mode-menu
 expect: d.menu === "Mode" && d.focus === "menu:0"   // the menu has the keyboard, on what is chosen now
@@ -24,20 +26,20 @@ key: down
 shot: mode-menu-keys
 key: enter
 dump: mode-chosen
-expect: d.note.mode === "WhenYouAsk" && d.menu === null && d.focus === "header:mode"
+expect: d.note.mode === "WhenYouAsk" && d.menu === null && d.focus === "header:mode" && d.header.row[0] === "Inkling waits to be asked"
 shot: header-ring
 set: appearance=dark
 wait: 300
 shot: header-ring-dark
 set: appearance=light
-key: shift-tab shift-tab space
+key: shift-tab space
 dump: mind-menu
 expect: d.menu === "Mind" && d.focus === "menu:0"
 key: down down
 key: escape
 dump: mind-escaped
 expect: d.menu === null && d.focus === "header:mind" && d.note.mind === "Inkling"
-key: tab tab tab tab tab tab tab
+key: tab tab tab tab tab
 dump: back-to-note
 expect: d.focus === "note"
 jump: next

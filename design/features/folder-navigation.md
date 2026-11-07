@@ -48,3 +48,17 @@ renaming were missing or hidden: a hover × deleted a folder in one click with n
 Both now live in right-click menus, macOS's own, with Undo for every delete.
 
 A note's folder line lost its trailing ›, which pointed at nothing.
+
+## The note's header, 7 Nov
+
+Files on a note's header row tipped it into a toolbar: seven controls of one size, one
+grey and one gap, doing three jobs, with a label and its value ("Files · warpbuilds")
+among plain verbs, the folder's own directories repeated under the folder's name, and a
+bare "Files" on every note linked to nothing. The header is now two lines by job. The
+first, in the faint ink, says what the note has been given: "wb · linked to warpbuilds ·
+Tell Inkling". The second is the reading: the mind and its mode as the sentence they
+already were ("Inkling reads along", two presses, no chevrons), and on the right the
+open count, marked with the gutter's French knot rather than a second copy of the mind's
+dot, then Hide threads and Turn over. A note linked to nothing shows nothing about files;
+File > Link Files to This Note… links one. At a 1100 px window the old row wrapped and
+left its right half alone on a second line; the new one fits.

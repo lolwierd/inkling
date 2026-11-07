@@ -39,6 +39,8 @@ mod answers;
 mod write_in;
 mod thread_pane;
 mod lifecycle;
+/// The header above the title: what the note has been given, and who reads it and how.
+mod header;
 
 const CARD_GAP: f32 = 14.;
 pub(crate) const CHAT_WIDTH: f32 = 310.;
@@ -3211,6 +3213,7 @@ impl NotePage {
         state["local_directories"] = json!(self.note.local_directories(&cx.global::<Store>().folders));
         state["folder"] = json!(self.note.folder);
         state["directories_inherited"] = json!(self.note.local_directories.is_none());
+        state["header"] = self.header_words(cx);
         state["paper"] = json!([l, t, r, b]);
         // each unfolded tag where it was drawn, and the column of your words from the header
         // row to the last line, in the window: no tag you have not dragged may cover it
@@ -3401,166 +3404,6 @@ pub(crate) fn sheet_page(window: &Window, scroll: &ScrollHandle, p: &crate::them
 }
 
 impl NotePage {
-    fn choose_local_directories(&mut self, cx: &mut Context<Self>) {
-        let note_id = self.note.id.clone();
-        let rx = cx.prompt_for_paths(PathPromptOptions { files: false, directories: true, multiple: true, prompt: Some("Use for this note".into()) });
-        cx.spawn(async move |this, cx| {
-            let Ok(Ok(Some(paths))) = rx.await else { return };
-            let _ = this.update(cx, |this, cx| {
-                if this.note.id != note_id { return; }
-                this.note.local_directories = Some(paths.iter().map(|p| p.to_string_lossy().into_owned()).collect());
-                this.flush(cx);
-                cx.notify();
-            });
-        }).detach();
-    }
-
-    fn header(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let t = Theme::get(cx).clone();
-        let p = t.p;
-        let directories = self.note.local_directories(&cx.global::<Store>().folders).to_vec();
-        let inherited = self.note.local_directories.is_none();
-        let files_label = directories.first().map(|path| {
-            let name = std::path::Path::new(path).file_name().and_then(|n| n.to_str()).unwrap_or(path);
-            if directories.len() > 1 { format!("Files · {name} +{}", directories.len() - 1) } else { format!("Files · {name}") }
-        }).unwrap_or_else(|| "Files".into());
-        let files_tip = if directories.is_empty() { "Choose local directories for this note".to_string() } else {
-            format!("{}\n{}", if inherited { "Inherited from this note's folder" } else { "Set on this note; overrides its folder" }, directories.join("\n"))
-        };
-        let folder = self.note.folder.as_ref().and_then(|id| cx.global::<Store>().folders.iter().find(|f| &f.id == id)).cloned();
-        let mode = self.note.mode;
-        let mind_name = self.mind.name.clone();
-        let has_brief = self.note.brief.is_some();
-        let jmw = self.just_my_words;
-        let open = self.note.threads.iter().filter(|th| th.status == ThreadStatus::Open).count();
-        let menu = self.menu;
-        // Every control in the row is quiet until the pointer is on it, and stays lit
-        // while its menu is open.
-        let control = move |id: &'static str, lit: bool| {
-            div()
-                .id(id)
-                .flex()
-                .items_center()
-                .gap(px(5.))
-                .h(px(24.))
-                .text_size(px(ts::UI))
-                .text_color(if lit { p.ink } else { p.graphite })
-                .cursor_pointer()
-                .hover(move |s| s.text_color(p.ink))
-                .active(|s| s.opacity(0.7))
-        };
-        let mind_menu = (menu == Some(Menu::Mind)).then(|| self.menu_card(Menu::Mind, cx));
-        let mode_menu = (menu == Some(Menu::Mode)).then(|| self.menu_card(Menu::Mode, cx));
-        // Each menu hangs so its words line up with its button's: the mind's dot and name
-        // over the button's dot and name; a mode's title under "Reads along", its icon
-        // out to the left (the card's edge, an item's inset, then a 12 px icon and a gap).
-        let (mind_dx, mode_dx) = (-(1. + 5. + 9.), -(1. + 5. + 9. + 12. + 7.));
-        let header = div()
-            .flex()
-            .flex_row()
-            // a narrow column (a small window with the chat open) wraps the row
-            .flex_wrap()
-            .items_center()
-            .gap_x(px(16.))
-            .gap_y(px(2.))
-            .min_h(px(24.))
-            // the controls step back while you write, like the window's own
-            .opacity(self.chrome.get())
-            .font_family(SANS)
-            .when(!jmw, |d| {
-                d.child(
-                    div()
-                        .relative()
-                        .child(
-                            control("mind-picker", menu == Some(Menu::Mind))
-                                .gap(px(6.))
-                                .text_color(p.ink)
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(ui::small_dot(t.voice_ink, 7.))
-                                // a mind with a long name gives way, so the row still fits the column
-                                .child(div().max_w(px(220.)).truncate().child(mind_name))
-                                .child(icon("chevron-down", 12., p.faint))
-                                .keyed_as("header:mind", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mind, window, cx)),
-                        )
-                        .children(mind_menu.map(|card| self.drop_down(card, mind_dx, cx))),
-                )
-                .when(!has_brief, |d| {
-                    d.child(
-                        control("tell", false)
-                            .child(icon("pencil", 12., p.faint))
-                            .child("Tell Inkling")
-                            .keyed_as("header:tell", 4., t.voice_ink, cx, |this, window, cx| this.edit_brief(window, cx)),
-                    )
-                })
-                .child(
-                    div()
-                        .relative()
-                        .child(
-                            control("mode", menu == Some(Menu::Mode))
-                                .child(match mode {
-                                    Mode::ThinksWithYou => "Reads along",
-                                    Mode::WhenYouAsk => "Waits to be asked",
-                                })
-                                .child(icon("chevron-down", 12., p.faint))
-                                .keyed_as("header:mode", 4., t.voice_ink, cx, |this, window, cx| this.toggle_menu(Menu::Mode, window, cx)),
-                        )
-                        .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
-                )
-            })
-            .child(control("note-files", false)
-                .child(div().max_w(px(180.)).truncate().child(files_label))
-                .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(files_tip.clone()).build(window, cx))
-                .keyed_as("header:files", 4., t.voice_ink, cx, |this, _, cx| this.choose_local_directories(cx)))
-            .when(!inherited, |d| d.child(control("inherit-files", false)
-                .child("Use folder setting")
-                .keyed_as("header:inherit-files", 4., t.voice_ink, cx, |this, _, cx| {
-                    this.note.local_directories = None;
-                    this.flush(cx);
-                    cx.notify();
-                })))
-            // the open count and Hide threads wrap together, and keep to the right edge on
-            // whichever line they land (a spacer that wrapped with them, or did not, put
-            // them left or right by turns as the window narrowed)
-            .child(
-                div()
-                    .ml_auto()
-                    .flex()
-                    .items_center()
-                    .gap(px(16.))
-                    .when(!jmw && open > 0, |d| {
-                        d.child(
-                            control("open-count", false)
-                                .gap(px(6.))
-                                .child(ui::small_dot(t.voice_ink, 7.))
-                                .child(if open == 1 { "1 loose thread".to_string() } else { format!("{open} loose threads") })
-                                .keyed_as("header:open-count", 4., t.voice_ink, cx, |this, window, cx| this.jump_to_open(true, window, cx)),
-                        )
-                    })
-                    .when(jmw || self.note.visible_threads() > 0, |d| {
-                        d.child(
-                            control("hide-threads", false)
-                                .child(if jmw { "Show threads" } else { "Hide threads" })
-                                .keyed_as("header:hide-threads", 4., t.voice_ink, cx, move |this, _, cx| this.set_hidden(!jmw, cx)),
-                        )
-                    })
-                    // the back of the note, once it has had a thread (where Turn back sits on the back)
-                    .when(!jmw && !self.note.threads.is_empty(), |d| {
-                        d.child(control("turn-over", false).child("Turn over").keyed_as("header:turn-over", 4., t.voice_ink, cx, |this, window, cx| this.turn_over(window, cx)))
-                    }),
-            )
-            .into_any_element();
-        // Where the note is filed, above its tools: its folder's name, a way back to the
-        // folder's page. It fades while you write, as the tools do.
-        div().flex().flex_col().gap(px(10.))
-            .when_some(folder, |d, folder| d.child(div().flex().child(div().id("note-folder").flex().items_center().gap(px(6.)).h(px(18.)).text_size(px(ts::SMALL))
-                .text_color(p.graphite).cursor_pointer().hover(move |s| s.text_color(p.ink)).active(|s| s.opacity(0.7))
-                .opacity(self.chrome.get())
-                .child(icon("folder", 12., p.faint))
-                .child(div().max_w(px(240.)).truncate().child(folder.name))
-                .keyed_as("header:folder", 4., t.voice_ink, cx, move |_, _, cx| cx.emit(PageEvent::OpenFolder(Some(folder.id.clone())))))))
-            .child(header).into_any_element()
-    }
-
     /// Open or close a header menu. A press on its own button while it is open closes it:
     /// the press outside the menu has just closed it, and must not open it again. An open
     /// menu takes the keyboard, on the item chosen now, so the arrow keys work at once.

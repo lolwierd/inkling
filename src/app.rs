@@ -38,6 +38,7 @@ gpui_kit::actions!(
         CopyNote,
         ExportNote,
         DeleteNote,
+        LinkFiles,
         FindLooseThread,
         NextThread,
         PrevThread,
@@ -190,6 +191,7 @@ pub fn init(cx: &mut App) {
                 MenuItem::separator(),
                 MenuItem::action("Copy This Note", CopyNote),
                 MenuItem::action("Export This Note…", ExportNote),
+                MenuItem::action("Link Files to This Note…", LinkFiles),
                 MenuItem::action("Delete This Note", DeleteNote),
                 MenuItem::separator(),
                 MenuItem::action("Import from Obsidian…", ImportObsidian),
@@ -2152,6 +2154,7 @@ impl Render for AppView {
             .when(showing_note, |d| d.on_action(cx.listener(|this, _: &JustMyWords, _, cx| this.toggle_jmw(cx)))
             .on_action(cx.listener(|this, _: &CopyNote, _, cx| this.copy_note(cx)))
             .on_action(cx.listener(|this, _: &ExportNote, window, cx| this.open_export(window, cx)))
+            .on_action(cx.listener(|this, _: &LinkFiles, _, cx| this.page.update(cx, |p, cx| p.choose_local_directories(cx))))
             .on_action(cx.listener(|this, _: &FindLooseThread, window, cx| this.page.update(cx, |p, cx| p.find_loose_thread(window, cx))))
             .on_action(cx.listener(|this, _: &NextThread, window, cx| this.page.update(cx, |p, cx| p.jump_to_open(true, window, cx))))
             .on_action(cx.listener(|this, _: &PrevThread, window, cx| this.page.update(cx, |p, cx| p.jump_to_open(false, window, cx))))

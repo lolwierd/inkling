@@ -28,7 +28,7 @@ this list when a feature lands or goes; the key is the default binding.
 | Reads each paragraph at your pause | pace Regular or Slow; a tacking stitch in the gutter marks what it read; checklist items and callouts read like paragraphs, a code block is read whole once you leave it, and a question can sit under a single line of code |
 | Speaks only when it is worth it | a question (?) or a correction (×) on a thread; sometimes with a sketch |
 | Shows its working | a correction carries a check you can do yourself, under it in the tag: the sum, worked again before it is shown and made only from your numbers (each one a link to your words), your own words from elsewhere in the note, or a page on the web that says so (its words, its title and site, a link); what it cannot show it asks as a question; Disagree, and if Inkling agrees it takes the correction back |
-| Looks things up on the web, when you ask | Find a loose thread, a question, a mind called by name, a reply and chat may search when a fact can't be settled from the note; reading along never does; a cited page shows only if a search returned it and its quoted words are on it; links no search returned are taken out; a call that would cost too much answers without the web; Settings > Model > Look things up on the web (on), with what it sends and costs |
+| Looks things up on the web, when you ask | Find a loose thread, a question, a mind called by name, a reply and chat may search when a fact can't be settled from the note; reading along never does; a cited page shows only if a search returned it and its quoted words are on it; links no search returned are taken out; no cap on what a call spends, only on its turns (eight), and one that runs out answers without the web; Settings > Model > Look things up on the web (on), with what it sends and costs |
 | Waits while you type | a question that arrives mid-sentence stays folded until you pause |
 | Fix the words, the thread settles | edit the words an open thread is about: it reads them again and ties off when the problem is gone |
 | Answer in the note | write the answer anywhere in the note: the thread's mind checks it, the thread ties off, and a knot sews in after your words; point at the knot to see what it answers, click it to open the thread, whose tag says "Answered in your note"; an explanation you asked for counts once it is in your own words; Reopen if it is not the answer |
@@ -43,7 +43,7 @@ this list when a feature lands or goes; the key is the default binding.
 | Capability | How |
 |---|---|
 | A thread from the words to the margin | stitched under the words (running stitch for a question, cross-stitch for a correction), a hanging thread to a folded tag |
-| Tags fold away | point at a tag to unfold it; click to open it and reply |
+| Tags fold away | point at a tag to unfold it; click to open it and reply; click its tab or its words again, or anywhere outside it, to fold it away (it stays folded under the pointer until the pointer leaves) |
 | Move a tag | drag it by the tab or the top row; it keeps its place |
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |

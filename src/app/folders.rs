@@ -135,11 +135,26 @@ impl AppView {
             }
             contents = contents.child(paths);
         }
-        div().id("folder-page").track_focus(&self.focus).size_full().overflow_y_scroll().bg(p.cloth)
+        let weave = canvas(|_, _, _| (), move |bounds, _, window, _| {
+            let mut y = bounds.origin.y;
+            while y < bounds.bottom() {
+                window.paint_quad(fill(Bounds::new(point(bounds.origin.x, y), size(bounds.size.width, px(1.))), p.weave));
+                y += px(3.);
+            }
+            let mut x = bounds.origin.x;
+            while x < bounds.right() {
+                window.paint_quad(fill(Bounds::new(point(x, bounds.origin.y), size(px(1.), bounds.size.height)), p.weave));
+                x += px(3.);
+            }
+        }).absolute().top_0().left_0().size_full();
+        let target = id.clone();
+        div().id("folder-page").relative().track_focus(&self.focus).size_full().overflow_y_scroll().bg(p.cloth)
             .px(px(36.)).pt(px(64.)).pb(px(36.))
-            .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(p.hover))
+            .can_drop(move |value, _, cx| value.downcast_ref::<DraggedNote>().is_some_and(|drag| cx.global::<Store>().note(&drag.id).is_some_and(|n| n.folder != target)))
+            .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(t.voice_ink.opacity(0.08)))
             .on_drop(cx.listener(move |this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, id.clone(), cx)))
-            .child(div().max_w(px(760.)).mx_auto().min_h(px(420.)).px(px(36.)).py(px(32.)).bg(p.paper).rounded(px(4.)).child(contents))
+            .child(weave)
+            .child(div().relative().max_w(px(760.)).mx_auto().min_h(px(420.)).px(px(36.)).py(px(32.)).bg(p.paper).rounded(px(4.)).child(contents))
             .into_any_element()
     }
 }

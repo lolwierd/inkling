@@ -4,8 +4,8 @@
 wait: 1500
 open: sidebar
 wait: 400
-press: 85,355
-point: 90,345
+press: 85,315
+point: 90,305
 point: 85,164
 release
 wait: 400

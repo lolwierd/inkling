@@ -1,0 +1,20 @@
+# Hold a dragged note at the sidebar edges to reach offscreen destinations.
+# fixture: folder-scroll
+wait: 1500
+open: sidebar
+wait: 400
+press: 160,195
+point: 170,200
+point: 100,615
+wait: 1800
+dump: down
+expect: d.dragging && d.sidebar_scroll < -100
+point: 100,155
+wait: 1800
+dump: up
+expect: d.sidebar_scroll > dumps.down.sidebar_scroll
+key: escape
+release
+dump: canceled
+expect: !d.dragging && d.folder === "f0"
+quit

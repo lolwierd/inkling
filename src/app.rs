@@ -275,6 +275,7 @@ pub struct AppView {
     folder_page: Option<Option<String>>,
     sidebar_open: bool,
     sidebar_scroll: ScrollHandle,
+    drag_scroll_frame: Option<Instant>,
     sidebar_motion: SidebarMotion,
     palette: Option<Entity<Palette>>,
     settings: Option<Entity<SettingsView>>,
@@ -443,6 +444,18 @@ pub(crate) fn tip(name: &'static str, keys: Option<&'static dyn Action>) -> impl
 /// until `release` are then a drag, as the platform would report them.
 static HELD: std::sync::Mutex<Option<(f32, f32)>> = std::sync::Mutex::new(None);
 
+// A background resize refreshes GPUI's pointer from macOS. During scripted drags,
+// replay the held pointer before each frame so screenshots show the tested target.
+fn keep_script_drag(window: &mut Window) {
+    window.on_next_frame(|window, cx| {
+        let held = *HELD.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((x, y)) = held {
+            window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent { position: point(px(x), px(y)), pressed_button: Some(MouseButton::Left), modifiers: Modifiers::default() }), cx);
+            keep_script_drag(window);
+        }
+    });
+}
+
 fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
     use crate::script::Step;
     let none = Modifiers::default();
@@ -479,6 +492,7 @@ fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
             window.dispatch_event(move_to(position), cx);
             window.dispatch_event(PlatformInput::MouseDown(MouseDownEvent { button: MouseButton::Left, position, modifiers: none, click_count: 1, first_mouse: false }), cx);
             *HELD.lock().unwrap_or_else(|e| e.into_inner()) = Some((*x, *y));
+            keep_script_drag(window);
         }
         Step::Release => {
             if let Some((x, y)) = HELD.lock().unwrap_or_else(|e| e.into_inner()).take() {
@@ -681,6 +695,7 @@ impl AppView {
             folder_page: None,
             sidebar_open: false,
             sidebar_scroll: ScrollHandle::new(),
+            drag_scroll_frame: None,
             sidebar_motion: SidebarMotion::closed(Instant::now()),
             chrome,
             last_pointer: None,
@@ -826,6 +841,7 @@ impl AppView {
             Step::Dump(label) => {
                 let raw = self.page.update(cx, |p, cx| p.debug_state(window, cx));
                 let mut state: serde_json::Value = serde_json::from_str(&raw).unwrap();
+                state["sidebar_scroll"] = serde_json::json!(self.sidebar_scroll.offset().y.as_f32());
                 state["dragging"] = serde_json::json!(cx.has_active_drag());
                 state["folder_page"] = serde_json::json!(self.folder_page.as_ref().map(|id| id.as_deref().unwrap_or("unfiled")));
                 state["note_folders"] = serde_json::json!(cx.global::<Store>().notes.iter().map(|n| (&n.title, &n.folder)).collect::<std::collections::BTreeMap<_, _>>());
@@ -1518,18 +1534,24 @@ impl AppView {
         let ring = t.voice_ink;
         let dragging = cx.has_active_drag();
         if dragging {
+            let now = Instant::now();
+            let dt = self.drag_scroll_frame.map_or(1. / 60., |last| (now - last).as_secs_f32().min(0.1));
+            self.drag_scroll_frame = Some(now);
             let bounds = self.sidebar_scroll.bounds();
             let pointer = window.mouse_position();
             if bounds.contains(&pointer) {
                 let edge = px(30.);
-                let delta = if pointer.y < bounds.top() + edge { 5. } else if pointer.y > bounds.bottom() - edge { -5. } else { 0. };
+                let delta = if pointer.y < bounds.top() + edge { 240. * dt } else if pointer.y > bounds.bottom() - edge { -240. * dt } else { 0. };
                 if delta != 0. {
                     let offset = self.sidebar_scroll.offset();
-                    self.sidebar_scroll.set_offset(point(offset.x, offset.y + px(delta)));
-                    window.request_animation_frame();
+                    let next = (offset.y + px(delta)).clamp(-self.sidebar_scroll.max_offset().y, px(0.));
+                    if next != offset.y {
+                        self.sidebar_scroll.set_offset(point(offset.x, next));
+                        window.request_animation_frame();
+                    }
                 }
             }
-        }
+        } else { self.drag_scroll_frame = None; }
         let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
             let id = n.id.clone();
             let on = self.folder_page.is_none() && n.id == current;

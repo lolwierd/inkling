@@ -6,15 +6,15 @@ switch: Project notes
 set: note-directories=/tmp/note-only
 edit: Notes on the build pipeline and its runners. => Edited words kept through every move.
 # The note's folder link navigates to its page.
-click: 370,135
+click: 380,104
 wait: 400
 dump: link
 expect: d.folder_page === "work" && !d.editor_focused
 # Starting a page-row drag opens the sidebar for destinations.
-press: 450,380
-point: 460,385
+press: 450,235
+point: 460,240
 wait: 400
-point: 85,247
+point: 85,227
 release
 wait: 400
 dump: personal
@@ -31,10 +31,10 @@ dump: inherited-personal
 expect: d.local_directories.join() === "/tmp/personal"
 open: sidebar
 wait: 400
-# Project notes is below Personal's directory name.
-press: 85,295
-point: 90,300
-point: 85,323
+# Project notes is inside Personal.
+press: 85,255
+point: 90,260
+point: 85,283
 release
 wait: 400
 dump: unfiled

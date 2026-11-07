@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1
+
 - Switched to the Claude Code already installed on your Mac, shrinking the download and picking up Claude Code updates without an Inkling release.
 
 ## 0.1.0

@@ -17,23 +17,31 @@ setQueryForTests(fakeQuery as any);
 const settings = { model: "claude-opus-5-5", effort: "low" as const };
 const fake = (d: object) => `[[fake ${JSON.stringify(d)}]]`;
 
-test("finds a native Claude install without a shell PATH and keeps its update symlink", () => {
+test("finds native, Homebrew, and custom Claude installs and reports missing executables", () => {
   const home = mkdtempSync(join(tmpdir(), "inkling-claude-"));
   try {
     const shellBin = join(home, "bin");
     const nativeBin = join(home, ".local", "bin");
+    const brewBin = join(home, "homebrew", "bin");
     mkdirSync(shellBin);
     mkdirSync(nativeBin, { recursive: true });
+    mkdirSync(brewBin, { recursive: true });
     const shellClaude = join(shellBin, "claude");
     const nativeClaude = join(nativeBin, "claude");
+    const brewClaude = join(brewBin, "claude");
     writeFileSync(shellClaude, "#!/bin/sh\n", { mode: 0o755 });
+    symlinkSync(shellClaude, brewClaude);
     symlinkSync(shellClaude, nativeClaude);
-    expect(installedClaude({ PATH: "/usr/bin:/bin" }, home)).toBe(nativeClaude);
-    expect(installedClaude({ INKLING_CLAUDE_PATH: shellClaude }, home)).toBe(shellClaude);
+    expect(installedClaude({}, home, [brewBin])).toBe(nativeClaude);
+    expect(installedClaude({ INKLING_CLAUDE_PATH: shellClaude }, home, [brewBin])).toBe(shellClaude);
 
     rmSync(nativeClaude);
     symlinkSync(join(home, "missing"), nativeClaude);
-    expect(installedClaude({ PATH: shellBin }, home)).toBe(shellClaude);
+    expect(installedClaude({}, home, [brewBin])).toBe(brewClaude);
+    expect(installedClaude({ PATH: shellBin }, home, [brewBin])).toBe(shellClaude);
+    expect(() => installedClaude({}, home, [])).toThrow("Claude Code was not found");
+    expect(() => installedClaude({ INKLING_CLAUDE_PATH: nativeClaude }, home, [brewBin]))
+      .toThrow("INKLING_CLAUDE_PATH must point to an executable");
   } finally {
     rmSync(home, { recursive: true });
   }
@@ -211,7 +219,7 @@ describe("childEnv", () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
     expect(env.HOME).toBe("/h");
-    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("inkling/0.1.0");
+    expect(env.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("inkling/0.1.1");
   });
   test("keeps them with INKLING_USE_API_KEY=1", () => {
     const env = childEnv({ ANTHROPIC_API_KEY: "sk-test", INKLING_USE_API_KEY: "1" });

@@ -1,13 +1,13 @@
 # Releasing Inkling
 
-[CI](../.github/workflows/ci.yml) runs on pull requests and pushes to `master`. On an Apple Silicon runner it installs locked dependencies, runs `scripts/dev check` and builds the release ZIP. Packaging checks the extracted bundle’s signature and architecture and starts the bundled brain long enough to read its startup handshake. GUI scenarios run separately with `scripts/dev check --e2e` on a Mac. Neither check needs Claude credentials.
+[CI](../.github/workflows/ci.yml) runs on pull requests and pushes to `master`. On an Apple Silicon runner it installs locked dependencies, runs `scripts/dev check` and builds the release ZIP. Packaging checks the extracted bundle’s signature and architecture, starts its brain, and verifies that the SDK launches a test executable from Claude Code’s native install path with Finder’s limited `PATH`. GUI scenarios run separately with `scripts/dev check --e2e` on a Mac. Neither check needs Claude credentials.
 
 For a downloadable preview, run **CI → Run workflow** in GitHub Actions and download the `inkling-macos-arm64` artifact from the completed run. It contains the install ZIP and its SHA-256 file. The same files can be built locally with `scripts/package.sh`. Follow the [install instructions](../README.md#install-and-run) to try the preview.
 
 ## Cut a release
 
 1. Keep user-facing changes under `## Unreleased` in [CHANGELOG.md](../CHANGELOG.md). In the release PR, move those entries under an exact version heading such as `## 0.1.0` and leave a fresh `## Unreleased` above it.
-2. Set the same version in `Cargo.toml` and refresh `Cargo.lock` with `cargo check` if the version changed. The app bundle reads its version from Cargo. For the first release, Cargo already declares `0.1.0`.
+2. Set the same version in `Cargo.toml` and refresh `Cargo.lock` with `cargo check` if the version changed. The app bundle reads its version from Cargo. Update the brain’s package version, handshake version and SDK client version to match.
 3. Merge the release PR into `master`. Once CI passes, tag the exact release commit from `master`. For example, if that commit is the current tip:
 
    ```sh

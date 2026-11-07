@@ -35,15 +35,18 @@ export interface LimitInfo {
 
 // Finder launches without the shell's PATH. Keep the native install's symlink
 // so new sessions pick up the executable Claude Code updated it to.
-export function installedClaude(env = process.env, home = homedir()): string {
-  if (env.INKLING_CLAUDE_PATH) return env.INKLING_CLAUDE_PATH;
-  const candidates = [
+export function installedClaude(
+  env = process.env,
+  home = homedir(),
+  systemBins = ["/opt/homebrew/bin", "/usr/local/bin"],
+): string {
+  const override = env.INKLING_CLAUDE_PATH;
+  const candidates = override ? [override] : [
     join(home, ".local/bin/claude"),
-    ...(env.PATH ?? "").split(delimiter).filter(isAbsolute).map(dir => join(dir, "claude")),
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude",
+    ...[...(env.PATH ?? "").split(delimiter), ...systemBins].map(dir => join(dir, "claude")),
   ];
   for (const path of candidates) {
+    if (!isAbsolute(path)) continue;
     try {
       if (!statSync(path).isFile()) continue;
       accessSync(path, constants.X_OK);
@@ -51,6 +54,9 @@ export function installedClaude(env = process.env, home = homedir()): string {
     } catch {
       // Missing, a stale symlink, or not executable. Try the next location.
     }
+  }
+  if (override) {
+    throw new ProviderError("other", "INKLING_CLAUDE_PATH must point to an executable Claude Code file using its full path.");
   }
   throw new ProviderError("other", "Claude Code was not found. Install Claude Code or set INKLING_CLAUDE_PATH to its executable.");
 }
@@ -90,7 +96,7 @@ export function childEnv(source: Record<string, string | undefined> = process.en
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
   }
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = "inkling/0.1.0";
+  env.CLAUDE_AGENT_SDK_CLIENT_APP = "inkling/0.1.1";
   return env;
 }
 

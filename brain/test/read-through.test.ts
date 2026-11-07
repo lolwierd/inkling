@@ -57,7 +57,7 @@ describe("a read made by Read it through", () => {
 
   test("a point the writer let stand reaches every read of a pass, and so do the working rules", () => {
     // Let it stand: the points ride in the system prompt, which the pass's prompt keeps
-    expect(throughSystemPrompt(ctx)).toContain("1. On «five working days», Skeptic's question: Why five days and not three? Their reason: The on-call week is five days.");
+    expect(throughSystemPrompt(ctx)).toContain("Point 1. On «five working days», Skeptic's question: Why five days and not three? Their reason: The on-call week is five days.");
     // the read's rules (Show its working's check and question, repeats, no sources) are kept
     for (const rule of ["- check (corrections only)", "- question (corrections only)", "- repeats:", "Web lookup is disabled for this call"]) {
       expect(through).toContain(rule);

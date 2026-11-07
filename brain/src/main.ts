@@ -5,7 +5,7 @@
 
 import { createInterface } from "node:readline";
 import { accountStatus, addUsage, ProviderError, runStructured, runText, TurnsSpent, usageLine, type Access, type LimitInfo } from "./claude.ts";
-import { cleanSvg, clip, findQuote, pickAnswers, snapQuote } from "./output.ts";
+import { cleanSvg, clip, findQuote, pickAnswers, sameWordsAs, snapQuote } from "./output.ts";
 import {
   answerPrompt,
   askPrompt,
@@ -89,8 +89,8 @@ function messages(v: unknown): ThreadMessage[] {
   });
 }
 
-/** At most this many points the writer let stand reach a prompt (the app sends 12). */
-const LET_STAND_MAX = 20;
+/** At most this many points the writer let stand reach a prompt (the app sends at most 40). */
+const LET_STAND_MAX = 40;
 
 /** The points the writer let stand, as the app sends them; an entry without its words or
  * its point is left out, and long fields are cut. */
@@ -118,6 +118,7 @@ function letStand(v: unknown): LetStandPoint[] {
 function repeated(v: unknown, count: number): number {
   return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= count ? v : 0;
 }
+
 
 const VOICES = new Set<Voice>(["plain", "warm", "blunt", "riddle"]);
 const FREQUENCIES = new Set<Frequency>(["rarely", "when_it_matters", "often"]);
@@ -336,8 +337,9 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
       // A note that waits to be asked raises nothing new.
       if (input.task === "read" && input.answersOnly) return { data: { speak: false, ...answered }, usage };
       // A point the writer let stand is not raised again, in any words: the model says
-      // which one its note repeats, and then the note is held back.
-      const repeats = repeated(d.repeats, input.ctx.letStand.length);
+      // which one its note repeats, or it is on the same words, and then it is held back.
+      const kind = d.kind === "correction" ? "correction" : "question";
+      const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), kind, input.ctx.letStand);
       if (repeats > 0) {
         log(`${input.task} ${id} held back: it makes let-stand point ${repeats} again`);
         return { data: { speak: false, repeats, ...answered }, usage };
@@ -417,7 +419,7 @@ async function relate(
   const { data, usage } = await runStructured<unknown>(sys, prompt, RELATE_SCHEMA, settings, signal, onLimit);
   const d = structured(data);
   // A point the writer let stand is not raised again here either.
-  const repeats = repeated(d.repeats, input.ctx.letStand.length);
+  const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), "question", input.ctx.letStand);
   if (repeats > 0) {
     log(`relate held back: it makes let-stand point ${repeats} again`);
     return { data: { speak: false, repeats }, usage };

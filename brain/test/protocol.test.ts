@@ -601,9 +601,13 @@ describe("what each task sends back", () => {
       const point = { quote: "Saturday 14 March", point: "Is the office open on Saturday?", kind: "question", mind: "Inkling", reason: "It is." };
       b.send(run("l", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 1 } })], passages }));
       expect((await b.end("l")).data).toEqual({ speak: false, repeats: 1 });
-      // a number that names no point is ignored
-      b.send(run("m", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 4 } })], passages }));
+      // a number that names no point is ignored, when the words are not the point's either
+      const elsewhere = { ...point, quote: "the budget for the whole trip" };
+      b.send(run("m", { task: "relate", ctx: ctx("", { letStand: [elsewhere] }), target, before: [fake({ structured: { ...clash, repeats: 4 } })], passages }));
       expect((await b.end("m")).data).toMatchObject({ speak: true, other: "Friday 13 March" });
+      // on the point's own words it is held back even when the model says it repeats none
+      b.send(run("k", { task: "relate", ctx: ctx("", { letStand: [point] }), target, before: [fake({ structured: { ...clash, repeats: 0 } })], passages }));
+      expect((await b.end("k")).data).toEqual({ speak: false, repeats: 1 });
     });
 
     test("with no passages there is no model call", async () => {
@@ -742,14 +746,14 @@ describe("points the writer let stand", () => {
       { quote: "no point" },
       "junk",
       { quote: "x".repeat(400), point: "y".repeat(400), kind: "bogus", reason: "   " },
-      ...Array.from({ length: 30 }, (_, i) => ({ quote: `q${i}`, point: `p${i}` })),
+      ...Array.from({ length: 45 }, (_, i) => ({ quote: `q${i}`, point: `p${i}` })),
     ];
     b.send(run("x", { task: "ask", ctx: ctx(fake({ echo: "options" }), { letStand }), target: "t", question: "q" }));
     const sys: string = JSON.parse((await b.end("x")).data.text).systemPrompt;
-    expect(sys).toContain("1. On «four days a week», Skeptic's question: Is pace the problem? Their reason: Pace is the problem.");
-    expect(sys).toContain(`2. On «${"x".repeat(160)}», Inkling's question: ${"y".repeat(240)} (No reason given.)`);
-    expect(sys).toContain("20. On «q17»");
-    expect(sys).not.toContain("21. On");
+    expect(sys).toContain("Point 1. On «four days a week», Skeptic's question: Is pace the problem? Their reason: Pace is the problem.");
+    expect(sys).toContain(`Point 2. On «${"x".repeat(160)}», Inkling's question: ${"y".repeat(240)} (No reason given.)`);
+    expect(sys).toContain("Point 40. On «q37»");
+    expect(sys).not.toContain("Point 41. On");
     expect(sys).not.toContain("no words");
   });
 

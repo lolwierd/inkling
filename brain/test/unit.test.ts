@@ -367,8 +367,8 @@ describe("points the writer let stand", async () => {
   test("numbered, each with its mind, kind and reason", () => {
     const block = letStandBlock(points);
     expect(block).toContain("Never raise any of them again, in any words");
-    expect(block).toContain("1. On «four days a week», Skeptic's question: Is pace the problem, or the last 3 km? Their reason: Pace is the problem.");
-    expect(block).toContain("2. On «always», Inkling's correction: Always? What is the evidence? (No reason given.)");
+    expect(block).toContain("Point 1. On «four days a week», Skeptic's question: Is pace the problem, or the last 3 km? Their reason: Pace is the problem.");
+    expect(block).toContain("Point 2. On «always», Inkling's correction: Always? What is the evidence? (No reason given.)");
   });
 
   test("every mind's system prompt carries them, and none when there are none", () => {
@@ -514,5 +514,22 @@ describe("usage", () => {
     const u = addUsage(a, b);
     expect(u).toEqual({ ms: 3000, model: "haiku + sonnet", inputTokens: 4300, cacheReadTokens: 3000, outputTokens: 70, costUsd: 0.021, turns: 3, tools: { Grep: 1 } });
     expect(usageLine("read", "r7", u)).toBe("usage read r7: 3.0 s, haiku + sonnet, in 4300 (cache read 3000, write 0), out 70, $0.0210, 3 turns, tools Grep×1");
+  });
+});
+
+describe("a point let stand, on the same words", () => {
+  test("held back when the kind matches and the words are the same or mostly shared", async () => {
+    const { sameWordsAs } = await import("../src/output.ts");
+    const points = [
+      { quote: "I run four days a week", kind: "question" },
+      { quote: "always", kind: "correction" },
+    ];
+    expect(sameWordsAs("four days a week", "question", points)).toBe(1); // inside the point's words
+    expect(sameWordsAs("I run four days a week, mostly easy", "question", points)).toBe(1); // around them
+    expect(sameWordsAs("Always", "correction", points)).toBe(2); // a one-word point, the same word
+    expect(sameWordsAs("four days a week", "correction", points)).toBe(0); // another kind
+    expect(sameWordsAs("a week", "question", points)).toBe(0); // too few words to say
+    expect(sameWordsAs("the long run on Sunday", "question", points)).toBe(0);
+    expect(sameWordsAs("", "question", points)).toBe(0);
   });
 });

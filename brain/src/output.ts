@@ -212,3 +212,28 @@ export function pickAnswers(
   }
   return out;
 }
+
+/** Words for comparing quotes: lower case, letters and digits only. */
+function words(s: string): string[] {
+  return s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+/**
+ * The let-stand point a new thought is about, when the model did not say so: one of the
+ * same kind on the same words (one quote inside the other, or most of their words shared).
+ * A backstop for `repeats`, so a point let stand stays down even when the model misses it.
+ */
+export function sameWordsAs(quote: string, kind: string, points: { quote: string; kind: string }[]): number {
+  const mine = words(quote);
+  if (mine.length === 0) return 0;
+  const i = points.findIndex((p) => {
+    if (p.kind !== kind) return false;
+    const theirs = words(p.quote);
+    if (theirs.length === 0) return false;
+    const [short, long] = mine.length <= theirs.length ? [mine, theirs] : [theirs, mine];
+    if (long.join(" ").includes(short.join(" ")) && short.length >= Math.min(3, long.length)) return true;
+    const shared = short.filter((w) => long.includes(w)).length;
+    return short.length >= 3 && shared / long.length >= 0.6;
+  });
+  return i + 1;
+}

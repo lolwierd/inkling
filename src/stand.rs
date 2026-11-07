@@ -8,8 +8,11 @@ use serde::Serialize;
 
 use crate::store::{Ending, Role, ThoughtKind, Thread, ThreadStatus};
 
-/// At most this many points reach a prompt.
-pub const TOLD_MAX: usize = 12;
+/// Every point whose words are still in the note reaches a prompt, up to this many (a
+/// guard on the prompt's size, not a budget: a point dropped could be raised again).
+pub const TOLD_MAX: usize = 40;
+/// Points whose words have gone from the note fill in up to this many in all.
+pub const GONE_MAX: usize = 12;
 
 /// The tag's button on a mind's open point, and its tooltip.
 pub const BUTTON: &str = "Let stand";
@@ -54,9 +57,10 @@ pub fn dismiss(t: &mut Thread, typed: &str) -> &'static str {
     if t.reason.is_some() { LET_STAND_WHY } else { LET_STAND }
 }
 
-/// The points let stand in a note, as every mind is told them: the ones whose words are
-/// still in `text` (the note's text) first, then the rest, newest first within each, at
-/// most [`TOLD_MAX`], each field one line and cut short.
+/// The points let stand in a note, as every mind is told them: every one whose words are
+/// still in `text` (the note's text), up to [`TOLD_MAX`], then the ones whose words have
+/// gone while fewer than [`GONE_MAX`] are told; newest first within each, each field one
+/// line and cut short.
 pub fn points(threads: &[Thread], text: &str) -> Vec<Point> {
     let mut stood: Vec<(&Thread, &str)> = threads
         .iter()
@@ -69,9 +73,11 @@ pub fn points(threads: &[Thread], text: &str) -> Vec<Point> {
     // in the note first; newest first (a thread let stand before dates were kept counts
     // from when it was opened)
     stood.sort_by_key(|(t, _)| (!text.contains(t.quote.as_str()), std::cmp::Reverse(t.ended_at.unwrap_or(t.created_at))));
+    let present = stood.iter().filter(|(t, _)| text.contains(t.quote.as_str())).count().min(TOLD_MAX);
+    let gone = GONE_MAX.saturating_sub(present);
     stood
         .into_iter()
-        .take(TOLD_MAX)
+        .take(present + gone)
         .map(|(t, first)| Point {
             quote: line(&t.quote, 160),
             point: line(first, 240),
@@ -168,15 +174,18 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
-    fn at_most_twelve_and_each_cut_short() {
+    fn every_point_still_in_the_note_and_a_few_gone_each_cut_short() {
         let mut threads: Vec<Thread> = (0..20).map(|i| stood(&format!("words {i}"), "Why?", i)).collect();
         threads[0].quote = "é".repeat(400);
         threads[0].messages[0].text = format!("Line one\n\nline   two {}", "ü".repeat(400));
         threads[0].set_reason(&"ß".repeat(300));
+        // none of their words are in the note: the newest few are kept
         let told = points(&threads, "");
-        assert_eq!(told.len(), TOLD_MAX);
-        // the newest are kept
+        assert_eq!(told.len(), GONE_MAX);
         assert_eq!(told.last().unwrap().quote, "words 11");
+        // nineteen of their words are: all nineteen are told, and the gone one is not
+        let note: String = (1..20).map(|i| format!("words {i}. ")).collect();
+        assert_eq!(points(&threads, &note).len(), 19);
         let p = &told[0];
         assert_eq!((p.quote.chars().count(), p.point.chars().count()), (160, 240));
         assert!(p.quote.ends_with('\u{2026}') && p.point.starts_with("Line one line two üü"));

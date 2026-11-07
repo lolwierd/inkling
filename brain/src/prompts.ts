@@ -46,13 +46,13 @@ export function letStandBlock(points: LetStandPoint[]): string {
   return [
     "Points the writer let stand. They weighed each one and decided their words stay as they are. Never raise any of them again, in any words or about any other part of the note, unless the writer asks about it. Your point is the same one when the writer's reason, or their decision to keep the words, answers it too.",
     ...points.map(
-      (p, i) => `${i + 1}. On «${p.quote}», ${p.mind}'s ${p.kind}: ${p.point} ${p.reason ? `Their reason: ${p.reason}` : "(No reason given.)"}`,
+      (p, i) => `Point ${i + 1}. On «${p.quote}», ${p.mind}'s ${p.kind}: ${p.point} ${p.reason ? `Their reason: ${p.reason}` : "(No reason given.)"}`,
     ),
   ].join("\n");
 }
 
 const REPEATS =
-  "- repeats: after writing your note, compare it with the points the writer let stand (listed in your instructions): the number of the one it makes again, in any words; 0 when it makes none of them, or when there are none.";
+  "- repeats: after writing your note, compare it with the points the writer let stand (listed in your instructions as Point 1, Point 2, …): N for the Point N it makes again, in any words; 0 when it makes none of them, or when there are none.";
 
 /** The stable part of every system prompt: who the mind is and how it behaves. */
 export function systemPrompt(ctx: Context): string {

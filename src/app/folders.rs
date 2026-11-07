@@ -51,7 +51,7 @@ impl AppView {
         let store = cx.global::<Store>();
         let folder = id.as_ref().and_then(|id| store.folders.iter().find(|f| &f.id == id)).cloned();
         let title = folder.as_ref().map_or("Unfiled".to_string(), |f| f.name.clone());
-        let notes: Vec<Note> = store.notes.iter().filter(|n| n.folder == id).cloned().collect();
+        let notes: Vec<Note> = store.notes.iter().filter(|n| n.folder == id || (id.is_none() && n.folder.as_ref().is_some_and(|id| !store.folders.iter().any(|f| &f.id == id)))).cloned().collect();
         let t = Theme::get(cx).clone();
         let p = t.p;
         let mut contents = div().flex().flex_col().gap(px(16.))
@@ -94,7 +94,13 @@ impl AppView {
             let threads = crate::between::open_here(&cx.global::<Store>().notes, &note);
             contents = contents.child(div().id(SharedString::from(format!("folder-note-{}", note.id)))
                 .py(px(16.)).border_b_1().border_color(p.rule).cursor_pointer().hover(move |s| s.bg(p.hover))
-                .on_drag(DraggedNote { id: note.id.clone(), title: title.clone() }, |drag, _, _, cx| cx.new(|_| drag.clone()))
+                .on_drag(DraggedNote { id: note.id.clone(), title: title.clone() }, {
+                    let app = cx.entity();
+                    move |drag, _, _, cx| {
+                        app.update(cx, |app, cx| { app.sidebar_open = true; cx.notify(); });
+                        cx.new(|_| drag.clone())
+                    }
+                })
                 .child(div().font_family(crate::theme::SERIF).text_size(px(22.)).child(title))
                 .child(div().mt(px(5.)).text_size(px(ts::UI)).text_color(p.graphite).child(excerpt))
                 .child(div().mt(px(8.)).text_size(px(ts::SMALL)).text_color(p.graphite).child(format!("{} · {} loose threads", note.updated_at.format("%-d %b"), threads)))

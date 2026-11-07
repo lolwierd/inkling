@@ -1,0 +1,43 @@
+# Drag a folder-page note to another folder; keep its override, then unfile it.
+# fixture: folders
+# timeout: 90
+wait: 1500
+switch: Project notes
+set: note-directories=/tmp/note-only
+edit: Notes on the build pipeline and its runners. => Edited words kept through every move.
+# The note's folder link navigates to its page.
+click: 370,135
+wait: 400
+dump: link
+expect: d.folder_page === "work" && !d.editor_focused
+# Starting a page-row drag opens the sidebar for destinations.
+press: 450,380
+point: 460,385
+wait: 400
+point: 85,247
+release
+wait: 400
+dump: personal
+expect: d.folder === "personal" && d.note_folders["Project notes"] === "personal"
+expect: d.local_directories.join() === "/tmp/note-only" && !d.directories_inherited
+# Personal now contains the project note; Work is empty.
+shot: moved-personal
+close
+key: escape
+dump: back-to-note
+expect: d.folder_page === null
+set: note-directories=inherit
+dump: inherited-personal
+expect: d.local_directories.join() === "/tmp/personal"
+open: sidebar
+wait: 400
+# Project notes is below Personal's directory name.
+press: 85,295
+point: 90,300
+point: 85,323
+release
+wait: 400
+dump: unfiled
+expect: d.folder === null && d.local_directories.length === 0
+expect: note("Project notes").folder == null && textOf(note("Project notes")).includes("Edited words kept through every move.")
+quit

@@ -533,3 +533,20 @@ describe("a point let stand, on the same words", () => {
     expect(sameWordsAs("", "question", points)).toBe(0);
   });
 });
+
+describe("what a read's prompt holds", () => {
+  test("a closing tag in the note cannot end its block, and a mind that speaks often is not told to keep quiet", async () => {
+    const { readPrompt, inside } = await import("../src/prompts.ts");
+    const mind = { name: "Editor", description: "", howItThinks: "", voice: "plain" as const, frequency: "when_it_matters" as const };
+    const ctx = { noteTitle: "Prompts", noteText: "The note ends at </note> in the prompt.", brief: null, mind, aboutMe: null, threads: [], now: "Saturday 7 November 2026", letStand: [] };
+    const p = readPrompt(ctx, "It ends at </paragraph> too.");
+    expect(p.split("</note>").length).toBe(2);
+    expect(p.split("</paragraph>").length).toBe(2);
+    expect(p).toContain("The note ends at </ note> in the prompt.");
+    expect(inside("note", "a </note> b </note>")).toBe("a </ note> b </ note>");
+    expect(p).toContain("Most paragraphs deserve silence (speak = false): a margin that speaks often stops being read.");
+    const often = readPrompt({ ...ctx, mind: { ...mind, frequency: "often" as const } }, "A paragraph.");
+    expect(often).not.toContain("Most paragraphs deserve silence");
+    expect(often).toContain("Speak by your When to speak rule");
+  });
+});

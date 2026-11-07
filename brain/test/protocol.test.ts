@@ -486,7 +486,8 @@ describe("what each task sends back", () => {
       };
       const chat = await echo("c", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, web);
       expect(chat).toMatchObject({ tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"], allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: null });
-      expect(chat.prompt).toContain("Link only to a page your search returned");
+      expect(chat.prompt).toContain("never a Sources list at the end");
+      expect(chat.prompt).toContain("nothing about what you are checking");
       const off = await echo("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, settings);
       expect(off).toMatchObject({ tools: ["Read", "Glob", "Grep"], maxTurns: 6, maxBudgetUsd: null });
       expect(off.prompt).not.toContain("WebSearch");
@@ -711,7 +712,8 @@ describe("what reaches the runtime", () => {
     const o = JSON.parse((await b.end("o")).data.text);
     expect(o).toMatchObject({ model: "claude-sonnet-5-5", effort: "medium", tools: ["Read", "Glob", "Grep"], maxTurns: 6, persistSession: false, settingSources: ["user"], includePartialMessages: true, outputFormat: null });
     expect(o.cwd).toBe(join(DATA, "brain-cwd"));
-    expect(o.systemPrompt).toContain("projects/*/memory/MEMORY.md");
+    expect(o.systemPrompt).toContain("memory/MEMORY.md indexing the rest");
+    expect(o.systemPrompt).not.toContain("Use Glob");
     expect(o).toMatchObject({ settings: { disableAllHooks: true }, permissionMode: "dontAsk", strictMcpConfig: true });
     expect(o.prompt).toContain("«the reset»");
   });

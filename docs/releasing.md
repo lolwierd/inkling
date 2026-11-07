@@ -1,8 +1,10 @@
 # Releasing Inkling
 
-[CI](../.github/workflows/ci.yml) runs on pull requests and pushes to `master`. On an Apple Silicon runner it installs locked dependencies, runs `scripts/dev check` and builds the release ZIP. Packaging checks the extracted bundle’s signature and architecture, starts its brain, and verifies that the SDK launches a test executable from Claude Code’s native install path with Finder’s limited `PATH`. GUI scenarios run separately with `scripts/dev check --e2e` on a Mac. Neither check needs Claude credentials.
+[CI](../.github/workflows/ci.yml) runs on pull requests and pushes to `master`. On an Apple Silicon runner it installs locked dependencies, runs `scripts/dev check` and builds the release ZIP. Packaging checks the extracted bundle’s signatures and architectures, then runs the standalone brain with Finder’s limited `PATH` and verifies that the SDK launches a test executable from Claude Code’s native install path. GUI scenarios run separately with `scripts/dev check --e2e` on a Mac. Neither check needs Claude credentials.
 
 For a downloadable preview, run **CI → Run workflow** in GitHub Actions and download the `inkling-macos-arm64` artifact from the completed run. It contains the install ZIP and its SHA-256 file. The same files can be built locally with `scripts/package.sh`. Follow the [install instructions](../README.md#install-and-run) to try the preview.
+
+The release helper embeds [Bun 1.4.2](https://github.com/oven-sh/bun/tree/bun-v1.4.2). The bundle includes Bun’s notices, with links to its JavaScriptCore source and relinking instructions. To rebuild the helper with a relinked Bun, put that `bun` first on `PATH` and run `scripts/package.sh` from the matching Inkling source tag.
 
 ## Cut a release
 

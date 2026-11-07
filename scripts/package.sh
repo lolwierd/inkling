@@ -23,23 +23,17 @@ trap 'rm -r "$unpacked"' EXIT
 ditto -x -k "target/dist/$archive" "$unpacked"
 app="$unpacked/Inkling.app"
 plutil -lint "$app/Contents/Info.plist"
-codesign --verify --strict "$app"
+codesign --verify --deep --strict "$app"
 test "$(lipo -archs "$app/Contents/MacOS/inkling")" = arm64
 brain="$app/Contents/Resources/brain"
 test ! -L "$brain"
-for package in "$brain"/node_modules/@anthropic-ai/claude-agent-sdk-*; do
-  if [ -e "$package" ]; then
-    echo "The ZIP should use the installed Claude Code, but includes $package" >&2
-    exit 1
-  fi
-done
+helper="$brain/dist/inkling-brain"
+test "$(lipo -archs "$helper")" = arm64
+test ! -e "$brain/node_modules"
+test ! -e "$brain/src"
 (
   cd "$brain"
-  # Wait for the startup handshake without requesting account status or model output.
-  ready=$(printf '{"op":"shutdown"}\n' | bun run src/main.ts)
-  printf '%s\n' "$ready" | grep -F '"ev":"ready"'
-
-  # Exercise the real SDK's launcher using a fresh home and Finder's PATH.
+  # Exercise the standalone helper using a fresh home and Finder's PATH.
   # The stub records the launch and exits before a session can start.
   mkdir -p "$unpacked/home/.local/bin"
   cat > "$unpacked/home/.local/bin/claude" <<'STUB'
@@ -49,9 +43,25 @@ exit 1
 STUB
   chmod +x "$unpacked/home/.local/bin/claude"
   env -i HOME="$unpacked/home" PATH=/usr/bin:/bin INKLING_DATA_DIR="$unpacked/data" \
-    INKLING_TEST_LAUNCH="$unpacked/claude-args" "$(command -v bun)" -e '
-      import { accountStatus } from "./src/claude.ts";
-      await accountStatus(3000).catch(() => {});
+    INKLING_TEST_LAUNCH="$unpacked/claude-args" INKLING_TEST_HELPER="$helper" \
+    "$(command -v bun)" -e '
+      import assert from "node:assert/strict";
+      import { createInterface } from "node:readline";
+      import { Readable } from "node:stream";
+      const child = Bun.spawn([process.env.INKLING_TEST_HELPER], {
+        stdin: "pipe", stdout: "pipe", stderr: "inherit", signal: AbortSignal.timeout(10000),
+      });
+      const lines = createInterface({ input: Readable.fromWeb(child.stdout) })[Symbol.asyncIterator]();
+      const read = async () => JSON.parse((await lines.next()).value);
+      assert.equal((await read()).ev, "ready");
+      child.stdin.write(JSON.stringify({ op: "status", id: "packaging" }) + "\n");
+      child.stdin.flush();
+      const status = await read();
+      assert.equal(status.id, "packaging");
+      assert.equal(status.ev, "error"); // The stub exits deliberately.
+      child.stdin.write(JSON.stringify({ op: "shutdown" }) + "\n");
+      child.stdin.end();
+      assert.equal(await child.exited, 0);
     '
   grep -qx -- '--input-format' "$unpacked/claude-args"
 )

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build Inkling and wrap it in a minimal macOS app bundle at target/Inkling.app.
 # Local bundles link to this checkout's brain/ folder so edits apply on launch.
-# A portable bundle ships its own brain and production dependencies.
+# A portable bundle ships a standalone brain executable.
 #   ./scripts/bundle.sh                     debug build
 #   ./scripts/bundle.sh release             optimized build
 #   ./scripts/bundle.sh release --portable  optimized, independent of the checkout
@@ -27,12 +27,23 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/inkling"
 if [ "$PORTABLE" = --portable ]; then
-  BRAIN="$APP/Contents/Resources/brain"
-  mkdir "$BRAIN"
-  cp -R brain/src "$BRAIN/"
-  cp brain/package.json brain/bun.lock "$BRAIN/"
-  # The Agent SDK's optional platform package is a second copy of Claude Code.
-  (cd "$BRAIN" && bun install --frozen-lockfile --production --omit=optional)
+  BRAIN="$PWD/$APP/Contents/Resources/brain"
+  STAGE=$(mktemp -d)
+  trap 'rm -r "$STAGE"' EXIT
+  mkdir -p "$BRAIN/dist" "$BRAIN/licenses"
+  cp -R brain/src "$STAGE/"
+  cp brain/package.json brain/bun.lock "$STAGE/"
+  (
+    cd "$STAGE"
+    # The Agent SDK's optional platform package is a second copy of Claude Code.
+    bun install --frozen-lockfile --production --omit=optional
+    bun build --compile --minify --no-compile-autoload-dotenv --no-compile-autoload-bunfig \
+      src/main.ts --outfile "$BRAIN/dist/inkling-brain"
+  )
+  codesign --force --sign - "$BRAIN/dist/inkling-brain"
+  cp assets/licenses/Bun.md "$BRAIN/licenses/"
+  cp "$STAGE/node_modules/@anthropic-ai/claude-agent-sdk/LICENSE.md" "$BRAIN/licenses/Claude-Agent-SDK.md"
+  cp "$STAGE/node_modules/zod/LICENSE" "$BRAIN/licenses/Zod.txt"
   cp assets/fonts/OFL-*.txt "$APP/Contents/Resources/"
 else
   ln -s "$(pwd)/brain" "$APP/Contents/Resources/brain"

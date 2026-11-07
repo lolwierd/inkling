@@ -44,7 +44,7 @@ Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](desi
 
 ### Download the app
 
-The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install [Bun](https://bun.com/docs/installation) and a current version of [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`. Inkling uses the Claude Code installation on your Mac and picks up its updates.
+The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install a current version of [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`. Inkling uses the Claude Code installation on your Mac and picks up its updates. The downloaded app includes the runtime for its helper, so you can install it without Bun.
 
 1. Sign in to GitHub with access to this private repository. From [Releases](https://github.com/lolwierd/inkling/releases/latest), download `Inkling-<version>-macos-arm64.zip` and its matching `.zip.sha256` file.
 2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, replacing `<version>` with the version you downloaded. The ZIP should report `OK`.
@@ -60,7 +60,7 @@ INKLING_CLAUDE_PATH="/absolute/path/to/claude" /Applications/Inkling.app/Content
 
 ### Build from source
 
-Install [Rust via rustup](https://rustup.rs), Bun and Claude Code. On a Mac without Xcode, install Apple’s Command Line Tools with `xcode-select --install` first.
+Install [Rust via rustup](https://rustup.rs), [Bun](https://bun.com/docs/installation) and Claude Code. On a Mac without Xcode, install Apple’s Command Line Tools with `xcode-select --install` first.
 
 ```bash
 git clone https://github.com/lolwierd/inkling.git

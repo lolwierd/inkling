@@ -82,16 +82,16 @@ export function inside(tag: string, text: string): string {
   return text.split(`</${tag}>`).join(`</ ${tag}>`);
 }
 
+function noteOnly(ctx: Context): string {
+  return [`<note title="${ctx.noteTitle.replace(/"/g, "'")}">`, inside("note", ctx.noteText), "</note>"].join("\n");
+}
+
+function marginBlock(ctx: Context): string {
+  return ["<margin>", threadsBlock(ctx), "</margin>"].join("\n");
+}
+
 function noteBlock(ctx: Context): string {
-  return [
-    `<note title="${ctx.noteTitle.replace(/"/g, "'")}">`,
-    inside("note", ctx.noteText),
-    "</note>",
-    "",
-    "<margin>",
-    threadsBlock(ctx),
-    "</margin>",
-  ].join("\n");
+  return [noteOnly(ctx), "", marginBlock(ctx)].join("\n");
 }
 
 // Show its working: a correction carries a check the writer can do themselves, and the
@@ -136,20 +136,21 @@ function silence(ctx: Context): string {
     : "Most paragraphs deserve silence (speak = false): a margin that speaks often stops being read.";
 }
 
-/** The system prompt for the reads of a Read it through pass: the note and its margin
- *  ride at its end. Every read of the pass sends the same note, and the runtime caches the
- *  system prompt, so from the second read on the note comes from the cache instead of
- *  being written again with each paragraph (measured: about a quarter of the cost on a
- *  sixty-paragraph note). */
+/** The system prompt for the reads of a Read it through pass: the note rides at its end.
+ *  Every read of the pass sends the same note, and the runtime caches the system prompt,
+ *  so from the second read on the note comes from the cache instead of being written again
+ *  with each paragraph (measured: about a quarter of the cost on a sixty-paragraph note).
+ *  The margin goes with each paragraph instead: a thread the pass opens changes it, and in
+ *  here it would make every later read write the whole note to the cache again. */
 export function throughSystemPrompt(ctx: Context): string {
-  return [systemPrompt(ctx), "", "The note you are reading through, with its margin:", noteBlock(ctx)].join("\n");
+  return [systemPrompt(ctx), "", "The note you are reading through:", noteOnly(ctx)].join("\n");
 }
 
 /** A read. Reading it through (`through`), the note is in the system prompt instead
  *  (`throughSystemPrompt`), and the writer has finished the whole draft. */
 export function readPrompt(ctx: Context, target: string, through = false): string {
   return [
-    ...(through ? [] : [noteBlock(ctx), ""]),
+    ...(through ? [marginBlock(ctx), ""] : [noteBlock(ctx), ""]),
     through
       ? "The writer has finished this draft and asked you to read it through, one paragraph at a time. The next paragraph:"
       : "The writer just finished this paragraph:",

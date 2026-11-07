@@ -31,9 +31,12 @@ describe("a read made by Read it through", () => {
     expect(readPrompt(ctx, target, false)).toBe(along);
   });
 
-  test("the pass's prompt leaves the note to the system prompt and says the draft is finished", () => {
+  test("the pass's prompt leaves the note to the system prompt, keeps the margin, and says the draft is finished", () => {
     expect(through).not.toContain("<note");
     expect(through).not.toContain("Rollback triggers");
+    // the margin changes as the pass opens threads, so it comes with each paragraph
+    expect(through).toContain("<margin>");
+    expect(through).toContain("Thread 1 on «every two weeks»");
     expect(through).toContain("The writer has finished this draft and asked you to read it through, one paragraph at a time.");
     expect(through).toContain(`<paragraph>${target}</paragraph>`);
     expect(through).toContain("when another paragraph of the note already answers what you would ask, stay silent.");
@@ -44,13 +47,15 @@ describe("a read made by Read it through", () => {
     expect(rules(through)).toEqual(rules(along));
   });
 
-  test("its system prompt is the usual one with the note and its margin at the end", () => {
+  test("its system prompt is the usual one with the note at the end, and no margin", () => {
     const sys = throughSystemPrompt(ctx);
     expect(sys.startsWith(systemPrompt(ctx))).toBe(true);
     const tail = sys.slice(systemPrompt(ctx).length);
-    expect(tail).toContain("The note you are reading through, with its margin:");
+    expect(tail).toContain("The note you are reading through:");
     expect(tail).toContain("Rollback triggers when the 5xx rate passes 2% for five minutes.");
-    expect(tail).toContain("Thread 1 on «every two weeks»");
+    // a thread the pass opens must not change the cached part
+    expect(tail).not.toContain("<margin>");
+    expect(throughSystemPrompt({ ...ctx, threads: [] })).toBe(sys);
     // the paragraph changes with every read, so it stays out of the cached part
     expect(sys).not.toContain(target);
   });

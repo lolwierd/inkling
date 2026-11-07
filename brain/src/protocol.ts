@@ -99,7 +99,9 @@ export interface RunSettings {
 export type Task =
   // `through`: a read made by Read it through, which reads a finished draft once.
   // `answersOnly`: a note that waits to be asked reads only for answers (Answer in the note).
-  | { task: "read"; ctx: Context; target: string; through?: boolean; answersOnly?: boolean }
+  // `pass` and `ahead`: a read of a Read it through pass, and the paragraphs it will read
+  // after this one, so one call can read them all (main.ts throughRead).
+  | { task: "read"; ctx: Context; target: string; through?: boolean; answersOnly?: boolean; pass?: string; ahead?: string[] }
   | { task: "probe"; ctx: Context; target: string }
   | { task: "ask"; ctx: Context; target: string; question: string; history?: ThreadMessage[] }
   | { task: "answer"; ctx: Context; target: string }

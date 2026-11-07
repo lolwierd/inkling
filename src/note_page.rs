@@ -1872,7 +1872,7 @@ impl NotePage {
         // Read it through: a read of a finished draft, and a failure ends the pass.
         let through = self.reads_through(hash);
         if through {
-            input["through"] = json!(true);
+            self.mark_through(&mut input);
         }
         let target = text.clone();
         let reads = task == "read";

@@ -20,6 +20,8 @@ dump: after
 expect: d.read_through === null && d.reading === null && d.read_hashes === 3
 expect: d.threads.length === 1 && d.threads[0].quote === "reset it every minute" && d.threads[0].kind === "Question"
 expect: d.toasts.some(t => t.text === "Inkling read it through. New threads are in the margin.")
+# each read of a pass names it and sends what it will read next, so the brain reads them in one call
+expect: (t => t[0].input.ahead.length === 2 && t[1].input.ahead.length === 1 && t[2].input.ahead.length === 0 && t[1].input.pass === t[0].input.pass && t[2].input.pass === t[0].input.pass && t[3].input.pass !== t[0].input.pass)(requests.filter(r => r.input.task === "read" && r.input.through))
 # again: every paragraph has been read
 key: cmd-shift-r
 dump: again

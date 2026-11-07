@@ -19,6 +19,11 @@ pub(crate) struct Pass {
     /// The note's threads when it began: an open question or correction not among them at
     /// the end is new.
     had: HashSet<String>,
+    /// Names the pass to the brain, which reads its paragraphs in one call and answers the
+    /// pass's later reads from that call (`throughRead` in brain/src/main.ts).
+    id: String,
+    /// The paragraphs it will read after the one being read, sent with each read.
+    ahead: Vec<String>,
 }
 
 /// What the reading loop reads as one: a paragraph, or a whole code block.
@@ -142,7 +147,8 @@ impl NotePage {
             return;
         }
         let had = self.note.threads.iter().map(|t| t.id.clone()).collect();
-        self.read_through = Some(Pass { next: 1, done: 0, total, reading: None, had });
+        let id = format!("{}:{}", self.note.id, chrono::Utc::now().timestamp_millis());
+        self.read_through = Some(Pass { next: 1, done: 0, total, reading: None, had, id, ahead: vec![] });
         self.step_through(cx);
         cx.notify();
     }
@@ -207,6 +213,10 @@ impl NotePage {
                 }
             }
         }
+        // what the pass will read after this one, for the brain's one call
+        let ahead: Vec<String> = pick.map_or(vec![], |(i, _)| {
+            units[i + 1..].iter().filter(|u| next_for(u, read, alone, imported) == Next::Read).map(|u| u.text.clone()).collect()
+        });
         // A paragraph that calls the mind by name is answered, as reading along does, and
         // the pass goes on while the answer streams in.
         for u in calls {
@@ -219,6 +229,7 @@ impl NotePage {
             pass.next = u.end;
             pass.reading = Some(hash);
             pass.total = pass.done + 1 + rest;
+            pass.ahead = ahead;
         }
         self.read_line(u.line, u.text, hash, cx);
         cx.notify();
@@ -228,6 +239,16 @@ impl NotePage {
     /// finished draft (`"through": true`), and a failure ends the pass.
     pub(super) fn reads_through(&self, hash: u64) -> bool {
         self.read_through.as_ref().is_some_and(|p| p.reading == Some(hash))
+    }
+
+    /// A read of the pass says so, names the pass and lists what it will read next, so the
+    /// brain can read them all in one call.
+    pub(super) fn mark_through(&self, input: &mut Value) {
+        input["through"] = json!(true);
+        if let Some(p) = &self.read_through {
+            input["pass"] = json!(p.id);
+            input["ahead"] = json!(p.ahead);
+        }
     }
 
     /// The needle has passed the last paragraph.

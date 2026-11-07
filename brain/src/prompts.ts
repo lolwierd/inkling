@@ -201,6 +201,44 @@ function clipLine(s: string, max: number): string {
   return one.length <= max ? one : `${one.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** At most this many paragraphs, and this many characters of them, go in one call of a
+ *  Read it through pass; the rest are read by the next call when the pass reaches them. */
+export const THROUGH_BATCH = 40;
+export const THROUGH_CHARS = 24_000;
+
+/**
+ * Read it through in one call: the paragraphs the pass will read, numbered, under the
+ * margin, with a read's rules for each. The note rides in the system prompt
+ * (`throughSystemPrompt`), as it does for a pass's single reads.
+ */
+export function throughBatchPrompt(ctx: Context, paragraphs: string[]): string {
+  const open = openThreadNumbers(ctx);
+  return [
+    marginBlock(ctx),
+    "",
+    "The writer has finished this draft and asked you to read it through. These are the paragraphs you have not read yet, in order:",
+    ...paragraphs.map((p, i) => `<paragraph n="${i + 1}">${inside("paragraph", p)}</paragraph>`),
+    "(A paragraph here may be a heading, a list item or a line of a callout: read it as what it is in the note.)",
+    "",
+    `Decide for each paragraph whether to say something about it. ${silence(ctx)} Never repeat a point that an existing margin thread already makes, or one the writer let stand, and never make one point about two paragraphs. The whole draft is in front of you: when another paragraph of the note already answers what you would ask, stay silent.`,
+    "In notes, list only the paragraphs you speak about, with at most one note each:",
+    "- paragraph: its n.",
+    "- quote: copy the exact words from that paragraph that your note is about, the shortest span that makes sense (often 3 to 15 words). It must match the paragraph character for character.",
+    "- text: your margin note, at most 45 words, usually ending in one question.",
+    ...checkRules(false),
+    "- sketch: true only when a small step-by-step drawing would make it click (a process, a structure, a flow, a comparison) and they seem to be struggling to picture it.",
+    REPEATS,
+    ...(open.length
+      ? [
+          `Open margin threads: ${open.join(", ")}. For each paragraph that answers one of them, give answers on its entry; an entry that only answers has empty quote and text.`,
+          ...ANSWER_RULES,
+          ...refusedLines(ctx),
+        ]
+      : []),
+    NO_SOURCES,
+  ].join("\n");
+}
+
 /** A read. Reading it through (`through`), the note is in the system prompt instead
  *  (`throughSystemPrompt`), and the writer has finished the whole draft. */
 export function readPrompt(ctx: Context, target: string, through = false): string {
@@ -630,4 +668,32 @@ export const SETTLE_SCHEMA = {
   additionalProperties: false,
   required: ["settled", "quote", "text"],
   properties: { settled: { type: "boolean" }, quote: { type: "string" }, text: { type: "string" } },
+} as const;
+
+/** Read it through in one call: a note for each paragraph that gets one. */
+export const THROUGH_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["notes"],
+  properties: {
+    notes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["paragraph", "kind", "quote", "text", "sketch", "repeats"],
+        properties: {
+          paragraph: { type: "integer" },
+          kind: THOUGHT_SCHEMA.properties.kind,
+          quote: { type: "string" },
+          text: { type: "string" },
+          sketch: { type: "boolean" },
+          check: THOUGHT_SCHEMA.properties.check,
+          question: { type: "string" },
+          answers: THOUGHT_WITH_ANSWERS_SCHEMA.properties.answers,
+          repeats: THOUGHT_SCHEMA.properties.repeats,
+        },
+      },
+    },
+  },
 } as const;

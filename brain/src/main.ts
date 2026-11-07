@@ -31,6 +31,11 @@ import {
   GATE_SCHEMA,
   GATE_SYSTEM,
   gatePrompt,
+  isOpen,
+  THROUGH_BATCH,
+  THROUGH_CHARS,
+  THROUGH_SCHEMA,
+  throughBatchPrompt,
   openThreadNumbers,
   settlePrompt,
   SETTLE_SCHEMA,
@@ -197,7 +202,15 @@ function task(v: unknown): Task {
   if (!isObject(v)) badRequest("input is missing");
   switch (v.task) {
     case "read":
-      return { task: "read", ctx: context(v.ctx), target: required(v.target, "target"), through: v.through === true, answersOnly: v.answersOnly === true };
+      return {
+        task: "read",
+        ctx: context(v.ctx),
+        target: required(v.target, "target"),
+        through: v.through === true,
+        answersOnly: v.answersOnly === true,
+        pass: optionalText(v.pass) ?? undefined,
+        ahead: strings(v.ahead),
+      };
     case "probe":
     case "answer":
     case "sketch":
@@ -288,6 +301,70 @@ async function firstLook(ctx: Context, target: string, settings: RunSettings, si
   }
 }
 
+/** What the one call of a Read it through pass said about each paragraph it read, by the
+ * paragraph's words, until the pass reaches it; dropped half an hour after the call. */
+const passes = new Map<string, { at: number; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
+const PASS_KEEP_MS = 30 * 60 * 1000;
+
+/**
+ * A read of a Read it through pass: from what the pass's one call already said about the
+ * paragraph, with no model call; or, when it has not read it (the first read of the pass,
+ * a paragraph you changed meanwhile, one past the last call's limits), from one call made
+ * now for this paragraph and the ones the pass will read after it. Thread numbers and
+ * let-stand points are settled when the call comes back, as the margin may change before
+ * the pass reaches a paragraph. Null for any other read.
+ */
+async function throughRead(
+  id: string,
+  input: Extract<Task, { task: "read" }>,
+  settings: RunSettings,
+  signal: AbortController,
+  access: Access,
+): Promise<{ d: Json; answers: { thread: string; quote: string }[]; usage: Usage } | null> {
+  if (!input.through || !input.pass) return null;
+  const now = Date.now();
+  for (const [k, p] of passes) if (now - p.at > PASS_KEEP_MS) passes.delete(k);
+  const key = input.target.trim();
+  const known = passes.get(input.pass)?.by.get(key);
+  if (known) {
+    passes.get(input.pass)?.by.delete(key);
+    log(`read ${id}: from the pass's one call`);
+    return { ...known, usage: { ms: 0 } };
+  }
+  const batch: string[] = [];
+  let chars = 0;
+  for (const p of [input.target, ...(input.ahead ?? [])]) {
+    const t = p.trim();
+    if (!t || batch.includes(t)) continue;
+    if (batch.length >= THROUGH_BATCH || (batch.length > 0 && chars + t.length > THROUGH_CHARS)) break;
+    batch.push(t);
+    chars += t.length;
+  }
+  const { data, usage } = await runStructured<unknown>(throughSystemPrompt(input.ctx), throughBatchPrompt(input.ctx, batch), THROUGH_SCHEMA, settings, signal, onLimit, access);
+  const notes = isObject(data) && Array.isArray(data.notes) ? data.notes.filter(isObject) : [];
+  const by = new Map<string, { d: Json; answers: { thread: string; quote: string }[] }>();
+  for (const t of batch) by.set(t, { d: { speak: false }, answers: [] });
+  for (const n of notes) {
+    const i = typeof n.paragraph === "number" && Number.isInteger(n.paragraph) ? n.paragraph - 1 : -1;
+    if (i < 0 || i >= batch.length) continue;
+    const t = batch[i];
+    const entry = by.get(t)!;
+    const answers = pickAnswers(n.answers, input.ctx.threads, t);
+    // a let-stand point is matched against the points as they were for this call
+    const repeats = repeated(n.repeats, input.ctx.letStand.length);
+    const speaks = entry.d.speak !== true && text(n.text).trim() !== "";
+    by.set(t, {
+      d: speaks ? { ...n, speak: repeats === 0, repeats } : entry.d,
+      answers: [...entry.answers, ...answers.filter((a) => !entry.answers.some((b) => b.thread === a.thread))],
+    });
+  }
+  log(`read ${id}: read it through in one call, ${batch.length} paragraph(s), ${notes.length} note(s)`);
+  const mine = by.get(key) ?? { d: { speak: false }, answers: [] };
+  by.delete(key);
+  passes.set(input.pass, { at: now, by });
+  return { ...mine, usage };
+}
+
 /** The tasks that may open local files and Claude Code memories; the rest get no tools. */
 const FILE_TASKS: ReadonlySet<string> = new Set(["read", "probe", "ask", "answer", "reply", "chat"]);
 
@@ -360,11 +437,19 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
           : input.answersOnly
             ? [sys, answersOnlyPrompt(input.ctx, input.target), THOUGHT_WITH_ANSWERS_SCHEMA]
             : [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through) + answersBlock(input.ctx), answering ? THOUGHT_WITH_ANSWERS_SCHEMA : THOUGHT_SCHEMA];
-      const { data, usage: own, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, access);
+      // Reading it through, one call reads the paragraphs of the pass (`throughRead`).
+      const batched = input.task === "read" ? await throughRead(id, input, settings, signal, access) : null;
+      const { data, usage: own, found } = batched
+        ? { data: batched.d as unknown, usage: batched.usage, found: [] as Found[] }
+        : await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, access);
       const usage = first ? addUsage(first.usage, own) : own;
       const d = structured(data);
       // Answer in the note: the open threads this paragraph answers, whatever else the read says.
-      const answers = answering ? pickAnswers(d.answers, input.ctx.threads, input.target) : [];
+      const answers = batched
+        ? batched.answers.filter((a) => input.ctx.threads.some((t) => t.id === a.thread && isOpen(t)))
+        : answering
+          ? pickAnswers(d.answers, input.ctx.threads, input.target)
+          : [];
       const answered = answers.length > 0 ? { answers } : {};
       // A note that waits to be asked raises nothing new.
       if (input.task === "read" && input.answersOnly) return { data: { speak: false, ...answered }, usage };

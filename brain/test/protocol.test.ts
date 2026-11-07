@@ -336,6 +336,35 @@ describe("what each task sends back", () => {
     expect((await b.end("r")).data).toEqual({ speak: true, kind: "question", quote: "one Redis counter", text: "What happens at the boundary?", sketch: true });
   });
 
+  describe("Read it through in one call", () => {
+    const first = "The cache lives on the runner for a week.";
+    const second = "Hits are around 90 percent on main.";
+    const third = "Misses cost about two minutes.";
+
+    test("the pass's first read reads the rest too, and the later reads make no call", async () => {
+      const b = brain();
+      const notes = [{ paragraph: 2, kind: "question", quote: "around 90 percent", text: "Measured how?", sketch: false, repeats: 0 }];
+      // the note rides in the system prompt: the directive goes with the first paragraph
+      b.send(run("a", { task: "read", ctx: ctx(), target: `${first} ${fake({ structured: { notes } })}`, through: true, pass: "p1", ahead: [second, third] }));
+      expect((await b.end("a")).data).toEqual({ speak: false });
+      // a call here would find no directive and fail: these come from the one call
+      b.send(run("b", { task: "read", ctx: ctx(), target: second, through: true, pass: "p1", ahead: [third] }));
+      expect((await b.end("b")).data).toMatchObject({ speak: true, kind: "question", quote: "around 90 percent", text: "Measured how?" });
+      b.send(run("c", { task: "read", ctx: ctx(), target: third, through: true, pass: "p1", ahead: [] }));
+      expect((await b.end("c")).data).toEqual({ speak: false });
+      expect(b.stderr).toContain("read it through in one call, 3 paragraph(s), 1 note(s)");
+      expect(b.stderr.match(/from the pass's one call/g)?.length).toBe(2);
+    });
+
+    test("answers are tied to their threads when the call comes back", async () => {
+      const b = brain();
+      const threads = [{ id: "t1", quote: "the cache", messages: [{ role: "mind", text: "How long does it live?" }], resolved: false }];
+      const notes = [{ paragraph: 1, kind: "question", quote: "", text: "", sketch: false, repeats: 0, answers: [{ thread: 1, quote: "on the runner for a week" }] }];
+      b.send(run("a", { task: "read", ctx: ctx("", { threads }), target: `${first} ${fake({ structured: { notes } })}`, through: true, pass: "p2", ahead: [] }));
+      expect((await b.end("a")).data).toEqual({ speak: false, answers: [{ thread: "t1", quote: "on the runner for a week" }] });
+    });
+  });
+
   describe("the first look", () => {
     const target = "We’ll keep one Redis counter per user and reset it every minute.";
     const speaks = thought(true, "one Redis counter", "What happens at the boundary?");

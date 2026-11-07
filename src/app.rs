@@ -1541,6 +1541,7 @@ impl AppView {
                     .when(!f.local_directories.is_empty(), |d| {
                         let id = f.id.clone();
                         d.child(ui::ghost_button(SharedString::from(format!("folder-files-clear-{}", f.id)), "Clear", &t)
+                            .mr(px(18.))
                             .keyed_as(format!("sidebar:files-clear-{}", f.id), 4., ring, cx, move |this, _, cx| {
                                 cx.stop_propagation();
                                 let store = cx.global_mut::<Store>();

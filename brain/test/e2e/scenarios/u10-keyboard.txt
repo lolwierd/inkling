@@ -13,7 +13,7 @@ caret: end
 key: shift-tab
 dump: header-last
 expect: d.focus === "header:turn-over"   // the header's last control, after Hide threads
-key: shift-tab shift-tab shift-tab shift-tab
+key: shift-tab shift-tab shift-tab shift-tab shift-tab
 dump: tell
 expect: d.focus === "header:tell"
 key: tab
@@ -37,7 +37,7 @@ key: down down
 key: escape
 dump: mind-escaped
 expect: d.menu === null && d.focus === "header:mind" && d.note.mind === "Inkling"
-key: tab tab tab tab tab tab
+key: tab tab tab tab tab tab tab
 dump: back-to-note
 expect: d.focus === "note"
 jump: next

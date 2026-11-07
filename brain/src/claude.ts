@@ -245,7 +245,7 @@ function resultKind(
   message: string,
 ): ErrorKind {
   if (subtype === "error_max_structured_output_retries") return "bad_output";
-  // With one turn and no tools, running out of turns means the structured answer never came.
+  // Exhausting the structured call's turn budget means its answer never arrived.
   if (subtype === "error_max_turns" && structured) return "bad_output";
   if (assistantError && ASSISTANT_ERROR_KIND[assistantError]) return ASSISTANT_ERROR_KIND[assistantError];
   if (limitRejected) return "rate_limit";

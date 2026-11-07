@@ -697,6 +697,7 @@ describe("what reaches the runtime", () => {
     expect(o).toMatchObject({ model: "claude-sonnet-5-5", effort: "medium", tools: ["Read", "Glob", "Grep"], maxTurns: 8, persistSession: false, settingSources: ["user"], includePartialMessages: true, outputFormat: null });
     expect(o.cwd).toBe(join(DATA, "brain-cwd"));
     expect(o.systemPrompt).toContain("projects/*/memory/MEMORY.md");
+    expect(o).toMatchObject({ settings: { disableAllHooks: true }, permissionMode: "dontAsk", strictMcpConfig: true });
     expect(o.prompt).toContain("«the reset»");
   });
 

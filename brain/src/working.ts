@@ -1,7 +1,7 @@
 // Show its working: a correction reaches the page only with a check the writer can do
 // themselves, either a sum made from their own numbers or their own words from elsewhere
-// in the note. The brain cannot open any source (no web, no files), so a correction that
-// rests on the model's memory alone becomes its fallback question. Everything here is
+// in the note, or a verified web source. File findings and unsupported remembered facts
+// use questions until the check format supports local sources. Everything here is
 // pure: the brain, the fake brain and the tests all go through `withWorking`.
 
 import { findQuote } from "./output.ts";

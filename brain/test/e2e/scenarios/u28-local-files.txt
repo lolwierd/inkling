@@ -22,4 +22,5 @@ settle
 dump: reloaded
 expect: d.local_directories.join() === "/tmp/project-b" && !d.directories_inherited
 shot: overridden
+wait: 1500
 quit

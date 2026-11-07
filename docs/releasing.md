@@ -2,7 +2,7 @@
 
 [CI](../.github/workflows/ci.yml) runs on pull requests and on pushes to `master`. On an Apple Silicon runner it installs the locked dependencies, runs `scripts/dev check` and builds the release ZIP. Packaging then unzips the bundle and checks its signatures and architectures. It also runs the standalone brain with the limited `PATH` Finder gives apps and makes sure the SDK can launch a test executable from Claude Code's native install path. The GUI scenarios aren't part of CI; run them locally with `scripts/dev check --e2e`. Neither needs Claude credentials.
 
-To get a preview build, open CI in GitHub Actions, choose Run workflow, and download the `inkling-macos-arm64` artifact when the run finishes. It has the install ZIP and its SHA-256 file. `scripts/package.sh` builds the same files locally. The [install instructions](../README.md#install-and-run) work for a preview too.
+To get a preview build, open CI in GitHub Actions, choose Run workflow, and download the `inkling-macos-arm64` artifact when the run finishes. It has the install ZIP and its SHA-256 file. `scripts/package.sh` builds the same files locally. The [install instructions](../README.md#install) work for a preview too.
 
 The release helper embeds [Bun 1.4.2](https://github.com/oven-sh/bun/tree/bun-v1.4.2). The bundle includes Bun's notices, which link to its JavaScriptCore source and explain how to relink it. To rebuild the helper with a relinked Bun, put that `bun` first on `PATH` and run `scripts/package.sh` from the matching Inkling tag.
 

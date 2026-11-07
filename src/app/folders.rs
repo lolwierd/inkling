@@ -7,11 +7,29 @@ pub(super) struct DraggedNote {
     pub title: String,
 }
 
-impl Render for DraggedNote {
+pub(super) struct NoteDragPreview {
+    title: String,
+    offset: Point<Pixels>,
+}
+
+impl DraggedNote {
+    pub(super) fn preview(&self, offset: Point<Pixels>, cx: &mut App) -> Entity<NoteDragPreview> {
+        cx.new(|_| NoteDragPreview { title: self.title.clone(), offset })
+    }
+}
+
+impl Render for NoteDragPreview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::get(cx);
-        div().px(px(12.)).py(px(8.)).rounded(px(6.)).bg(t.p.card).border_1().border_color(t.p.rule)
-            .text_color(t.p.ink).font_family(SANS).text_size(px(ts::UI)).child(self.title.clone())
+        // GPUI subtracts the source click offset. Put the compact slip beside the
+        // pointer regardless of where in a wide note row the drag began.
+        div().relative().left(self.offset.x + px(12.)).top(self.offset.y + px(12.))
+            .max_w(px(240.)).px(px(10.)).py(px(7.)).rounded(px(5.))
+            .bg(t.p.paper).border_1().border_color(t.voice_ink.opacity(0.4))
+            .shadow(vec![BoxShadow { color: t.p.shadow, offset: point(px(0.), px(3.)), blur_radius: px(10.), spread_radius: px(0.), inset: false }])
+            .flex().items_center().gap(px(7.)).text_color(t.p.ink).font_family(SANS).text_size(px(ts::SMALL))
+            .child(icon("file-text", 13., t.voice_ink))
+            .child(div().min_w(px(0.)).truncate().child(self.title.clone()))
     }
 }
 
@@ -96,9 +114,9 @@ impl AppView {
                 .py(px(16.)).border_b_1().border_color(p.rule).cursor_pointer().hover(move |s| s.bg(p.hover))
                 .on_drag(DraggedNote { id: note.id.clone(), title: title.clone() }, {
                     let app = cx.entity();
-                    move |drag, _, _, cx| {
+                    move |drag, offset, _, cx| {
                         app.update(cx, |app, cx| { app.sidebar_open = true; cx.notify(); });
-                        cx.new(|_| drag.clone())
+                        drag.preview(offset, cx)
                     }
                 })
                 .child(div().font_family(crate::theme::SERIF).text_size(px(22.)).child(title))

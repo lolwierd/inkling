@@ -1,0 +1,29 @@
+# Whole folder sections accept drops; preview tracks the pointer, Escape cancels.
+# fixture: folders
+wait: 1500
+open: sidebar
+wait: 400
+press: 200,315
+point: 210,305
+point: 90,195
+wait: 300
+dump: dragging
+expect: d.dragging && d.note_folders.Draft === null
+shot: drop-target-light
+set: appearance=dark
+shot: drop-target-dark
+key: escape
+dump: canceled
+expect: !d.dragging && d.sidebar.open && d.note_folders.Draft === null
+release
+set: appearance=light
+# Drop on a note within Work, not just the folder header.
+press: 200,315
+point: 210,305
+point: 90,195
+release
+wait: 300
+dump: moved
+expect: d.folder === "work" && d.note_folders.Draft === "work"
+expect: d.local_directories[0] === "/Users/ayaan/Projects/warpbuilds/backend-core"
+quit

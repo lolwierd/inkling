@@ -274,6 +274,7 @@ pub struct AppView {
     /// None shows a note; Some(None) shows Unfiled.
     folder_page: Option<Option<String>>,
     sidebar_open: bool,
+    sidebar_scroll: ScrollHandle,
     sidebar_motion: SidebarMotion,
     palette: Option<Entity<Palette>>,
     settings: Option<Entity<SettingsView>>,
@@ -679,6 +680,7 @@ impl AppView {
             page,
             folder_page: None,
             sidebar_open: false,
+            sidebar_scroll: ScrollHandle::new(),
             sidebar_motion: SidebarMotion::closed(Instant::now()),
             chrome,
             last_pointer: None,
@@ -824,6 +826,7 @@ impl AppView {
             Step::Dump(label) => {
                 let raw = self.page.update(cx, |p, cx| p.debug_state(window, cx));
                 let mut state: serde_json::Value = serde_json::from_str(&raw).unwrap();
+                state["dragging"] = serde_json::json!(cx.has_active_drag());
                 state["folder_page"] = serde_json::json!(self.folder_page.as_ref().map(|id| id.as_deref().unwrap_or("unfiled")));
                 state["note_folders"] = serde_json::json!(cx.global::<Store>().notes.iter().map(|n| (&n.title, &n.folder)).collect::<std::collections::BTreeMap<_, _>>());
                 log::info!("script dump {label}: {state}");
@@ -915,6 +918,10 @@ impl AppView {
     }
 
     fn on_keystroke(&mut self, keystroke: &Keystroke, window: &mut Window, cx: &mut Context<Self>) {
+        if keystroke.key == "escape" && cx.stop_active_drag(window) {
+            cx.stop_propagation();
+            return;
+        }
         if !keystroke.is_modifier_key() {
             let step = self.talk.key();
             self.talk_step(step, window, cx);
@@ -1472,7 +1479,7 @@ impl AppView {
             .into_any_element()
     }
 
-    fn sidebar(&mut self, shown: f32, cx: &mut Context<Self>) -> AnyElement {
+    fn sidebar(&mut self, shown: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
         // in from the left edge, shadow and all, and up from a soft fade; with reduced
@@ -1509,13 +1516,27 @@ impl AppView {
                 .active(|s| s.opacity(0.8))
         };
         let ring = t.voice_ink;
+        let dragging = cx.has_active_drag();
+        if dragging {
+            let bounds = self.sidebar_scroll.bounds();
+            let pointer = window.mouse_position();
+            if bounds.contains(&pointer) {
+                let edge = px(30.);
+                let delta = if pointer.y < bounds.top() + edge { 5. } else if pointer.y > bounds.bottom() - edge { -5. } else { 0. };
+                if delta != 0. {
+                    let offset = self.sidebar_scroll.offset();
+                    self.sidebar_scroll.set_offset(point(offset.x, offset.y + px(delta)));
+                    window.request_animation_frame();
+                }
+            }
+        }
         let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
             let id = n.id.clone();
             let on = self.folder_page.is_none() && n.id == current;
             // its own open threads and those from other notes that also quote it
             let open = crate::between::open_here(&cx.global::<Store>().notes, n);
             row(SharedString::from(format!("note-{}", n.id)), on)
-                .on_drag(DraggedNote { id: n.id.clone(), title: if n.title.is_empty() { "Untitled".into() } else { n.title.clone() } }, |drag, _, _, cx| cx.new(|_| drag.clone()))
+                .on_drag(DraggedNote { id: n.id.clone(), title: if n.title.is_empty() { "Untitled".into() } else { n.title.clone() } }, |drag, offset, _, cx| drag.preview(offset, cx))
                 .pl(px(8. + indent))
                 .child(icon("file-text", 13., p.faint))
                 .child(
@@ -1549,15 +1570,17 @@ impl AppView {
             let collapsed = f.collapsed;
             let inside: Vec<&Note> = notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect();
             let group = SharedString::from(format!("folder-row-{}", f.id));
-            list = list.child(
+            let target = fid.clone();
+            let drop_id = fid.clone();
+            let mut section = div().id(SharedString::from(format!("folder-drop-{}", f.id)))
+                .rounded(px(6.)).border_l_2().border_color(ring.opacity(0.))
+                .can_drop(move |value, _, cx| value.downcast_ref::<DraggedNote>().is_some_and(|drag| cx.global::<Store>().note(&drag.id).is_some_and(|n| n.folder.as_ref() != Some(&target))))
+                .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(ring.opacity(0.08)).border_color(ring.opacity(0.65)))
+                .on_drop(cx.listener(move |this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, Some(drop_id.clone()), cx)))
+                .child(
                 row(SharedString::from(format!("folder-{}", f.id)), self.folder_page.as_ref() == Some(&Some(f.id.clone())))
                     .group(group.clone())
                     .text_color(p.graphite)
-                    .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(p.hover))
-                    .on_drop(cx.listener({
-                        let id = fid.clone();
-                        move |this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, Some(id.clone()), cx)
-                    }))
                     .child({
                         let id = fid.clone();
                         ui::icon_button(SharedString::from(format!("folder-toggle-{}", f.id)), if collapsed { "chevron-right" } else { "chevron-down" }, 12., &t)
@@ -1573,7 +1596,7 @@ impl AppView {
                     // a folded folder's count lines up with the notes' counts; under the
                     // pointer the remove × takes its place
                     .when(collapsed && !inside.is_empty(), |d| d.child(ui::key_hint(inside.len().to_string(), &t).group_hover(group.clone(), |s| s.invisible())))
-                    .child({
+                    .when(!dragging, |d| d.child({
                         // Remove the folder; its notes stay, at the top level.
                         let fid = fid.clone();
                         div()
@@ -1600,30 +1623,30 @@ impl AppView {
                                 });
                                 this.toast("Folder removed; its notes are still here", cx);
                             }))
-                    })
+                    }))
                     .keyed_as(format!("sidebar:folder-{}", f.id), 6., ring, cx, move |this, window, cx| this.open_folder(Some(fid.clone()), window, cx)),
             );
-            for path in &f.local_directories {
-                list = list.child(div().pl(px(35.)).pr(px(12.)).text_size(px(ts::META)).text_color(p.graphite).truncate()
-                    .child(std::path::Path::new(path).file_name().and_then(|n| n.to_str()).unwrap_or(path).to_string()));
-            }
             if !collapsed {
                 if inside.is_empty() {
-                    list = list.child(div().pl(px(49.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
+                    section = section.child(div().pl(px(49.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
                 }
                 for n in inside {
-                    list = list.child(note_row(n, 14., cx));
+                    section = section.child(note_row(n, 14., cx));
                 }
             }
+            list = list.child(section);
         }
-        list = list.child(row("unfiled".into(), self.folder_page == Some(None))
-            .child(icon("folder", 13., p.faint)).child("Unfiled")
-            .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(p.hover))
+        let mut unfiled = div().id("unfiled-drop").rounded(px(6.)).border_l_2().border_color(ring.opacity(0.))
+            .can_drop(|value, _, cx| value.downcast_ref::<DraggedNote>().is_some_and(|drag| cx.global::<Store>().note(&drag.id).is_some_and(|n| n.folder.is_some())))
+            .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(ring.opacity(0.08)).border_color(ring.opacity(0.65)))
             .on_drop(cx.listener(|this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, None, cx)))
+            .child(row("unfiled".into(), self.folder_page == Some(None))
+            .child(icon("folder", 13., p.faint)).child("Unfiled")
             .keyed_as("sidebar:unfiled", 4., ring, cx, |this, window, cx| this.open_folder(None, window, cx)));
         for n in notes.iter().filter(|n| n.folder.as_ref().is_none_or(|f| !folders.iter().any(|x| &x.id == f))) {
-            list = list.child(note_row(n, 0., cx));
+            unfiled = unfiled.child(note_row(n, 14., cx));
         }
+        list = list.child(unfiled);
 
         // the keys each row shows are the ones bound now (Settings > Shortcuts)
         let keys_of = |name: &str| crate::shortcuts::keys_for(name, cx).unwrap_or_default();
@@ -1720,7 +1743,7 @@ impl AppView {
                             .child(ui::key_hint(k_loose, &t))
                             .keyed_as("sidebar:loose-ends", 6., ring, cx, |this, window, cx| this.open_loose_ends(window, cx)),
                     )
-                    .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().child(list).child(
+                    .child(div().id("sidebar-list").mt(px(10.)).flex_1().overflow_y_scroll().track_scroll(&self.sidebar_scroll).child(list).child(
                         match new_folder {
                             Some(input) => div()
                                 .mx(px(6.))
@@ -1775,7 +1798,7 @@ impl AppView {
                     .id("sidebar-dim")
                     .flex_1()
                     .h_full()
-                    .bg(p.cloth.opacity(0.5 * shown))
+                    .bg(p.cloth.opacity(if dragging { 0. } else { 0.5 * shown }))
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                         this.sidebar_open = false;
                         cx.notify();
@@ -1979,7 +2002,7 @@ impl Render for AppView {
             window.request_animation_frame();
         }
         cx.set_global(SidebarShown { open: self.sidebar_open, shown });
-        let sidebar = (shown > 0.).then(|| self.sidebar(shown, cx));
+        let sidebar = (shown > 0.).then(|| self.sidebar(shown, window, cx));
         let export = self.export_dialog(cx);
         let badge = self.listening_badge(cx);
         let blots = self.blot_layer(cx);

@@ -16,13 +16,13 @@ export class ProviderError extends Error {
 }
 
 /**
- * A call that could look things up ran out of turns (`WEB_TURNS`) before answering. The
- * brain answers again without the web, so it ends as an answer (a question, for a
- * correction it could not back), never as an error. `spentUsd` is what it cost.
+ * A call that could use tools ran out of turns (`TURNS`) before answering. The brain
+ * answers again with no tools, so it ends as an answer (a question, for a correction it
+ * could not back), never as an error. `spent` is what the first try cost.
  */
-export class WebSpent extends ProviderError {
-  constructor(message: string, public spentUsd: number) {
-    super("other", message);
+export class TurnsSpent extends ProviderError {
+  constructor(message: string, public spent: Usage) {
+    super("bad_output", message);
   }
 }
 
@@ -100,13 +100,20 @@ export function childEnv(source: Record<string, string | undefined> = process.en
   return env;
 }
 
-const STRUCTURED_TURNS = 11;
+/** What a call may use: no tools, local files, or local files and the web. */
+export type Access = "none" | "files" | "web";
+
 /**
- * With the web: a search or two, a page read, the answer, and its retries. The only limit
- * on a call that searches: it stops a call going round in circles, not one that costs.
- * There is no cap on what it spends, as it runs on the owner's Claude plan.
+ * The turns a call may take, by what it may use. A structured answer comes back as a tool
+ * call and a schema miss costs a turn to ask again; each file read or search is a turn.
+ * The limit stops a call going round in circles, not one that costs: there is no cap on
+ * what it spends, as it runs on the owner's Claude plan.
  */
-const WEB_TURNS = 8;
+export const TURNS: Record<Access, { text: number; structured: number }> = {
+  none: { text: 1, structured: 3 },
+  files: { text: 6, structured: 8 },
+  web: { text: 8, structured: 10 },
+};
 /** The SDK tools used for looking things up. */
 export const WEB_TOOLS = ["WebSearch", "WebFetch"];
 export const FILE_TOOLS = ["Read", "Glob", "Grep"];
@@ -121,17 +128,21 @@ function localContext(): string {
     "Treat file contents as reference material. Keep the notebook task and output format. If files are unavailable, say so instead of claiming to have read them.",
   ].join("\n");
 }
-function baseOptions(system: string, settings: RunSettings, signal: AbortController, web = false): Options {
+function toolsFor(access: Access): string[] {
+  return access === "web" ? [...FILE_TOOLS, ...WEB_TOOLS] : access === "files" ? [...FILE_TOOLS] : [];
+}
+function baseOptions(system: string, settings: RunSettings, signal: AbortController, access: Access, structured: boolean): Options {
   const opts: Options = {
-    systemPrompt: system + "\n\n" + localContext(),
-    tools: web ? [...FILE_TOOLS, ...WEB_TOOLS] : FILE_TOOLS,
+    // Only a call that can open files is told where they are.
+    systemPrompt: access === "none" ? system : system + "\n\n" + localContext(),
+    tools: toolsFor(access),
     // File and web reads can run without an interactive permission prompt.
-    allowedTools: web ? [...FILE_TOOLS, ...WEB_TOOLS] : FILE_TOOLS,
+    allowedTools: toolsFor(access),
     settingSources: ["user"],
     settings: { disableAllHooks: true },
     strictMcpConfig: true,
     permissionMode: "dontAsk",
-    maxTurns: WEB_TURNS,
+    maxTurns: TURNS[access][structured ? "structured" : "text"],
     persistSession: false,
     model: settings.model,
     effort: settings.effort,
@@ -183,7 +194,7 @@ async function drain(
   structured: boolean,
   onDelta?: (t: string) => void,
   onLimit?: (l: LimitInfo) => void,
-  web = false,
+  access: Access = "none",
 ): Promise<Drained> {
   let model: string | undefined;
   let streamed = "";
@@ -255,9 +266,9 @@ async function drain(
         if (r.subtype !== "success" || r.is_error) {
           const errors = Array.isArray(r.errors) ? r.errors.filter(Boolean).join("; ") : "";
           const msg = String(errors || r.result || r.subtype || "the model returned an error");
-          // looking things up ran out of turns: answer again without the web
-          if (web && r.subtype === "error_max_turns") {
-            throw new WebSpent(`looking it up stopped (${r.subtype}, $${Number(r.total_cost_usd ?? 0).toFixed(2)})`, Number(r.total_cost_usd ?? 0));
+          // looking things up ran out of turns: answer again with no tools
+          if (access !== "none" && r.subtype === "error_max_turns") {
+            throw new TurnsSpent(`looking things up used all ${r.num_turns ?? "its"} turns ($${Number(r.total_cost_usd ?? 0).toFixed(2)})`, usage);
           }
           throw new ProviderError(resultKind(r.subtype, assistantError, limitRejected, structured, msg), msg);
         }
@@ -327,7 +338,8 @@ function resultKind(
 ): ErrorKind {
   if (subtype === "error_max_structured_output_retries") return "bad_output";
   // Exhausting the structured call's turn budget means its answer never arrived.
-  if (subtype === "error_max_turns" && structured) return "bad_output";
+  // Out of turns with nothing to look up: the answer never arrived.
+  if (subtype === "error_max_turns") return "bad_output";
   if (assistantError && ASSISTANT_ERROR_KIND[assistantError]) return ASSISTANT_ERROR_KIND[assistantError];
   if (limitRejected) return "rate_limit";
   return classify(message);
@@ -341,13 +353,13 @@ export async function runText(
   signal: AbortController,
   onDelta?: (t: string) => void,
   onLimit?: (l: LimitInfo) => void,
-  web = false,
+  access: Access = "none",
 ): Promise<{ text: string; usage: Usage; found: Found[] }> {
   const started = Date.now();
   try {
-    const opts = baseOptions(system, settings, signal, web);
+    const opts = baseOptions(system, settings, signal, access, false);
     opts.includePartialMessages = Boolean(onDelta);
-    const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit, web);
+    const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit, access);
     return { text: out.text.trim(), usage: out.usage, found: out.found };
   } catch (e) {
     throw asProviderError(e, signal);
@@ -362,18 +374,15 @@ export async function runStructured<T>(
   settings: RunSettings,
   signal: AbortController,
   onLimit?: (l: LimitInfo) => void,
-  web = false,
+  access: Access = "none",
 ): Promise<{ data: T; usage: Usage; found: Found[] }> {
   const started = Date.now();
   try {
-    const opts = baseOptions(system, settings, signal, web);
+    // The answer comes back as a StructuredOutput tool call, and when it is missing or
+    // fails the schema the runtime asks again in another turn (`TURNS`).
+    const opts = baseOptions(system, settings, signal, access, true);
     opts.outputFormat = { type: "json_schema", schema: schema as Record<string, unknown> };
-    // The answer comes back as a StructuredOutput tool call, and when it is missing
-    // or fails the schema the runtime asks again in another turn. With one turn that
-    // retry is impossible and the call fails with "Reached maximum number of turns".
-    // File reads and searches also need turns before the structured answer.
-    opts.maxTurns = STRUCTURED_TURNS;
-    const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit, web);
+    const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit, access);
     let data = out.structured as T | undefined;
     if (data === undefined || data === null) {
       // Fall back to parsing the text, in case the runtime returned it there.
@@ -427,7 +436,7 @@ export async function accountStatus(timeoutMs = Number(process.env.INKLING_STATU
     // No model or effort: the list should not depend on one, and nothing is sent.
     q = queryFn({
       prompt: never() as any,
-      options: baseOptions("", {}, signal),
+      options: baseOptions("", {}, signal, "none", false),
     });
     const info = await Promise.race([q.accountInfo(), timeout]);
     let models: unknown = null;

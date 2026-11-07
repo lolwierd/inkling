@@ -463,13 +463,13 @@ describe("what each task sends back", () => {
       expect((await b.end("r")).data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
     });
 
-    test("a call that runs out of turns answers again without the web, and counts both", async () => {
+    test("a call that runs out of turns answers again with no tools, and counts both", async () => {
       const b = brain();
       // the first call runs out of turns; the second (no tools) answers as a question
       b.send(run("p", { task: "probe", ctx: ctx(fake({ resultError: { subtype: "error_max_turns", isError: true }, webOnce: true, structured: { kind: "question", quote: "450 metres tall", text: "Where did 450 come from?", sketch: false } }) + "\n" + target), target }, web));
       const done = await b.end("p");
       expect(done.data).toMatchObject({ kind: "question", text: "Where did 450 come from?" });
-      expect(b.stderr).toContain("answering without the web");
+      expect(b.stderr).toContain("answering with no tools");
     });
 
     test("in prose, a link no search returned is taken out", async () => {
@@ -478,7 +478,7 @@ describe("what each task sends back", () => {
       expect((await b.end("a")).data.text).toBe(`It is 330 m (${TOWER}); see too.`);
     });
 
-    test("the tools: file tools always, web tools when enabled; no spending cap", async () => {
+    test("the tools: file tools for the tasks that look things up, web tools when enabled; no spending cap", async () => {
       const b = brain();
       const echo = (id: string, input: object, s: object) => {
         b.send(run(id, input, s));
@@ -488,7 +488,7 @@ describe("what each task sends back", () => {
       expect(chat).toMatchObject({ tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"], allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: null });
       expect(chat.prompt).toContain("Link only to a page your search returned");
       const off = await echo("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, settings);
-      expect(off).toMatchObject({ tools: ["Read", "Glob", "Grep"], maxTurns: 8, maxBudgetUsd: null });
+      expect(off).toMatchObject({ tools: ["Read", "Glob", "Grep"], maxTurns: 6, maxBudgetUsd: null });
       expect(off.prompt).not.toContain("WebSearch");
     });
   });
@@ -705,7 +705,7 @@ describe("what reaches the runtime", () => {
     const b = brain();
     b.send(run("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: "the reset" }, { model: "claude-sonnet-5-5", effort: "medium" }));
     const o = JSON.parse((await b.end("o")).data.text);
-    expect(o).toMatchObject({ model: "claude-sonnet-5-5", effort: "medium", tools: ["Read", "Glob", "Grep"], maxTurns: 8, persistSession: false, settingSources: ["user"], includePartialMessages: true, outputFormat: null });
+    expect(o).toMatchObject({ model: "claude-sonnet-5-5", effort: "medium", tools: ["Read", "Glob", "Grep"], maxTurns: 6, persistSession: false, settingSources: ["user"], includePartialMessages: true, outputFormat: null });
     expect(o.cwd).toBe(join(DATA, "brain-cwd"));
     expect(o.systemPrompt).toContain("projects/*/memory/MEMORY.md");
     expect(o).toMatchObject({ settings: { disableAllHooks: true }, permissionMode: "dontAsk", strictMcpConfig: true });

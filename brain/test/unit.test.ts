@@ -249,13 +249,19 @@ describe("drain against the fake SDK", () => {
     const out = await runStructured<any>("sys", fake({ structured: { a: 1 } }), {}, settings, ac());
     expect(out.data).toEqual({ a: 1 });
   });
-  test("structured calls leave room for the runtime's schema retry; text calls allow file lookups", async () => {
-    const s = await runStructured<any>("sys", fake({ echo: "options" }), {}, settings, ac());
-    expect(s.data.maxTurns).toBe(11);
-    expect(s.data.outputFormat).toBe("json_schema");
-    expect(s.data.tools).toEqual(["Read", "Glob", "Grep"]);
-    const t = await runText("sys", fake({ echo: "options" }), settings, ac());
-    expect(JSON.parse(t.text).maxTurns).toBe(8);
+  test("turns and tools follow what a call may use; only a call with files is told where they are", async () => {
+    const none = await runStructured<any>("sys", fake({ echo: "options" }), {}, settings, ac());
+    expect(none.data).toMatchObject({ maxTurns: 3, outputFormat: "json_schema", tools: [], allowedTools: [] });
+    expect(none.data.systemPrompt).not.toContain("Claude Code");
+    const files = await runStructured<any>("sys", fake({ echo: "options" }), {}, settings, ac(), undefined, "files");
+    expect(files.data).toMatchObject({ maxTurns: 8, tools: ["Read", "Glob", "Grep"] });
+    expect(files.data.systemPrompt).toContain("Claude Code");
+    const web = await runStructured<any>("sys", fake({ echo: "options" }), {}, settings, ac(), undefined, "web");
+    expect(web.data).toMatchObject({ maxTurns: 10, tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"] });
+    const text = await runText("sys", fake({ echo: "options" }), settings, ac(), undefined, undefined, "files");
+    expect(JSON.parse(text.text).maxTurns).toBe(6);
+    const draw = await runText("sys", fake({ echo: "options" }), settings, ac());
+    expect(JSON.parse(draw.text)).toMatchObject({ maxTurns: 1, tools: [] });
   });
   test("structured output missing falls back to JSON in the text", async () => {
     const out = await runStructured<any>("sys", fake({ result: 'Sure: {"a": 2} done' }), {}, settings, ac());

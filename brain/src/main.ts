@@ -4,7 +4,7 @@
 // `done` or `error` event; after a cancel it is never `done`.
 
 import { createInterface } from "node:readline";
-import { accountStatus, addUsage, ProviderError, runStructured, runText, usageLine, WebSpent, type LimitInfo } from "./claude.ts";
+import { accountStatus, addUsage, ProviderError, runStructured, runText, TurnsSpent, usageLine, type Access, type LimitInfo } from "./claude.ts";
 import { cleanSvg, clip, findQuote, pickAnswers, snapQuote } from "./output.ts";
 import {
   answerPrompt,
@@ -262,10 +262,19 @@ function nonEmpty(v: unknown, what: string): string {
 
 // ----- running tasks ------------------------------------------------------------
 
+/** The tasks that may open local files and Claude Code memories; the rest get no tools. */
+const FILE_TASKS: ReadonlySet<string> = new Set(["read", "probe", "ask", "answer", "reply", "chat"]);
+
+/** What a task may use: the web (when it is on and the task may search), local files, or nothing. */
+function accessFor(task: string, settings: RunSettings): Access {
+  if (settings.web === true && WEB_TASKS.has(task)) return "web";
+  return FILE_TASKS.has(task) ? "files" : "none";
+}
+
 /**
- * A task that may look things up runs with the web; if that runs out of turns,
- * it runs again without web tools, so it still ends as an answer: a question,
- * for a correction it could not back. The usage then counts both.
+ * A task that may look things up runs with its tools; if that runs out of turns, it
+ * runs again with none, so it still ends as an answer: a question, for a correction it
+ * could not back. The usage then counts both.
  */
 async function run(id: string, settings: RunSettings, input: Task, signal: AbortController): Promise<{ data: unknown; usage: Usage }> {
   // A fixed byte ceiling keeps large notes/history from producing an unbounded
@@ -273,18 +282,19 @@ async function run(id: string, settings: RunSettings, input: Task, signal: Abort
   if (new TextEncoder().encode(JSON.stringify(input)).byteLength > 256 * 1024) {
     throw new ProviderError("other", "The note and conversation are too large for one request. Shorten the note or conversation and try again.");
   }
-  const web = settings.web === true && WEB_TASKS.has(input.task);
+  const access = accessFor(input.task, settings);
   try {
-    return await runOnce(id, settings, input, signal, web);
+    return await runOnce(id, settings, input, signal, access);
   } catch (e) {
-    if (!web || !(e instanceof WebSpent) || signal.signal.aborted) throw e;
-    log(`${input.task} ${id}: ${e.message}; answering without the web`);
-    const again = await runOnce(id, settings, input, signal, false);
-    return { data: again.data, usage: addUsage({ ms: 0, costUsd: e.spentUsd }, again.usage) };
+    if (access === "none" || !(e instanceof TurnsSpent) || signal.signal.aborted) throw e;
+    log(`${input.task} ${id}: ${e.message}; answering with no tools`);
+    const again = await runOnce(id, settings, input, signal, "none");
+    return { data: again.data, usage: addUsage(e.spent, again.usage) };
   }
 }
 
-async function runOnce(id: string, settings: RunSettings, input: Task, signal: AbortController, web: boolean): Promise<{ data: unknown; usage: Usage }> {
+async function runOnce(id: string, settings: RunSettings, input: Task, signal: AbortController, access: Access): Promise<{ data: unknown; usage: Usage }> {
+  const web = access === "web";
   if (input.task === "relate" && input.passages.length === 0) {
     // Nothing to compare with: no model call.
     return { data: { speak: false }, usage: { ms: 0 } };
@@ -318,7 +328,7 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
           : input.answersOnly
             ? [sys, answersOnlyPrompt(input.ctx, input.target), THOUGHT_WITH_ANSWERS_SCHEMA]
             : [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through) + answersBlock(input.ctx), answering ? THOUGHT_WITH_ANSWERS_SCHEMA : THOUGHT_SCHEMA];
-      const { data, usage, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, web);
+      const { data, usage, found } = await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, access);
       const d = structured(data);
       // Answer in the note: the open threads this paragraph answers, whatever else the read says.
       const answers = answering ? pickAnswers(d.answers, input.ctx.threads, input.target) : [];
@@ -372,20 +382,20 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
     case "relate":
       return relate(input, sys, settings, signal);
     case "reply": {
-      const { data, usage, found } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere, web), REPLY_SCHEMA, settings, signal, onLimit, web);
+      const { data, usage, found } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere, web), REPLY_SCHEMA, settings, signal, onLimit, access);
       const d = structured(data);
       return { data: { text: links(nonEmpty(d.text, "an empty reply"), found), resolved: d.resolved === true, redraw: d.redraw === true }, usage };
     }
     case "ask": {
-      const { text: out, usage, found } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web, input.history), settings, signal, delta, onLimit, web);
+      const { text: out, usage, found } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web, input.history), settings, signal, delta, onLimit, access);
       return { data: { text: links(out, found) }, usage };
     }
     case "answer": {
-      const { text: out, usage, found } = await runText(sys, answerPrompt(input.ctx, input.target, web), settings, signal, delta, onLimit, web);
+      const { text: out, usage, found } = await runText(sys, answerPrompt(input.ctx, input.target, web), settings, signal, delta, onLimit, access);
       return { data: { text: links(out, found) }, usage };
     }
     case "chat": {
-      const { text: out, usage, found } = await runText(sys, chatPrompt(input.ctx, input.history, input.message, input.near, web), settings, signal, delta, onLimit, web);
+      const { text: out, usage, found } = await runText(sys, chatPrompt(input.ctx, input.history, input.message, input.near, web), settings, signal, delta, onLimit, access);
       return { data: { text: links(out, found) }, usage };
     }
   }

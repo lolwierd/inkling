@@ -572,3 +572,20 @@ describe("the first look's prompt", () => {
     expect(p).toContain("When unsure, set it to true");
   });
 });
+
+describe("a file a correction cites", () => {
+  test("only one this call opened, with the passage in it; the line is counted here", async () => {
+    const { verifyFile, lookedAt } = await import("../src/files.ts");
+    const text = "# Cache\n\nThe cache lives on the runner for seven days, then it is evicted.\n";
+    const read = (p: string) => (p === "/repo/README.md" ? text : null);
+    const passage = "lives on the runner for seven days";
+    expect(verifyFile({ path: "/repo/README.md", passage }, ["/repo/README.md"], read)).toEqual({ file: { path: "/repo/README.md", line: 3, passage } });
+    expect(verifyFile({ path: "/repo/./README.md", passage }, ["/repo/README.md"], read)).toMatchObject({ file: { path: "/repo/README.md" } });
+    expect(verifyFile({ path: "/repo/README.md", passage }, [], read)).toEqual({ why: "/repo/README.md was not opened in this answer" });
+    expect(verifyFile({ path: "README.md", passage }, ["README.md"], read)).toEqual({ why: "its file has no absolute path" });
+    expect(verifyFile({ path: "/repo/README.md", passage: "seven days" }, ["/repo/README.md"], read)).toMatchObject({ why: expect.stringContaining("has 2 words") });
+    expect(verifyFile({ path: "/repo/README.md", passage: "lives on the runner for nine days" }, ["/repo/README.md"], read)).toEqual({ why: "the passage is not in /repo/README.md" });
+    expect(verifyFile({ path: "/repo/gone.md", passage }, ["/repo/gone.md"], read)).toEqual({ why: "/repo/gone.md could not be read" });
+    expect(lookedAt(["/a", "/b", "/a"], ["https://x.org"])).toEqual(["/a", "/b", "https://x.org"]);
+  });
+});

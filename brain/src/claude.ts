@@ -100,6 +100,12 @@ export function childEnv(source: Record<string, string | undefined> = process.en
   return env;
 }
 
+/** The files a call opened with Read and the pages it fetched. */
+export interface Opened {
+  files: string[];
+  pages: string[];
+}
+
 /** What a call may use: no tools, local files, or local files and the web. */
 export type Access = "none" | "files" | "web";
 
@@ -188,6 +194,8 @@ interface Drained {
   usage: Usage;
   /** What the call's searches returned: the only URLs a source may cite. */
   found: Found[];
+  /** The files it opened with Read and the pages it fetched, in order. */
+  opened: Opened;
 }
 
 async function drain(
@@ -205,6 +213,7 @@ async function drain(
   const found: Found[] = [];
   let searches = 0;
   const tools: Record<string, number> = {};
+  const opened: Opened = { files: [], pages: [] };
   for await (const m of q) {
     switch (m.type) {
       case "user": {
@@ -224,6 +233,8 @@ async function drain(
         if (Array.isArray(blocks)) {
           for (const b of blocks) {
             if (b?.type === "tool_use" && typeof b.name === "string" && b.name !== "StructuredOutput") tools[b.name] = (tools[b.name] ?? 0) + 1;
+            if (b?.type === "tool_use" && b.name === "Read" && typeof b.input?.file_path === "string") opened.files.push(b.input.file_path);
+            if (b?.type === "tool_use" && b.name === "WebFetch" && typeof b.input?.url === "string") opened.pages.push(b.input.url);
           }
         }
         break;
@@ -274,7 +285,7 @@ async function drain(
           }
           throw new ProviderError(resultKind(r.subtype, assistantError, limitRejected, structured, msg), msg);
         }
-        return { text: r.result ?? streamed, structured: r.structured_output, usage, found };
+        return { text: r.result ?? streamed, structured: r.structured_output, usage, found, opened };
       }
     }
   }
@@ -356,13 +367,13 @@ export async function runText(
   onDelta?: (t: string) => void,
   onLimit?: (l: LimitInfo) => void,
   access: Access = "none",
-): Promise<{ text: string; usage: Usage; found: Found[] }> {
+): Promise<{ text: string; usage: Usage; found: Found[]; opened: Opened }> {
   const started = Date.now();
   try {
     const opts = baseOptions(system, settings, signal, access, false);
     opts.includePartialMessages = Boolean(onDelta);
     const out = await drain(queryFn({ prompt, options: opts }), started, false, onDelta, onLimit, access);
-    return { text: out.text.trim(), usage: out.usage, found: out.found };
+    return { text: out.text.trim(), usage: out.usage, found: out.found, opened: out.opened };
   } catch (e) {
     throw asProviderError(e, signal);
   }
@@ -377,7 +388,7 @@ export async function runStructured<T>(
   signal: AbortController,
   onLimit?: (l: LimitInfo) => void,
   access: Access = "none",
-): Promise<{ data: T; usage: Usage; found: Found[] }> {
+): Promise<{ data: T; usage: Usage; found: Found[]; opened: Opened }> {
   const started = Date.now();
   try {
     // The answer comes back as a StructuredOutput tool call, and when it is missing or
@@ -390,7 +401,7 @@ export async function runStructured<T>(
       // Fall back to parsing the text, in case the runtime returned it there.
       data = parseLooseJson<T>(out.text);
     }
-    return { data, usage: out.usage, found: out.found };
+    return { data, usage: out.usage, found: out.found, opened: out.opened };
   } catch (e) {
     throw asProviderError(e, signal);
   }

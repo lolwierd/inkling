@@ -1,11 +1,12 @@
 // Show its working: a correction reaches the page only with a check the writer can do
 // themselves, either a sum made from their own numbers or their own words from elsewhere
-// in the note, or a verified web source. File findings and unsupported remembered facts
-// use questions until the check format supports local sources. Everything here is
-// pure: the brain, the fake brain and the tests all go through `withWorking`.
+// in the note, a verified web source, or a verified local file. Unsupported remembered
+// facts use questions. Everything here is pure: the brain, the fake brain and the tests
+// all go through `withWorking`.
 
 import { findQuote } from "./output.ts";
 import type { Source } from "./web.ts";
+import type { FileSource } from "./files.ts";
 
 export interface SumLine {
   sum: string;
@@ -24,10 +25,14 @@ export interface Check {
   words: string[];
   /** A page that says so, made sure of (web.ts `verifySource`); only with the web on. */
   source?: Source;
+  /** A local file that says so, made sure of (files.ts `verifyFile`). */
+  file?: FileSource;
 }
 
 /** What became of the source a correction cited: made sure of, or why not. */
 export type Cited = { source: Source } | { why: string } | null;
+/** What became of the file a correction cited: made sure of, or why not. */
+export type Filed = { file: FileSource } | { why: string } | null;
 
 /** The writer's own text a check may draw on, and what the correction is about. */
 export interface Writer {
@@ -315,16 +320,21 @@ function inWriter(words: string, w: Writer): string | null {
  * number in it is the writer's, an earlier result or a unit, and every passage is the
  * writer's own, from elsewhere in the note. Returns why not, otherwise.
  */
-export function backCorrection(raw: unknown, text: string, w: Writer, cited: Cited = null): { check: Check } | { why: string } {
+export function backCorrection(raw: unknown, text: string, w: Writer, cited: Cited = null, filed: Filed = null): { check: Check } | { why: string } {
   if (!isObject(raw)) return { why: "it came without a check" };
   const lines = list(raw.sum).filter(isObject);
   const passages = list(raw.words).map(str).filter(Boolean);
   const source = cited && "source" in cited ? cited.source : null;
-  if (!lines.length && !passages.length && !source) return { why: cited && "why" in cited ? cited.why : "its check was empty" };
+  const file = filed && "file" in filed ? filed.file : null;
+  if (!lines.length && !passages.length && !source && !file) {
+    const why = (cited && "why" in cited ? cited.why : null) ?? (filed && "why" in filed ? filed.why : null);
+    return { why: why ?? "its check was empty" };
+  }
   const check: Check = { sum: [], givens: [], words: [] };
-  // numbers the correction's text may use: the writer's, the check's, and the source's
-  const shownValues: number[] = mentions([w.title, w.note, w.brief ?? "", w.target, source?.passage ?? ""].join("\n")).flatMap((m) => m.values);
+  // numbers the correction's text may use: the writer's, the check's, the source's and the file's
+  const shownValues: number[] = mentions([w.title, w.note, w.brief ?? "", w.target, source?.passage ?? "", file?.passage ?? ""].join("\n")).flatMap((m) => m.values);
   if (source) check.source = source;
+  if (file) check.file = file;
 
   if (lines.length) {
     if (lines.length > MAX_LINES) return { why: `its sum has ${lines.length} lines` };
@@ -422,11 +432,12 @@ function formatMention(m: Mention): string {
  * model sent). A correction goes out with its check, or comes back as its fallback
  * question, or `null` when it has neither: a read then stays silent and a probe fails.
  */
-export function withWorking(thought: Thought, answer: Json, w: Writer, log: (why: string) => void = () => {}, cited: Cited = null): Thought | null {
+export function withWorking(thought: Thought, answer: Json, w: Writer, log: (why: string) => void = () => {}, cited: Cited = null, filed: Filed = null): Thought | null {
   const { check: _ignored, ...plain } = thought;
   if (thought.kind !== "correction") return plain;
   if (cited && "why" in cited) log(`a source was dropped: ${cited.why}`);
-  const backed = backCorrection(answer.check, thought.text, w, cited);
+  if (filed && "why" in filed) log(`a file was dropped: ${filed.why}`);
+  const backed = backCorrection(answer.check, thought.text, w, cited, filed);
   if ("check" in backed) return { ...plain, check: backed.check };
   log(`correction became a question: ${backed.why}`);
   const question = str(answer.question);

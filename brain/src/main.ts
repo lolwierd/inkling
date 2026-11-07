@@ -44,6 +44,8 @@ import {
 import type { Context, ElsewhereEnd, Event, Frequency, LetStandPoint, Passage, Relation, RunSettings, Task, ThreadMessage, Usage, Voice } from "./protocol.ts";
 import { withWorking } from "./working.ts";
 import { keepFoundLinks, verifySource, WEB_TASKS, type Found } from "./web.ts";
+import { lookedAt, verifyFile } from "./files.ts";
+import type { Opened } from "./claude.ts";
 
 const VERSION = "0.1.4";
 const running = new Map<string, AbortController>();
@@ -301,9 +303,16 @@ async function firstLook(ctx: Context, target: string, settings: RunSettings, si
   }
 }
 
+/** What an answer looked at, for the line under it in the margin: the files it opened and
+ * the pages it fetched. Nothing when it looked at nothing. */
+function looked(opened: Opened): { looked?: string[] } {
+  const all = lookedAt(opened.files, opened.pages);
+  return all.length ? { looked: all } : {};
+}
+
 /** What the one call of a Read it through pass said about each paragraph it read, by the
  * paragraph's words, until the pass reaches it; dropped half an hour after the call. */
-const passes = new Map<string, { at: number; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
+const passes = new Map<string, { at: number; opened: Opened; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
 const PASS_KEEP_MS = 30 * 60 * 1000;
 
 /**
@@ -320,16 +329,17 @@ async function throughRead(
   settings: RunSettings,
   signal: AbortController,
   access: Access,
-): Promise<{ d: Json; answers: { thread: string; quote: string }[]; usage: Usage } | null> {
+): Promise<{ d: Json; answers: { thread: string; quote: string }[]; usage: Usage; opened: Opened } | null> {
   if (!input.through || !input.pass) return null;
   const now = Date.now();
   for (const [k, p] of passes) if (now - p.at > PASS_KEEP_MS) passes.delete(k);
   const key = input.target.trim();
-  const known = passes.get(input.pass)?.by.get(key);
-  if (known) {
-    passes.get(input.pass)?.by.delete(key);
+  const pass = passes.get(input.pass);
+  const known = pass?.by.get(key);
+  if (pass && known) {
+    pass.by.delete(key);
     log(`read ${id}: from the pass's one call`);
-    return { ...known, usage: { ms: 0 } };
+    return { ...known, usage: { ms: 0 }, opened: pass.opened };
   }
   const batch: string[] = [];
   let chars = 0;
@@ -340,7 +350,7 @@ async function throughRead(
     batch.push(t);
     chars += t.length;
   }
-  const { data, usage } = await runStructured<unknown>(throughSystemPrompt(input.ctx), throughBatchPrompt(input.ctx, batch), THROUGH_SCHEMA, settings, signal, onLimit, access);
+  const { data, usage, opened } = await runStructured<unknown>(throughSystemPrompt(input.ctx), throughBatchPrompt(input.ctx, batch), THROUGH_SCHEMA, settings, signal, onLimit, access);
   const notes = isObject(data) && Array.isArray(data.notes) ? data.notes.filter(isObject) : [];
   const by = new Map<string, { d: Json; answers: { thread: string; quote: string }[] }>();
   for (const t of batch) by.set(t, { d: { speak: false }, answers: [] });
@@ -361,8 +371,8 @@ async function throughRead(
   log(`read ${id}: read it through in one call, ${batch.length} paragraph(s), ${notes.length} note(s)`);
   const mine = by.get(key) ?? { d: { speak: false }, answers: [] };
   by.delete(key);
-  passes.set(input.pass, { at: now, by });
-  return { ...mine, usage };
+  passes.set(input.pass, { at: now, opened, by });
+  return { ...mine, usage, opened };
 }
 
 /** The tasks that may open local files and Claude Code memories; the rest get no tools. */
@@ -439,8 +449,8 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
             : [through ? throughSystemPrompt(input.ctx) : sys, readPrompt(input.ctx, input.target, through) + answersBlock(input.ctx), answering ? THOUGHT_WITH_ANSWERS_SCHEMA : THOUGHT_SCHEMA];
       // Reading it through, one call reads the paragraphs of the pass (`throughRead`).
       const batched = input.task === "read" ? await throughRead(id, input, settings, signal, access) : null;
-      const { data, usage: own, found } = batched
-        ? { data: batched.d as unknown, usage: batched.usage, found: [] as Found[] }
+      const { data, usage: own, found, opened } = batched
+        ? { data: batched.d as unknown, usage: batched.usage, found: [] as Found[], opened: batched.opened }
         : await runStructured<unknown>(system, prompt, schema, settings, signal, onLimit, access);
       const usage = first ? addUsage(first.usage, own) : own;
       const d = structured(data);
@@ -468,17 +478,21 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
       // passage is on it.
       const cites = web && d.kind === "correction" && isObject(d.check) && isObject(d.check.source);
       const cited = cites ? await verifySource((d.check as Json).source, found) : null;
+      // and a file only if this call opened it and the passage is in it
+      const files = d.kind === "correction" && isObject(d.check) && isObject(d.check.file);
+      const filed = files ? verifyFile((d.check as Json).file, opened.files) : null;
       const thought = withWorking(
         { speak: true, kind: d.kind === "correction" ? "correction" : "question", quote, text: links(nonEmpty(d.text, "an empty note"), found), sketch: d.sketch === true },
         d,
         { title: input.ctx.noteTitle, note: input.ctx.noteText, brief: input.ctx.brief, target: input.target, quote },
         log,
         cited,
+        filed,
       );
       // A correction with neither a check nor a question to fall back on is never shown.
       if (!thought && input.task === "read") return { data: { speak: false, ...answered }, usage };
       if (!thought) throw new ProviderError("bad_output", "a correction came without a check or a question");
-      return { data: { ...thought, ...answered }, usage };
+      return { data: { ...thought, ...answered, ...looked(opened) }, usage };
     }
     case "settle": {
       const prompt = settlePrompt(input.ctx, input.quote, input.messages, input.target, input.answer, input.notAnswers);
@@ -501,21 +515,21 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
     case "relate":
       return relate(input, sys, settings, signal);
     case "reply": {
-      const { data, usage, found } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere, web), REPLY_SCHEMA, settings, signal, onLimit, access);
+      const { data, usage, found, opened } = await runStructured<unknown>(sys, replyPrompt(input.ctx, input.quote, input.messages, input.message, input.elsewhere, web), REPLY_SCHEMA, settings, signal, onLimit, access);
       const d = structured(data);
-      return { data: { text: links(nonEmpty(d.text, "an empty reply"), found), resolved: d.resolved === true, redraw: d.redraw === true }, usage };
+      return { data: { text: links(nonEmpty(d.text, "an empty reply"), found), resolved: d.resolved === true, redraw: d.redraw === true, ...looked(opened) }, usage };
     }
     case "ask": {
-      const { text: out, usage, found } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web, input.history), settings, signal, delta, onLimit, access);
-      return { data: { text: links(out, found) }, usage };
+      const { text: out, usage, found, opened } = await runText(sys, askPrompt(input.ctx, input.target, input.question, web, input.history), settings, signal, delta, onLimit, access);
+      return { data: { text: links(out, found), ...looked(opened) }, usage };
     }
     case "answer": {
-      const { text: out, usage, found } = await runText(sys, answerPrompt(input.ctx, input.target, web), settings, signal, delta, onLimit, access);
-      return { data: { text: links(out, found) }, usage };
+      const { text: out, usage, found, opened } = await runText(sys, answerPrompt(input.ctx, input.target, web), settings, signal, delta, onLimit, access);
+      return { data: { text: links(out, found), ...looked(opened) }, usage };
     }
     case "chat": {
-      const { text: out, usage, found } = await runText(sys, chatPrompt(input.ctx, input.history, input.message, input.near, web), settings, signal, delta, onLimit, access);
-      return { data: { text: links(out, found) }, usage };
+      const { text: out, usage, found, opened } = await runText(sys, chatPrompt(input.ctx, input.history, input.message, input.near, web), settings, signal, delta, onLimit, access);
+      return { data: { text: links(out, found), ...looked(opened) }, usage };
     }
   }
 }

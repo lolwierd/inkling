@@ -102,6 +102,7 @@ const checkRules = (web: boolean) => [
   "  sum: the arithmetic, 1 to 4 lines, each {\"sum\": \"5:30 × 10\", \"is\": \"55:00\"}: numbers, durations (5:30, 1:05:00) and percentages with + − × ÷ and brackets, no units or words. Every number in a sum is one of givens, an earlier line's \"is\", or 1, 2, 7, 12, 24, 52, 60, 100, 365 or 1000; with",
   "  givens: each number you took from the writer, {\"value\": \"5:30\", \"words\": \"hold 5:30\"}, words being their exact words that contain it (1 to 6 words);",
   "  or words: 1 or 2 passages copied exactly from elsewhere in the note that this paragraph contradicts.",
+  FILE_RULE,
   ...(web ? [SOURCE_RULE] : []),
   web
     ? "  Every number in text is the writer's, in your sum, or in your source's passage: leave out any other figure, and a figure you worked out (a pace, a total, a gap) gets its own line, e.g. {\"sum\": \"50:00 ÷ 10\", \"is\": \"5:00\"}."
@@ -110,7 +111,12 @@ const checkRules = (web: boolean) => [
 ];
 
 const NO_SOURCES =
-  "You cannot search the web here. A point that rests on a file is a question that names the file; a point that rests only on what you recall is a question too, with what you recall inside it.";
+  "You cannot search the web here. A correction that rests on a file you opened cites it (file, above); a point that rests only on what you recall is a question, with what you recall inside it.";
+
+// Corrections backed by a file: the model may cite a local file it opened in this call;
+// the brain opens it to find the passage (files.ts) and drops a file it cannot find.
+const FILE_RULE =
+  "  or file: a local file you opened with Read in this answer that settles it, {\"path\": \"/absolute/path\", \"passage\": \"…\"}: 5 to 30 words copied word for word from the file. Inkling opens the file to find the passage, and drops a file it cannot find.";
 
 // Look things up on the web (Settings › Model): the model may search, and a correction may
 // cite a page; the brain keeps the citation only if a search in this call returned its URL
@@ -494,6 +500,12 @@ const CHECK_SCHEMA = {
       additionalProperties: false,
       required: ["url", "passage"],
       properties: { url: { type: "string" }, title: { type: "string" }, passage: { type: "string" } },
+    },
+    file: {
+      type: "object",
+      additionalProperties: false,
+      required: ["path", "passage"],
+      properties: { path: { type: "string" }, passage: { type: "string" } },
     },
   },
 } as const;

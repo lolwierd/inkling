@@ -2,7 +2,7 @@
 // SDK replaced by test/fake-sdk.ts (see test/fake-brain.ts). No model calls.
 // Run: bun test test/protocol.test.ts
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -334,6 +334,40 @@ describe("what each task sends back", () => {
     const target = "We’ll keep one Redis counter per user and reset it every minute.";
     b.send(run("r", { task: "read", ctx: ctx(fake(thought(true, "ONE redis counter", "What happens at the boundary?", { sketch: true }))), target }));
     expect((await b.end("r")).data).toEqual({ speak: true, kind: "question", quote: "one Redis counter", text: "What happens at the boundary?", sketch: true });
+  });
+
+  describe("what a mind looked at, and corrections backed by a file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "inkling-files-"));
+    const readme = join(dir, "README.md");
+    writeFileSync(readme, "# Cache\n\nThe cache lives on the runner for seven days, then it is evicted.\n");
+    const target = "The cache lives on the runner for a week, so Monday's build is warm.";
+    const correction = (file: object) => ({
+      structured: { speak: true, kind: "correction", quote: "for a week", text: "The README says seven days. Which is it?", sketch: false, repeats: 0, check: { file }, question: "How long does the cache live?" },
+    });
+
+    test("a correction cites a file it opened, and the brain finds the passage and its line", async () => {
+      const b = brain();
+      b.send(run("r", { task: "read", ctx: ctx(fake({ ...correction({ path: readme, passage: "lives on the runner for seven days" }), reads: [readme] })), target }));
+      const done = await b.end("r");
+      expect(done.data).toMatchObject({ kind: "correction", check: { file: { path: readme, line: 3, passage: "lives on the runner for seven days" } }, looked: [readme] });
+    });
+
+    test("a file it did not open, or words not in it, make the correction its question", async () => {
+      const b = brain();
+      b.send(run("a", { task: "read", ctx: ctx(fake(correction({ path: readme, passage: "lives on the runner for seven days" }))), target }));
+      expect((await b.end("a")).data).toMatchObject({ kind: "question", text: "How long does the cache live?" });
+      b.send(run("b", { task: "read", ctx: ctx(fake({ ...correction({ path: readme, passage: "lives on the runner for nine days" }), reads: [readme] })), target }));
+      expect((await b.end("b")).data).toMatchObject({ kind: "question" });
+      expect(b.stderr).toContain("a file was dropped");
+    });
+
+    test("an answer says what it looked at: files, then pages, each once", async () => {
+      const b = brain();
+      b.send(ask("q", { deltas: ["Seven days."], reads: [readme, readme], fetches: ["https://example.org/cache"] }));
+      expect((await b.end("q")).data).toEqual({ text: "Seven days.", looked: [readme, "https://example.org/cache"] });
+      b.send(ask("n", { deltas: ["No files."] }));
+      expect((await b.end("n")).data).toEqual({ text: "No files." });
+    });
   });
 
   describe("Read it through in one call", () => {

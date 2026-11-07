@@ -618,6 +618,9 @@ pub struct Note {
     pub title: String,
     #[serde(default)]
     pub folder: Option<String>,
+    /// None inherits the folder's directories; Some replaces them.
+    #[serde(default)]
+    pub local_directories: Option<Vec<String>>,
     #[serde(default)]
     pub blocks: Vec<Block>,
     #[serde(default)]
@@ -662,12 +665,19 @@ fn default_mind_id() -> String {
 }
 
 impl Note {
+    pub fn local_directories<'a>(&'a self, folders: &'a [Folder]) -> &'a [String] {
+        self.local_directories.as_deref().unwrap_or_else(|| {
+            folders.iter().find(|f| Some(&f.id) == self.folder.as_ref()).map_or(&[], |f| f.local_directories.as_slice())
+        })
+    }
+
     pub fn new(title: &str, mode: Mode, folder: Option<String>) -> Self {
         let now = Utc::now();
         Self {
             id: new_id(),
             title: title.into(),
             folder,
+            local_directories: None,
             blocks: vec![
                 Block { kind: BlockKind::Title, text: title.into() },
                 Block { kind: BlockKind::Paragraph, text: String::new() },
@@ -854,6 +864,8 @@ fn longest_run(s: &str, c: char) -> usize {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Folder {
+    #[serde(default)]
+    pub local_directories: Vec<String>,
     pub id: String,
     #[serde(default)]
     pub name: String,
@@ -1595,7 +1607,7 @@ mod tests {
         let tmp = TempDir::new();
         let mut store = Store::open_at(tmp.0.clone()).unwrap();
         let welcome = store.notes[0].id.clone();
-        store.folders.push(Folder { id: "f".into(), name: "Work".into(), collapsed: false });
+        store.folders.push(Folder { local_directories: vec![], id: "f".into(), name: "Work".into(), collapsed: false });
         store.save_folders();
         let filed = Note::new("Filed", Mode::ThinksWithYou, Some("f".into()));
         store.save_note(&filed);

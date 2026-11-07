@@ -102,3 +102,5 @@ this list when a feature lands or goes; the key is the default binding.
 | Every shortcut can be changed | Settings > Shortcuts: click keys and press new ones, add or remove keys, clashes flagged on both rows, reset one or all; new keys work at once, menus included |
 | Everything from the keyboard | Tab and ⇧Tab move between controls, a running-stitch ring shows where you are, Return or Space presses; the note keeps Tab for lists, so ⌃Tab leaves it; ↑ ↓ in the mind and mode menus |
 | Messages in passing | one stack of small stitched labels at the bottom: Undo for a deleted note or a snipped thread, problems in ochre with a close control; the pointer holds a label |
+
+Local files: Files on a note chooses local directories. Notes inherit directories chosen with Files on their sidebar folder, until the note overrides them. Use folder setting restores inheritance. Folder Clear removes its mapping. Claude Code user instructions load for every call, and Read, Glob and Grep can consult existing project memories and local files. Web lookup retains its separate setting.

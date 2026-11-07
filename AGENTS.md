@@ -157,7 +157,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
   (`send_task`, `later`). GPUI panics on a nested update of the same entity.
 - Store files load tolerantly: missing fields default, unknown ones are ignored, one bad
   entry costs that entry. New fields need `#[serde(default)]`.
-- The brain's working folder is `<notebook>/brain-cwd`, so the runtime never sees a project.
+- The brain's working folder is `<notebook>/brain-cwd`. It loads Claude Code user instructions and can read local files and existing project memories. Notes inherit `Folder.local_directories` unless `Note.local_directories` overrides them.
 - Task names agree across `brain/src/protocol.ts`, the app's requests and the fake
   brain; `brain/test/parity.test.ts` fails when they drift.
 

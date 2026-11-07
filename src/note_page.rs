@@ -1625,6 +1625,7 @@ impl NotePage {
             })
             .collect();
         json!({
+            "localDirectories": self.note.local_directories(&cx.global::<Store>().folders),
             "noteTitle": ed.title(),
             "noteText": plain_text_of(&blocks),
             "brief": self.note.brief,
@@ -2958,6 +2959,19 @@ impl NotePage {
                     None => log::warn!("script: no note titled {title:?}"),
                 }
             }
+            Step::Set(key, value) if key == "note-directories" => {
+                self.note.local_directories = if value == "inherit" { None } else { Some(value.split('|').filter(|p| !p.is_empty()).map(str::to_string).collect()) };
+                self.flush(cx);
+                cx.notify();
+            }
+            Step::Set(key, value) if key == "folder-directories" => {
+                let store = cx.global_mut::<Store>();
+                if let Some(folder) = store.folders.iter_mut().find(|f| Some(&f.id) == self.note.folder.as_ref()) {
+                    folder.local_directories = value.split('|').filter(|p| !p.is_empty()).map(str::to_string).collect();
+                    store.save_folders();
+                }
+                cx.notify();
+            }
             Step::Set(key, value) => {
                 let s = &mut cx.global_mut::<Store>().settings;
                 match (key.as_str(), value.as_str()) {
@@ -3169,6 +3183,8 @@ impl NotePage {
         // the paper you can see and each tab, in the window at the last paint: a dragged tag
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
+        state["local_directories"] = json!(self.note.local_directories(&cx.global::<Store>().folders));
+        state["directories_inherited"] = json!(self.note.local_directories.is_none());
         state["paper"] = json!([l, t, r, b]);
         // each unfolded tag where it was drawn, and the column of your words from the header
         // row to the last line, in the window: no tag you have not dragged may cover it
@@ -3248,9 +3264,29 @@ impl NotePage {
 // ----- rendering ---------------------------------------------------------------
 
 impl NotePage {
+    fn choose_local_directories(&mut self, cx: &mut Context<Self>) {
+        let note_id = self.note.id.clone();
+        let rx = cx.prompt_for_paths(PathPromptOptions { files: false, directories: true, multiple: true, prompt: Some("Use for this note".into()) });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = rx.await else { return };
+            let _ = this.update(cx, |this, cx| {
+                if this.note.id != note_id { return; }
+                this.note.local_directories = Some(paths.iter().map(|p| p.to_string_lossy().into_owned()).collect());
+                this.flush(cx);
+                cx.notify();
+            });
+        }).detach();
+    }
+
     fn header(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let t = Theme::get(cx).clone();
         let p = t.p;
+        let directories = self.note.local_directories(&cx.global::<Store>().folders).to_vec();
+        let inherited = self.note.local_directories.is_none();
+        let files_label = if directories.is_empty() { "Files".to_string() } else {
+            format!("Files · {}{}", directories.len(), if inherited { " from folder" } else { "" })
+        };
+        let files_tip = if directories.is_empty() { "Choose local directories for this note".to_string() } else { directories.join("\n") };
         let mode = self.note.mode;
         let mind_name = self.mind.name.clone();
         let has_brief = self.note.brief.is_some();
@@ -3330,6 +3366,17 @@ impl NotePage {
                         .children(mode_menu.map(|card| self.drop_down(card, mode_dx, cx))),
                 )
             })
+            .child(control("note-files", false)
+                .child(files_label)
+                .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(files_tip.clone()).build(window, cx))
+                .keyed_as("header:files", 4., t.voice_ink, cx, |this, _, cx| this.choose_local_directories(cx)))
+            .when(!inherited, |d| d.child(control("inherit-files", false)
+                .child("Use folder setting")
+                .keyed_as("header:inherit-files", 4., t.voice_ink, cx, |this, _, cx| {
+                    this.note.local_directories = None;
+                    this.flush(cx);
+                    cx.notify();
+                })))
             // the open count and Hide threads wrap together, and keep to the right edge on
             // whichever line they land (a spacer that wrapped with them, or did not, put
             // them left or right by turns as the window narrowed)

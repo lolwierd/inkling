@@ -1114,7 +1114,7 @@ impl AppView {
             if let Some(f) = store.folders.iter().find(|f| same_folder_name(&f.name, &name)) {
                 f.id.clone()
             } else {
-                let f = Folder { id: new_id(), name, collapsed: false };
+                let f = Folder { local_directories: vec![], id: new_id(), name, collapsed: false };
                 let id = f.id.clone();
                 store.folders.push(f);
                 store.save_folders();
@@ -1259,6 +1259,22 @@ impl AppView {
     }
 
     /// File > Import from Obsidian…: pick a vault folder and bring its notes in.
+    fn choose_folder_directories(&mut self, id: String, cx: &mut Context<Self>) {
+        let rx = cx.prompt_for_paths(PathPromptOptions { files: false, directories: true, multiple: true, prompt: Some("Use for notes in folder".into()) });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = rx.await else { return };
+            let _ = this.update(cx, |this, cx| {
+                let store = cx.global_mut::<Store>();
+                if let Some(folder) = store.folders.iter_mut().find(|f| f.id == id) {
+                    folder.local_directories = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+                    store.save_folders();
+                }
+                this.page.update(cx, |_, cx| cx.notify());
+                cx.notify();
+            });
+        }).detach();
+    }
+
     fn choose_vault(&mut self, cx: &mut Context<Self>) {
         let options = PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some("Import".into()) };
         let rx = cx.prompt_for_paths(options);
@@ -1511,6 +1527,29 @@ impl AppView {
                     .text_color(p.graphite)
                     .child(icon(if collapsed { "folder" } else { "folder-open" }, 13., p.faint))
                     .child(div().flex_1().min_w(px(0.)).truncate().child(f.name.clone()))
+                    .child({
+                        let id = f.id.clone();
+                        let tip = if f.local_directories.is_empty() { "Choose local directories".to_string() } else { f.local_directories.join("\n") };
+                        ui::ghost_button(SharedString::from(format!("folder-files-{}", f.id)), "Files", &t)
+                            .mr(px(18.))
+                            .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                            .keyed_as(format!("sidebar:files-{}", f.id), 4., ring, cx, move |this, _, cx| {
+                                cx.stop_propagation();
+                                this.choose_folder_directories(id.clone(), cx);
+                            })
+                    })
+                    .when(!f.local_directories.is_empty(), |d| {
+                        let id = f.id.clone();
+                        d.child(ui::ghost_button(SharedString::from(format!("folder-files-clear-{}", f.id)), "Clear", &t)
+                            .keyed_as(format!("sidebar:files-clear-{}", f.id), 4., ring, cx, move |this, _, cx| {
+                                cx.stop_propagation();
+                                let store = cx.global_mut::<Store>();
+                                if let Some(folder) = store.folders.iter_mut().find(|f| f.id == id) { folder.local_directories.clear(); }
+                                store.save_folders();
+                                this.page.update(cx, |_, cx| cx.notify());
+                                cx.notify();
+                            }))
+                    })
                     // a folded folder's count lines up with the notes' counts; under the
                     // pointer the remove × takes its place
                     .when(collapsed && !inside.is_empty(), |d| d.child(ui::key_hint(inside.len().to_string(), &t).group_hover(group.clone(), |s| s.invisible())))
@@ -1752,7 +1791,7 @@ impl AppView {
             match store.folders.iter_mut().find(|f| same_folder_name(&f.name, &name)) {
                 // a folder by that name is already here: open it rather than make a twin
                 Some(f) => f.collapsed = false,
-                None => store.folders.push(Folder { id: new_id(), name, collapsed: false }),
+                None => store.folders.push(Folder { local_directories: vec![], id: new_id(), name, collapsed: false }),
             }
             store.save_folders();
         }

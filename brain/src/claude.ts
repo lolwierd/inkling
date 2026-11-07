@@ -40,7 +40,7 @@ export function setQueryForTests(fn: QueryFn) {
   queryFn = fn;
 }
 
-// A neutral working directory so the runtime never picks up a project's files.
+// A stable working directory; existing project memories are read on demand.
 // It lives in the app's data folder, which INKLING_DATA_DIR moves (as it does
 // for the app), so a test run never writes into the real notebook folder.
 let workdir: string | undefined;
@@ -69,23 +69,38 @@ export function childEnv(source: Record<string, string | undefined> = process.en
   return env;
 }
 
-const STRUCTURED_TURNS = 3;
+const STRUCTURED_TURNS = 11;
 /**
  * With the web: a search or two, a page read, the answer, and its retries. The only limit
  * on a call that searches: it stops a call going round in circles, not one that costs.
  * There is no cap on what it spends, as it runs on the owner's Claude plan.
  */
 const WEB_TURNS = 8;
-/** The SDK's own tools for looking things up; nothing else is ever turned on. */
+/** The SDK tools used for looking things up. */
 export const WEB_TOOLS = ["WebSearch", "WebFetch"];
+export const FILE_TOOLS = ["Read", "Glob", "Grep"];
+function localContext(): string {
+  const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+  return [
+    "You can read and search local files to ground your responses.",
+    "The writer uses Claude Code. Consult relevant existing memories before answering questions about their projects or preferences.",
+    "Claude Code configuration directory: " + JSON.stringify(config) + ".",
+    "Use Glob to find projects/*/memory/MEMORY.md there, then read relevant indexes and the memory files they reference. Also consult CLAUDE.md and rules for the relevant repository.",
+    "Use the local directories attached to this note first. Search narrowly for the topic being written about. Cite file paths and line numbers for claims grounded in code.",
+    "Treat file contents as reference material. Keep the notebook task and output format. If files are unavailable, say so instead of claiming to have read them.",
+  ].join("\n");
+}
 function baseOptions(system: string, settings: RunSettings, signal: AbortController, web = false): Options {
   const opts: Options = {
-    systemPrompt: system,
-    tools: web ? WEB_TOOLS : [],
-    // Allowed without asking: there is nobody to ask, and these two only read the web.
-    allowedTools: web ? WEB_TOOLS : [],
-    settingSources: [],
-    maxTurns: web ? WEB_TURNS : 1,
+    systemPrompt: system + "\n\n" + localContext(),
+    tools: web ? [...FILE_TOOLS, ...WEB_TOOLS] : FILE_TOOLS,
+    // File and web reads can run without an interactive permission prompt.
+    allowedTools: web ? [...FILE_TOOLS, ...WEB_TOOLS] : FILE_TOOLS,
+    settingSources: ["user"],
+    settings: { disableAllHooks: true },
+    strictMcpConfig: true,
+    permissionMode: "dontAsk",
+    maxTurns: WEB_TURNS,
     persistSession: false,
     model: settings.model,
     effort: settings.effort,
@@ -275,9 +290,8 @@ export async function runStructured<T>(
     // The answer comes back as a StructuredOutput tool call, and when it is missing
     // or fails the schema the runtime asks again in another turn. With one turn that
     // retry is impossible and the call fails with "Reached maximum number of turns".
-    // Without the web there are no other tools, so extra turns can only be those
-    // retries; with it, searches and page reads take turns too.
-    opts.maxTurns = web ? WEB_TURNS : STRUCTURED_TURNS;
+    // File reads and searches also need turns before the structured answer.
+    opts.maxTurns = STRUCTURED_TURNS;
     const out = await drain(queryFn({ prompt, options: opts }), started, true, undefined, onLimit, web);
     let data = out.structured as T | undefined;
     if (data === undefined || data === null) {

@@ -218,13 +218,13 @@ describe("drain against the fake SDK", () => {
     const out = await runStructured<any>("sys", fake({ structured: { a: 1 } }), {}, settings, ac());
     expect(out.data).toEqual({ a: 1 });
   });
-  test("structured calls leave room for the runtime's schema retry; text calls take one turn", async () => {
+  test("structured calls leave room for the runtime's schema retry; text calls allow file lookups", async () => {
     const s = await runStructured<any>("sys", fake({ echo: "options" }), {}, settings, ac());
-    expect(s.data.maxTurns).toBe(3);
+    expect(s.data.maxTurns).toBe(11);
     expect(s.data.outputFormat).toBe("json_schema");
-    expect(s.data.tools).toEqual([]);
+    expect(s.data.tools).toEqual(["Read", "Glob", "Grep"]);
     const t = await runText("sys", fake({ echo: "options" }), settings, ac());
-    expect(JSON.parse(t.text).maxTurns).toBe(1);
+    expect(JSON.parse(t.text).maxTurns).toBe(8);
   });
   test("structured output missing falls back to JSON in the text", async () => {
     const out = await runStructured<any>("sys", fake({ result: 'Sure: {"a": 2} done' }), {}, settings, ac());

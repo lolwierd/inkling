@@ -725,7 +725,7 @@ mod tests {
 
     #[std::prelude::v1::test]
     fn rows_name_the_folder_note_and_mind() {
-        let folders = vec![Folder { id: "f-work".into(), name: "Work".into(), collapsed: true }];
+        let folders = vec![Folder { local_directories: vec![], id: "f-work".into(), name: "Work".into(), collapsed: true }];
         let mut budget = note("budget", "Q3 budget", Some("f-work"), vec![thread("b1", "We cut the bill\n\nby  moving", Open, "Skeptic", "2026-10-01T09:00:00Z", 0)]);
         budget.mind_id = "skeptic".into();
         let notes = vec![
@@ -771,7 +771,7 @@ mod tests {
 
     #[std::prelude::v1::test]
     fn typing_narrows_by_every_word() {
-        let folders = vec![Folder { id: "f".into(), name: "Work".into(), collapsed: false }];
+        let folders = vec![Folder { local_directories: vec![], id: "f".into(), name: "Work".into(), collapsed: false }];
         let notes = vec![
             note("budget", "Q3 budget", Some("f"), vec![thread("b1", "one node", Open, "Skeptic", "2026-10-01T09:00:00Z", 0)]),
             note("plan", "Sub-50 10k by March", None, vec![

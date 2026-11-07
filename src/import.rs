@@ -218,7 +218,7 @@ pub fn add_to_store(store: &mut Store, vault: Vault, mode: Mode) -> Summary {
             if let Some(f) = store.folders.iter().find(|f| same_folder(&f.name, &name)) {
                 return f.id.clone();
             }
-            let folder = Folder { id: new_id(), name, collapsed: true };
+            let folder = Folder { local_directories: vec![], id: new_id(), name, collapsed: true };
             let id = folder.id.clone();
             store.folders.push(folder);
             new_folders = true;
@@ -1265,7 +1265,7 @@ mod tests {
         fs::File::options().write(true).open(vault.0.join("Top.md")).unwrap().set_modified(modified).unwrap();
         let notebook = TempDir::new("notebook");
         let mut store = Store::open_at(notebook.0.clone()).unwrap();
-        store.folders.push(Folder { id: "mine".into(), name: "projects".into(), collapsed: false });
+        store.folders.push(Folder { local_directories: vec![], id: "mine".into(), name: "projects".into(), collapsed: false });
 
         let summary = add_to_store(&mut store, read_vault(&vault.0).unwrap(), Mode::WhenYouAsk);
         assert_eq!(summary, Summary { imported: 3, already_here: 0, unreadable: 0, in_icloud: 1 });

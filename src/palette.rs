@@ -434,7 +434,7 @@ mod tests {
         filed.folder = Some("f1".into());
         let mut orphan = note("Lost", "");
         orphan.folder = Some("deleted-folder".into());
-        let folders = vec![Folder { id: "f1".into(), name: "Work".into(), collapsed: false }];
+        let folders = vec![Folder { local_directories: vec![], id: "f1".into(), name: "Work".into(), collapsed: false }];
         let rows = search(&[filed, orphan], &folders, "");
         assert_eq!(rows[0].folder.as_deref(), Some("Work"));
         assert_eq!(rows[1].folder, None);

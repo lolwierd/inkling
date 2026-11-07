@@ -1,0 +1,25 @@
+# fixture: local-files
+wait: 1500
+dump: inherited
+expect: d.local_directories.join() === "/tmp/project-a" && d.directories_inherited
+set: note-directories=/tmp/project-b
+dump: overridden
+expect: d.local_directories.join() === "/tmp/project-b" && !d.directories_inherited
+set: folder-directories=/tmp/project-c
+dump: folder-changed
+expect: d.local_directories.join() === "/tmp/project-b"
+set: note-directories=inherit
+dump: restored
+expect: d.local_directories.join() === "/tmp/project-c" && d.directories_inherited
+open: sidebar
+shot: inherited-light
+set: appearance=dark
+shot: inherited-dark
+set: note-directories=/tmp/project-b
+note: Other note
+switch: Project notes
+settle
+dump: reloaded
+expect: d.local_directories.join() === "/tmp/project-b" && !d.directories_inherited
+shot: overridden
+quit

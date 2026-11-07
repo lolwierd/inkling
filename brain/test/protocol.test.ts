@@ -467,17 +467,17 @@ describe("what each task sends back", () => {
       expect((await b.end("a")).data.text).toBe(`It is 330 m (${TOWER}); see too.`);
     });
 
-    test("the tools: the web's two when it is on, none when it is off; no spending cap", async () => {
+    test("the tools: file tools always, web tools when enabled; no spending cap", async () => {
       const b = brain();
       const echo = (id: string, input: object, s: object) => {
         b.send(run(id, input, s));
         return b.end(id).then((e) => JSON.parse(e.data.text ?? "{}"));
       };
       const chat = await echo("c", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, web);
-      expect(chat).toMatchObject({ tools: ["WebSearch", "WebFetch"], allowedTools: ["WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: null });
+      expect(chat).toMatchObject({ tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"], allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"], maxTurns: 8, maxBudgetUsd: null });
       expect(chat.prompt).toContain("Link only to a page your search returned");
       const off = await echo("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: null }, settings);
-      expect(off).toMatchObject({ tools: [], maxTurns: 1, maxBudgetUsd: null });
+      expect(off).toMatchObject({ tools: ["Read", "Glob", "Grep"], maxTurns: 8, maxBudgetUsd: null });
       expect(off.prompt).not.toContain("WebSearch");
     });
   });
@@ -690,13 +690,22 @@ describe("status", () => {
 });
 
 describe("what reaches the runtime", () => {
-  test("options: no tools, one turn, no session, settings passed through, cwd in the data dir", async () => {
+  test("options: file tools, user context, no session, settings passed through, cwd in the data dir", async () => {
     const b = brain();
     b.send(run("o", { task: "chat", ctx: ctx(fake({ echo: "options" })), history: [], message: "hi", near: "the reset" }, { model: "claude-sonnet-5-5", effort: "medium" }));
     const o = JSON.parse((await b.end("o")).data.text);
-    expect(o).toMatchObject({ model: "claude-sonnet-5-5", effort: "medium", tools: [], maxTurns: 1, persistSession: false, settingSources: [], includePartialMessages: true, outputFormat: null });
+    expect(o).toMatchObject({ model: "claude-sonnet-5-5", effort: "medium", tools: ["Read", "Glob", "Grep"], maxTurns: 8, persistSession: false, settingSources: ["user"], includePartialMessages: true, outputFormat: null });
     expect(o.cwd).toBe(join(DATA, "brain-cwd"));
+    expect(o.systemPrompt).toContain("projects/*/memory/MEMORY.md");
     expect(o.prompt).toContain("«the reset»");
+  });
+
+  test("note directories reach the model for inherited or overridden context", async () => {
+    const b = brain();
+    b.send(run("paths", { task: "chat", ctx: { ...ctx(fake({ echo: "options" })), localDirectories: ["/tmp/project-a", "/tmp/project-b"] }, history: [], message: "check the implementation", near: null }, settings));
+    const o = JSON.parse((await b.end("paths")).data.text);
+    expect(o.systemPrompt).toContain('["/tmp/project-a","/tmp/project-b"]');
+    expect(o.tools).toEqual(["Read", "Glob", "Grep"]);
   });
 
   test("ANTHROPIC_API_KEY is dropped unless INKLING_USE_API_KEY=1", async () => {

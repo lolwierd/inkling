@@ -129,6 +129,7 @@ function context(v: unknown): Context {
   const mind = isObject(v.mind) ? v.mind : {};
   return {
     noteTitle: text(v.noteTitle),
+    localDirectories: Array.isArray(v.localDirectories) ? v.localDirectories.filter((p): p is string => typeof p === "string" && p.startsWith("/")) : [],
     noteText: text(v.noteText),
     brief: optionalText(v.brief),
     aboutMe: optionalText(v.aboutMe),
@@ -263,7 +264,7 @@ function nonEmpty(v: unknown, what: string): string {
 
 /**
  * A task that may look things up runs with the web; if that runs out of turns,
- * it runs again without it (one turn, no tools), so it still ends as an answer: a question,
+ * it runs again without web tools, so it still ends as an answer: a question,
  * for a correction it could not back. The usage then counts both.
  */
 async function run(id: string, settings: RunSettings, input: Task, signal: AbortController): Promise<{ data: unknown; usage: Usage }> {

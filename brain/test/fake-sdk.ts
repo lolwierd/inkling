@@ -86,7 +86,7 @@ export function fakeQuery({ prompt, options }: { prompt: unknown; options?: any 
       yield { type: "assistant", error: d.assistantError, message: { content: [{ type: "text", text: d.resultError?.result ?? "API Error" }] } };
     }
     await step();
-    if (d.resultError && (!d.webOnce || (options?.tools?.length ?? 0) > 0)) {
+    if (d.resultError && (!d.webOnce || Array.isArray(options?.tools) && options.tools.includes("WebSearch"))) {
       yield {
         type: "result",
         subtype: d.resultError.subtype,

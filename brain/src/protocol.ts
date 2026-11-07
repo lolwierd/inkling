@@ -77,6 +77,7 @@ export interface LetStandPoint {
 }
 
 export interface Context {
+  localDirectories?: string[];
   noteTitle: string;
   noteText: string;
   brief: string | null;

@@ -34,7 +34,8 @@ pub(super) fn markdown(key: String, text: &str, t: &Theme) -> AnyElement {
         .style(TextViewStyle {
             paragraph_gap: rems(0.5),
             heading_font_size: Some(std::sync::Arc::new(|level, _| px(if level <= 2 { 16. } else { 14. }))),
-            code_block: StyleRefinement::default().bg(t.p.paper).p(px(8.)).rounded(px(4.)),
+            // Keep the renderer's top inset for its language label.
+            code_block: StyleRefinement::default().bg(t.p.paper).px(px(8.)).pb(px(8.)).rounded(px(4.)),
             inline_code: HighlightStyle { background_color: Some(t.p.hover), ..Default::default() },
             table,
             is_dark: t.p.dark,

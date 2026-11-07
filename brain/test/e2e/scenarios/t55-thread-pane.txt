@@ -27,6 +27,13 @@ settle
 wait: 500
 dump: answered
 expect: d.conversations.t1.max - d.conversations.t1.scrolled < 2
+reply: Check the definition again. [[delay:2000]]
+wait: 400
+wheel: 1110, 430, 5000
+settle
+dump: reading-older
+expect: d.conversations.t1.scrolled === 0
+expect: d.pending.length === 0
 size: 900x620
 set: appearance=dark
 wait: 1000

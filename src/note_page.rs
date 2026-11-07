@@ -3285,10 +3285,13 @@ impl NotePage {
         let p = t.p;
         let directories = self.note.local_directories(&cx.global::<Store>().folders).to_vec();
         let inherited = self.note.local_directories.is_none();
-        let files_label = if directories.is_empty() { "Files".to_string() } else {
-            format!("Files · {}{}", directories.len(), if inherited { " from folder" } else { "" })
+        let files_label = directories.first().map(|path| {
+            let name = std::path::Path::new(path).file_name().and_then(|n| n.to_str()).unwrap_or(path);
+            if directories.len() > 1 { format!("Files · {name} +{}", directories.len() - 1) } else { format!("Files · {name}") }
+        }).unwrap_or_else(|| "Files".into());
+        let files_tip = if directories.is_empty() { "Choose local directories for this note".to_string() } else {
+            format!("{}\n{}", if inherited { "Inherited from this note's folder" } else { "Set on this note; overrides its folder" }, directories.join("\n"))
         };
-        let files_tip = if directories.is_empty() { "Choose local directories for this note".to_string() } else { directories.join("\n") };
         let folder = self.note.folder.as_ref().and_then(|id| cx.global::<Store>().folders.iter().find(|f| &f.id == id)).cloned();
         let mode = self.note.mode;
         let mind_name = self.mind.name.clone();
@@ -3370,7 +3373,7 @@ impl NotePage {
                 )
             })
             .child(control("note-files", false)
-                .child(files_label)
+                .child(div().max_w(px(180.)).truncate().child(files_label))
                 .tooltip(move |window, cx| gpui_kit::component::tooltip::Tooltip::new(files_tip.clone()).build(window, cx))
                 .keyed_as("header:files", 4., t.voice_ink, cx, |this, _, cx| this.choose_local_directories(cx)))
             .when(!inherited, |d| d.child(control("inherit-files", false)
@@ -3411,16 +3414,15 @@ impl NotePage {
                     }),
             )
             .into_any_element();
-        let mut details = div().flex().flex_col().gap(px(5.));
-        if let Some(folder) = folder {
-            details = details.child(ui::ghost_button("note-folder", folder.name, &t)
-                .keyed_as("header:folder", 4., t.voice_ink, cx, move |_, _, cx| cx.emit(PageEvent::OpenFolder(folder.id.clone()))));
-        }
-        for path in &directories {
-            details = details.child(div().text_size(px(ts::SMALL)).text_color(p.graphite)
-                .child(format!("{} · {}", if inherited { "From folder" } else { "This note" }, path)));
-        }
-        div().flex().flex_col().gap(px(8.)).child(header).when(self.note.folder.is_some() || !directories.is_empty(), |d| d.child(details)).into_any_element()
+        // Location belongs above the tools, like a breadcrumb back to the containing folder.
+        div().flex().flex_col().gap(px(12.))
+            .when_some(folder, |d, folder| d.child(div().id("note-folder").flex().items_center().gap(px(6.)).text_size(px(ts::SMALL))
+                .text_color(p.graphite).cursor_pointer().hover(move |s| s.text_color(p.ink)).active(|s| s.opacity(0.7))
+                .child(icon("folder", 12., p.graphite))
+                .child(div().max_w(px(240.)).truncate().child(folder.name))
+                .child(icon("chevron-right", 10., p.faint))
+                .keyed_as("header:folder", 4., t.voice_ink, cx, move |_, _, cx| cx.emit(PageEvent::OpenFolder(folder.id.clone())))))
+            .child(header).into_any_element()
     }
 
     /// Open or close a header menu. A press on its own button while it is open closes it:

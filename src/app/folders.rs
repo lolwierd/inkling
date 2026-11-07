@@ -72,36 +72,15 @@ impl AppView {
         let notes: Vec<Note> = store.notes.iter().filter(|n| n.folder == id || (id.is_none() && n.folder.as_ref().is_some_and(|id| !store.folders.iter().any(|f| &f.id == id)))).cloned().collect();
         let t = Theme::get(cx).clone();
         let p = t.p;
-        let mut contents = div().flex().flex_col().gap(px(16.))
-            .child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child("NOTEBOOK"))
-            .child(div().flex().items_center().gap(px(16.))
-                .child(div().flex_1().font_family(crate::theme::DISPLAY).text_size(px(34.)).child(title))
+        // A folder is the notebook's contents page: the writing comes first, its file context last.
+        let mut contents = div().flex().flex_col()
+            .child(div().flex().items_center().gap(px(16.)).pb(px(24.)).border_b_1().border_color(p.rule)
+                .child(div().flex_1().min_w(px(0.))
+                    .child(div().font_family(crate::theme::DISPLAY).text_size(px(30.)).child(title))
+                    .child(div().mt(px(4.)).text_size(px(ts::SMALL)).text_color(p.graphite)
+                        .child(format!("{} {}", notes.len(), if notes.len() == 1 { "note" } else { "notes" }))))
                 .child(ui::ghost_button("folder-new-note", "New note", &t)
-                    .keyed_as("folder:new-note", 4., t.voice_ink, cx, |this, window, cx| this.create_note("", None, window, cx))))
-            .child(div().text_size(px(ts::UI)).text_color(p.graphite).child(format!("{} {} · Drag notes here to move them", notes.len(), if notes.len() == 1 { "note" } else { "notes" })));
-        if let Some(folder) = folder {
-            let pick_id = folder.id.clone();
-            let clear_id = folder.id.clone();
-            let mut paths = div().flex().flex_col().gap(px(6.)).py(px(16.)).border_t_1().border_b_1().border_color(p.rule)
-                .child(div().flex().items_center().gap(px(12.))
-                    .child(div().flex_1().text_size(px(ts::UI)).child("Local directories"))
-                    .child(ui::ghost_button("folder-paths", "Choose", &t).keyed_as("folder:paths", 4., t.voice_ink, cx, move |this, _, cx| this.choose_folder_directories(pick_id.clone(), cx)))
-                    .when(!folder.local_directories.is_empty(), |d| d.child(ui::ghost_button("folder-clear-paths", "Clear", &t)
-                        .keyed_as("folder:clear-paths", 4., t.voice_ink, cx, move |this, _, cx| {
-                            let store = cx.global_mut::<Store>();
-                            if let Some(f) = store.folders.iter_mut().find(|f| f.id == clear_id) { f.local_directories.clear(); }
-                            store.save_folders();
-                            this.page.update(cx, |_, cx| cx.notify());
-                            cx.notify();
-                        }))));
-            if folder.local_directories.is_empty() {
-                paths = paths.child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child("Choose directories for the notes in this folder."));
-            }
-            for path in &folder.local_directories {
-                paths = paths.child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child(path.clone()));
-            }
-            contents = contents.child(paths);
-        }
+                    .keyed_as("folder:new-note", 4., t.voice_ink, cx, |this, window, cx| this.create_note("", None, window, cx))));
         if notes.is_empty() {
             contents = contents.child(div().py(px(40.)).text_color(p.graphite).child("No notes here yet. Create one, or drag a note from the sidebar."));
         }
@@ -111,7 +90,8 @@ impl AppView {
             let excerpt = note.blocks.iter().skip(1).find(|b| !b.text.trim().is_empty()).map(|b| b.text.chars().take(160).collect::<String>()).unwrap_or_else(|| "Empty note".into());
             let threads = crate::between::open_here(&cx.global::<Store>().notes, &note);
             contents = contents.child(div().id(SharedString::from(format!("folder-note-{}", note.id)))
-                .py(px(16.)).border_b_1().border_color(p.rule).cursor_pointer().hover(move |s| s.bg(p.hover))
+                .group(SharedString::from(format!("folder-note-group-{}", note.id)))
+                .px(px(12.)).py(px(18.)).border_b_1().border_color(p.rule).cursor_pointer().active(|s| s.opacity(0.7))
                 .on_drag(DraggedNote { id: note.id.clone(), title: title.clone() }, {
                     let app = cx.entity();
                     move |drag, offset, _, cx| {
@@ -119,16 +99,47 @@ impl AppView {
                         drag.preview(offset, cx)
                     }
                 })
-                .child(div().font_family(crate::theme::SERIF).text_size(px(22.)).child(title))
-                .child(div().mt(px(5.)).text_size(px(ts::UI)).text_color(p.graphite).child(excerpt))
-                .child(div().mt(px(8.)).text_size(px(ts::SMALL)).text_color(p.graphite).child(format!("{} · {} loose threads", note.updated_at.format("%-d %b"), threads)))
+                .child(div().flex().items_center().gap(px(16.))
+                    .child(div().flex_1().min_w(px(0.)).font_family(crate::theme::SERIF).text_size(px(22.)).truncate()
+                        .group_hover(SharedString::from(format!("folder-note-group-{}", note.id)), move |s| s.text_color(t.voice_ink)).child(title))
+                    .child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child(note.updated_at.format("%-d %b").to_string()))
+                    .child(icon("arrow-right", 14., t.voice_ink).invisible()
+                        .group_hover(SharedString::from(format!("folder-note-group-{}", note.id)), |s| s.visible())))
+                .child(div().mt(px(6.)).text_size(px(ts::UI)).text_color(p.graphite).truncate().child(excerpt))
+                .when(threads > 0, |d| d.child(div().mt(px(8.)).flex().items_center().gap(px(6.)).text_size(px(ts::SMALL)).text_color(p.graphite)
+                    .child(ui::small_dot(t.voice_ink, 5.))
+                    .child(format!("{threads} {}", if threads == 1 { "loose thread" } else { "loose threads" }))))
                 .keyed_as(format!("folder:note-{}", note.id), 4., t.voice_ink, cx, move |this, window, cx| this.open_note(open_id.clone(), window, cx)));
+        }
+        if let Some(folder) = folder {
+            let pick_id = folder.id.clone();
+            let clear_id = folder.id.clone();
+            let mut paths = div().mt(px(28.)).flex().flex_col().gap(px(6.))
+                .child(div().flex().items_center().gap(px(12.))
+                    .child(div().flex_1().text_size(px(ts::SMALL)).text_color(p.graphite).child("Files for these notes"))
+                    .child(ui::ghost_button("folder-paths", if folder.local_directories.is_empty() { "Link a folder" } else { "Change" }, &t).keyed_as("folder:paths", 4., t.voice_ink, cx, move |this, _, cx| this.choose_folder_directories(pick_id.clone(), cx)))
+                    .when(!folder.local_directories.is_empty(), |d| d.child(ui::ghost_button("folder-clear-paths", "Unlink", &t)
+                        .keyed_as("folder:clear-paths", 4., t.voice_ink, cx, move |this, _, cx| {
+                            let store = cx.global_mut::<Store>();
+                            if let Some(f) = store.folders.iter_mut().find(|f| f.id == clear_id) { f.local_directories.clear(); }
+                            store.save_folders();
+                            this.page.update(cx, |_, cx| cx.notify());
+                            cx.notify();
+                        }))));
+            if folder.local_directories.is_empty() {
+                paths = paths.child(div().text_size(px(ts::SMALL)).text_color(p.graphite).child("Link a local folder for Inkling to read alongside these notes."));
+            }
+            for path in &folder.local_directories {
+                paths = paths.child(div().flex().items_center().gap(px(8.)).text_size(px(ts::SMALL)).text_color(p.graphite)
+                    .child(icon("folder", 12., p.graphite)).child(path.clone()));
+            }
+            contents = contents.child(paths);
         }
         div().id("folder-page").track_focus(&self.focus).size_full().overflow_y_scroll().bg(p.cloth)
             .px(px(36.)).pt(px(64.)).pb(px(36.))
             .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(p.hover))
             .on_drop(cx.listener(move |this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, id.clone(), cx)))
-            .child(div().max_w(px(880.)).mx_auto().min_h(px(600.)).px(px(40.)).py(px(40.)).bg(p.paper).rounded(px(4.)).child(contents))
+            .child(div().max_w(px(760.)).mx_auto().min_h(px(420.)).px(px(36.)).py(px(32.)).bg(p.paper).rounded(px(4.)).child(contents))
             .into_any_element()
     }
 }

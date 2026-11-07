@@ -681,7 +681,7 @@ pub struct NotePage {
     /// at again at the next pause. (The thread's own quote follows the words on save.)
     rechecks: HashMap<String, (std::time::Instant, String)>,
     /// Threads being looked at again right now (the needle works beside them).
-    rechecking: HashSet<String>,
+    rechecking: HashMap<String, u64>,
     settle_task: Option<Task<()>>,
     /// Minds a script seats for its next ask.
     pending_room: Vec<String>,
@@ -814,7 +814,7 @@ impl NotePage {
             chrome: Rc::new(std::cell::Cell::new(1.)),
             arrived: HashMap::new(),
             rechecks: HashMap::new(),
-            rechecking: HashSet::new(),
+            rechecking: HashMap::new(),
             settle_task: None,
             pending_room: vec![],
             tags: HashMap::new(),
@@ -1481,11 +1481,12 @@ impl NotePage {
             return;
         }
         let Some(t) = self.note.threads.iter().find(|t| t.id == id && t.status == ThreadStatus::Open).cloned() else { return };
-        let now_text = {
+        let (now_text, paragraph_hash) = {
             let ed = self.editor.read(cx);
             let Some(range) = ed.anchors().iter().find(|a| a.id == id).map(|a| a.range.clone()) else { return };
+            let paragraph_hash = hash_text(&ed.lines_text(ed.unit_of(ed.line_of(range.start))));
             let Some(words) = ed.text().get(range).map(str::to_string) else { return };
-            words
+            (words, paragraph_hash)
         };
         if now_text.trim().is_empty() || now_text == before {
             return;
@@ -1503,7 +1504,7 @@ impl NotePage {
         });
         let input = self.between_reply(&t, input, cx);
         let tid = id.to_string();
-        self.rechecking.insert(tid.clone());
+        self.rechecking.insert(tid.clone(), paragraph_hash);
         let req = self.run(input, false, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);
@@ -1514,6 +1515,8 @@ impl NotePage {
                     cx.notify();
                     return;
                 }
+                if !page.note.read_hashes.contains(&paragraph_hash) { page.note.read_hashes.push(paragraph_hash); }
+                page.schedule_save(cx);
                 let body = v["text"].as_str().unwrap_or("").trim().to_string();
                 if let Some(t) = page.thread_mut(&tid) {
                     t.set_quote(&now_text);
@@ -1582,6 +1585,8 @@ impl NotePage {
         for (line, text, writing_code, alone) in candidates {
             let hash = hash_text(&text);
             let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash)
+                || self.reading.as_ref().is_some_and(|r| r.hash == hash)
+                || self.rechecking.values().any(|h| *h == hash)
                 || self.lifecycle.calls.values().any(|h| *h == hash) || (waits && self.answer_checks.contains(&hash));
             let verdict = if writing_code && !already {
                 Verdict::Later
@@ -3190,7 +3195,7 @@ impl NotePage {
             "scrolled": -self.scroll.offset().y.as_f32(),
             "waiting_tags": if self.typing_recently() { self.arrived.keys().map(|id| short(id)).collect::<Vec<_>>() } else { vec![] },
             "typing": self.typing_recently(),
-            "rechecking": self.rechecking.iter().map(|id| short(id)).collect::<Vec<_>>(),
+            "rechecking": self.rechecking.keys().map(|id| short(id)).collect::<Vec<_>>(),
             "undo": self.last_dismissed.as_ref().filter(|_| crate::toast::live(cx, crate::toast::Kind::ThreadDismissed)).map(|(id, _, _)| short(id)),
             // the window's toasts, oldest first, with where each was drawn
             "toasts": crate::toast::describe(cx),
@@ -5349,7 +5354,7 @@ impl Render for NotePage {
         let thinking: Vec<usize> = {
             let ed = self.editor.read(cx);
             let mut at: Vec<usize> = self.reading.as_ref().filter(|r| r.line < ed.line_count()).map(|r| ed.line_range(r.line).start).into_iter().collect();
-            at.extend(ed.anchors().iter().filter(|a| self.rechecking.contains(&a.id)).map(|a| a.range.start));
+            at.extend(ed.anchors().iter().filter(|a| self.rechecking.contains_key(&a.id)).map(|a| a.range.start));
             at
         };
         let jmw = self.just_my_words;

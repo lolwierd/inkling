@@ -418,7 +418,7 @@ impl NotePage {
             "notAnswers": t.not_answers,
         });
         let (tid, para, said) = (id.to_string(), paragraph.to_string(), t.messages.len());
-        self.rechecking.insert(tid.clone());
+        self.rechecking.insert(tid.clone(), crate::store::hash_text(paragraph));
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Done(v) => {
                 page.pending.remove(&tid);

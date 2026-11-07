@@ -24,6 +24,11 @@ The request map owns each timeout task. Removing the entry cancels the timer and
 releases the captured callback and request payload immediately. Previously those
 payloads survived until the detached 120/600-second timeout expired.
 
+In-flight read and recheck hashes are reservations, separate from saved completion
+hashes. The waiting queue must not contain a second copy of the same active read.
+A completed recheck records the paragraph hash captured when it started, never a
+newer paragraph that happened to exist when its answer arrived.
+
 ## Saving and resource limits
 
 Failed saves of edits, settings, folders and minds retain the newest serialized
@@ -118,7 +123,7 @@ ordering reproducible; it cannot make model answers deterministic.
 ## Reproduce validation
 
 Use `scripts/dev check`, then `scripts/dev e2e` for the complete app suite. The new
-race scenarios are `r18` through `r28`; `u33` also exercises the concurrently added
+race scenarios are `r18` through `r29`; `u33` also exercises the concurrently added
 folder/menu functionality. `cargo test robustness_tests -- --test-threads=1 --nocapture`
 runs the persistence/layout/pipe tests and prints the algorithm measurements.
 

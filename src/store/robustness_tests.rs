@@ -21,6 +21,21 @@ fn failed_saves_retry_the_newest_value() {
 }
 
 #[std::prelude::v1::test]
+fn an_explicit_successful_save_supersedes_a_failed_older_edit() {
+    let store = store();
+    let mut note = store.notes[0].clone();
+    let path = store.dir.join("notes").join(format!("{}.json", note.id));
+    let obstruction = path.with_extension("json.tmp"); fs::create_dir(&obstruction).unwrap();
+    note.title = "Before the move".into(); store.save_note(&note);
+    fs::remove_dir(obstruction).unwrap();
+    note.title = "After the move".into(); store.try_save_note(&note).unwrap();
+    store.retry_failed();
+    let disk: Note = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    assert_eq!(disk.title, "After the move");
+    assert!(store.failed.borrow().is_empty());
+}
+
+#[std::prelude::v1::test]
 fn failed_deletion_keeps_the_note_and_success_cannot_resurrect_it() {
     let mut store = store();
     let note = store.notes[0].clone();

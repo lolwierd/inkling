@@ -1,0 +1,22 @@
+# A recheck reserves its paragraph without persisting completion before the reply.
+# fixture: running-plan
+mode: reads
+edit: hold 5:30 for the whole race => hold 4:55 for the whole race [[reply>delay:5000]]
+wait: 2600
+dump: checking
+expect: d.rechecking.length === 1
+# These words are outside the thread's quote, in the same paragraph.
+edit: legs learn race pace => legs learn race pacing
+edit: legs learn race pacing => legs learn race pace
+wait: 6000
+dump: completed
+expect: d.pending.length === 0
+# A later edit restored to the same words must not cause a second read either.
+edit: legs learn race pace => legs learn race pacing
+edit: legs learn race pacing => legs learn race pace
+wait: 3500
+dump: unchanged
+expect: tasks.filter(t => t === "reply").length === 1
+expect: tasks.filter(t => t === "read").length === 0
+expect: d.threads.length === 2
+quit

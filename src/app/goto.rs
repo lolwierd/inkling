@@ -42,6 +42,7 @@ impl AppView {
     /// The card's Return: open the thread's note if it is not the one on the page, then show
     /// the thread there. `at` is the row it was on, so the next ⇧⌘K starts after it.
     fn go_to_thread(&mut self, key: Key, at: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.folder_page = None;
         self.loose = None;
         self.loose_last = Some((key.clone(), at));
         if self.page.read(cx).note_id() != key.note {

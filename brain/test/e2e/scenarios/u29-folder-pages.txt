@@ -1,0 +1,34 @@
+# Folder navigation, actual sidebar dragging, inheritance, and persistence.
+# fixture: folders
+# timeout: 90
+wait: 1500
+open: sidebar
+wait: 400
+press: 85,355
+point: 90,345
+point: 85,164
+release
+wait: 400
+dump: moved
+expect: d.folder === "work" && d.note_folders.Draft === "work"
+expect: d.local_directories[0] === "/Users/ayaan/Projects/warpbuilds/backend-core"
+close
+shot: note-folder
+open: folder:Work
+wait: 400
+dump: folder
+expect: d.folder_page === "work" && !d.editor_focused
+shot: folder-light
+set: appearance=dark
+shot: folder-dark
+set: appearance=light
+note: New in Work
+dump: new-in-folder
+expect: d.folder_page === null && d.folder === "work"
+expect: d.local_directories[0] === "/Users/ayaan/Projects/warpbuilds/backend-core"
+open: unfiled
+note: New unfiled
+dump: new-unfiled
+expect: d.folder === null && d.local_directories.length === 0
+expect: note("Draft").folder === "work" && note("New in Work").folder === "work" && note("New unfiled").folder == null
+quit

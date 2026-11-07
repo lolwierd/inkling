@@ -543,6 +543,7 @@ pub enum PageEvent {
     /// Something listed in the sidebar changed (title, a new note).
     NotesChanged,
     OpenNote(String),
+    OpenFolder(String),
     OpenSettings(crate::settings::Tab),
     /// The about-you paragraph picked up something new.
     Learned,
@@ -3078,7 +3079,7 @@ impl NotePage {
     }
 
     /// The page as the script sees it: what is pending, where the cards sit.
-    fn debug_state(&mut self, window: &mut Window, cx: &mut Context<Self>) -> String {
+    pub(crate) fn debug_state(&mut self, window: &mut Window, cx: &mut Context<Self>) -> String {
         let short = |id: &str| id.chars().take(8).collect::<String>();
         let placement = cx.global::<Store>().settings.placement;
         let viewport = window.viewport_size().width.as_f32();
@@ -3184,6 +3185,7 @@ impl NotePage {
         // stays on the paper (set apart, as one more key is past what json! can expand)
         let (l, t, r, b) = self.paper();
         state["local_directories"] = json!(self.note.local_directories(&cx.global::<Store>().folders));
+        state["folder"] = json!(self.note.folder);
         state["directories_inherited"] = json!(self.note.local_directories.is_none());
         state["paper"] = json!([l, t, r, b]);
         // each unfolded tag where it was drawn, and the column of your words from the header
@@ -3287,6 +3289,7 @@ impl NotePage {
             format!("Files · {}{}", directories.len(), if inherited { " from folder" } else { "" })
         };
         let files_tip = if directories.is_empty() { "Choose local directories for this note".to_string() } else { directories.join("\n") };
+        let folder = self.note.folder.as_ref().and_then(|id| cx.global::<Store>().folders.iter().find(|f| &f.id == id)).cloned();
         let mode = self.note.mode;
         let mind_name = self.mind.name.clone();
         let has_brief = self.note.brief.is_some();
@@ -3314,7 +3317,7 @@ impl NotePage {
         // over the button's dot and name; a mode's title under "Reads along", its icon
         // out to the left (the card's edge, an item's inset, then a 12 px icon and a gap).
         let (mind_dx, mode_dx) = (-(1. + 5. + 9.), -(1. + 5. + 9. + 12. + 7.));
-        div()
+        let header = div()
             .flex()
             .flex_row()
             // a narrow column (a small window with the chat open) wraps the row
@@ -3407,7 +3410,17 @@ impl NotePage {
                         d.child(control("turn-over", false).child("Turn over").keyed_as("header:turn-over", 4., t.voice_ink, cx, |this, window, cx| this.turn_over(window, cx)))
                     }),
             )
-            .into_any_element()
+            .into_any_element();
+        let mut details = div().flex().flex_col().gap(px(5.));
+        if let Some(folder) = folder {
+            details = details.child(ui::ghost_button("note-folder", folder.name, &t)
+                .keyed_as("header:folder", 4., t.voice_ink, cx, move |_, _, cx| cx.emit(PageEvent::OpenFolder(folder.id.clone()))));
+        }
+        for path in &directories {
+            details = details.child(div().text_size(px(ts::SMALL)).text_color(p.graphite)
+                .child(format!("{} · {}", if inherited { "From folder" } else { "This note" }, path)));
+        }
+        div().flex().flex_col().gap(px(8.)).child(header).when(self.note.folder.is_some() || !directories.is_empty(), |d| d.child(details)).into_any_element()
     }
 
     /// Open or close a header menu. A press on its own button while it is open closes it:

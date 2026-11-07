@@ -86,7 +86,7 @@ this list when a feature lands or goes; the key is the default binding.
 
 | Capability | How |
 |---|---|
-| Notes and folders | the sidebar (⌘\\): new note, new folder, folders fold; a dot on notes with open threads |
+| Notes and folders | the sidebar (⌘\\): new note, new folder; folder names open a page of their notes, disclosure arrows fold the list; drag notes onto folders or Unfiled to move them; notes link back to their folder; a dot on notes with open threads |
 | Find or start a note | ⌘K |
 | Copy a note | ⇧⌘C |
 | Export | ⇧⌘E: Markdown, HTML or Word, with the threads or without; checklists, callouts and code come along (`- [ ]`, `> [!note]`, fenced code in Markdown) |
@@ -103,4 +103,4 @@ this list when a feature lands or goes; the key is the default binding.
 | Everything from the keyboard | Tab and ⇧Tab move between controls, a running-stitch ring shows where you are, Return or Space presses; the note keeps Tab for lists, so ⌃Tab leaves it; ↑ ↓ in the mind and mode menus |
 | Messages in passing | one stack of small stitched labels at the bottom: Undo for a deleted note or a snipped thread, problems in ochre with a close control; the pointer holds a label |
 
-Local files: Files on a note chooses local directories. Notes inherit directories chosen with Files on their sidebar folder, until the note overrides them. Use folder setting restores inheritance. Folder Clear removes its mapping. Claude Code user instructions load for every call, and Read, Glob and Grep can consult existing project memories and local files. Web lookup retains its separate setting.
+Local files: Files on a note chooses local directories. Notes inherit directories chosen on their folder page, until the note overrides them. Use folder setting restores inheritance. Clear on the folder page removes its mapping. Selected directory names appear in the sidebar; full paths appear on the folder page and on notes, labelled as inherited or set on the note. Claude Code user instructions load for every call, and Read, Glob and Grep can consult existing project memories and local files. Web lookup retains its separate setting.

@@ -77,6 +77,7 @@
 //! jump: next                # or `prev`: the next open thread, as ⌥⌘↓ / ⌥⌘↑
 //! read-through              # Read it through, as ⇧⌘R: start a pass, or stop the one running
 //! open: settings            # sidebar|palette|loose|settings|minds|newmind|model|about|export|jmw
+//! open: folder:Work          # folder page by name; `open: unfiled` for notes without a folder
 //! close                     # close the sidebar and every overlay
 //! quit                      # every script should end with it
 //! ```

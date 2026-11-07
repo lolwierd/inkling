@@ -14,6 +14,7 @@
 //   [[rawquote:TEXT]]     quote TEXT verbatim (may be missing from the paragraph)
 //   [[correction]]        kind=correction              [[sketch]] sketch=true
 //   [[resolved]]          reply: resolved=true         [[redraw]] reply: redraw=true
+//   [[unresolved]]        reply: resolved=false, even if the old quote says resolved
 //   [[error:KIND]]        fail with KIND (auth, rate_limit, overloaded, cancelled,
 //                         bad_output, other); [[errmsg:TEXT]] sets the message
 //   [[hang]]              never answer (a cancel still ends it, as "cancelled")
@@ -274,7 +275,7 @@ function answerFor(id: string, input: Any, p: ReturnType<typeof plan>): Answer &
       return {
         data: {
           text: has("empty") ? "" : `[${id}] Reply to “${clean(input.message ?? "").slice(0, 50)}” (history ${Array.isArray(input.messages) ? input.messages.length : "?"})`,
-          resolved: has("resolved"),
+          resolved: has("resolved") && !has("unresolved"),
           redraw: has("redraw"),
         },
       };

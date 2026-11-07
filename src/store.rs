@@ -1314,7 +1314,10 @@ impl Store {
 
     /// Save a note and say whether it is on disk: the page tells the writer when it is not.
     pub fn try_save_note(&self, note: &Note) -> Result<()> {
-        save_json(&self.dir.join("notes").join(format!("{}.json", note.id)), note)
+        let path = self.dir.join("notes").join(format!("{}.json", note.id));
+        save_json(&path, note)?;
+        self.failed.borrow_mut().remove(&path);
+        Ok(())
     }
 
     /// Unlike an import, an edit already exists in memory. Keep its newest bytes

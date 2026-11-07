@@ -13,6 +13,12 @@ runs the fifth.
 
 Run `brain/test/live.ts` only when explicitly asked to use the real model.
 
+`scripts/dev check` also runs `scripts/test/`: the command harness must report an
+unrun e2e suite as `e2e: null, e2e_status: "skipped"`, not a pass. A requested suite
+reports `pass` or `fail`; a check without `--e2e` reports `not_requested`. JSON mode
+emits one final report on stdout. See [robustness](robustness.md) for the race and
+resource-limit regressions.
+
 ## Anatomy of a scenario
 
 ```text

@@ -223,9 +223,9 @@ describe("requests", () => {
     expect(b.of("r1").filter((e) => e.ev === "done" || e.ev === "error").length).toBe(1);
   });
 
-  test("a very large note goes through intact", async () => {
+  test("a large note within the request budget goes through intact", async () => {
     const b = brain();
-    const big = "lorem ipsum dolor sit amet ".repeat(200_000) + "ünïcødé 漢字 🚀"; // ~5.4 MB
+    const big = "lorem ipsum dolor sit amet ".repeat(8_000) + "ünïcødé 漢字 🚀"; // ~208 KB, below the explicit 256 KiB ceiling
     b.send(run("big", { task: "ask", ctx: ctx(big + fake({ echo: "options" })), target: "lorem", question: "q" }));
     const end = await b.end("big", 20000);
     expect(end.ev).toBe("done");

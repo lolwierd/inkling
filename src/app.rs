@@ -669,8 +669,10 @@ impl AppView {
                     let store = cx.global::<Store>();
                     store.retry_failed();
                     let problems = store.take_save_problems();
-                    if !problems.is_empty() { crate::toast::show(cx, Kind::Problem, problems.join("\n")); }
-                    cx.notify();
+                    if !problems.is_empty() {
+                        crate::toast::show(cx, Kind::Problem, problems.join("\n"));
+                        cx.notify();
+                    }
                 }).is_err() { break; }
             }
         }).detach();
@@ -1722,10 +1724,16 @@ impl AppView {
 
         let mut list = div().flex().flex_col().gap(px(1.));
         // Unfiled last, under the folders, as the notes no folder has taken
-        let unfiled_notes: Vec<&Row> = notes.iter().filter(|n| n.folder.as_ref().is_none_or(|f| !folders.iter().any(|x| &x.id == f))).collect();
+        let folder_ids: std::collections::HashSet<_> = folders.iter().map(|f| f.id.as_str()).collect();
+        let mut groups: std::collections::HashMap<Option<&str>, Vec<&Row>> = std::collections::HashMap::new();
+        for note in &notes {
+            let folder = note.folder.as_deref().filter(|f| folder_ids.contains(f));
+            groups.entry(folder).or_default().push(note);
+        }
+        let unfiled_notes = groups.remove(&None).unwrap_or_default();
         let sections: Vec<(Option<&Folder>, Vec<&Row>, bool)> = folders
             .iter()
-            .map(|f| (Some(f), notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect(), f.collapsed))
+            .map(|f| (Some(f), groups.remove(&Some(f.id.as_str())).unwrap_or_default(), f.collapsed))
             .chain(std::iter::once((None, unfiled_notes, cx.global::<Store>().settings.unfiled_collapsed)))
             .collect();
         for (folder, inside, collapsed) in sections {

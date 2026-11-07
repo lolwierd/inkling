@@ -88,6 +88,7 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/app.rs` | the window: no title bar (traffic lights, sidebar toggle and Chat sit on the cloth above the sheet and fade while you type), the sidebar with the wordmark, ⌘K palette and export overlays, opening Settings, hold-⌥ dictation, the script runner (`run_script`) and window-level steps | actions and menus (`init`), `chrome_layer`, `INKLING_OPEN`, `INKLING_JIGGLE` |
 | `src/shortcuts.rs` | every shortcut: the table (app actions here, the editor's from `editor::bindings()`), your keys from `settings.json` `shortcuts`, clashes, the keymap rebuild and menu refresh when a key changes | `table`, `apply`, `clashes`, `take` (what recording accepts) |
 | `src/note_page.rs` | one note: header row, editor, the margin's tags (folded to a tab until pointed at or opened; draggable, `Thread.tag_offset`), threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
+| `src/note_page/lifecycle.rs` | request ownership, a page visit's generation, queued rechecks and serialized profile learning | `Lifecycle`, `resume_rechecks`, `next_learning`; `docs/agents/robustness.md` explains the invariants and remaining work |
 | `src/note_page/ends.rs` | threads between notes on the page: the tab's second loop, the other end inside the tag (Go there, `· deleted`), following (Go there, ⌥⌘→ `FollowThread`, `follow:`), a far end's side on its first show, replies and second looks by the thread's mind with the other end, Copy's far line, the dump's `ends` | `far_end_block`, `follow`, `arrive`, `between_reply` |
 | `src/note_page/read_through.rs` | Read it through: one pass down the note's unread paragraphs by the reading loop's own rule (`judge`), the pill in the window's top band, the mode menu's last item | `step_through`, `next_for`, `Pass` |
 | `src/note_page/own.rs` | threads of your own: Ask yourself, the box with nobody seated, lines you add, calling a mind in (`ask` with `history`), your tag's lines and Ask button | `hang_own`, `add_to_own`, `call_into_own`, `called_mind` |
@@ -130,7 +131,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 2. The pause (`on_pause`) looks at the caret's line, the edited line and lines kept
    from before, and `judge` decides each: Read (finished: ends a sentence or the caret
    left, at least four words, nothing else reading), Answer (it calls the mind by name),
-   Later, or Skip. A paragraph's hash goes into `note.read_hashes` so it is read once.
+   Later, or Skip. A paragraph's hash goes into `note.read_hashes` only after its read
+   succeeds, so an interrupted read is still unread next time.
 3. `read_line` sends `{"task":"read"}` (or `probe` for a new notebook's first
    sentence) through `send_task` → `Brain::run` → one JSON line to the brain. After a
    read, `look_elsewhere` (`src/note_page/between.rs`) asks `relate` about passages from
@@ -153,6 +155,13 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
   (`snapQuote`); the app anchors by searching for it verbatim.
 - Every `run` request ends in exactly one `done` or `error`, and never `done` after a
   cancel; the Rust `Pending` delivers nothing after the end. Tests hold both sides to it.
+- A page request and its timer have one owner. Completion or cancellation drops the
+  timer; switching notes changes the visit generation, invalidating deferred work.
+  Learning survives note switches, runs serially, and checks the profile revision and
+  consent again before saving. A recheck may resolve only the exact words it read.
+- Failed edit/settings writes retain the newest bytes for retry. Imports count only
+  notes actually saved. Deletion removes the disk file before removing the note from
+  memory and clears any queued older save, so retry cannot resurrect it.
 - One read in flight per page (`reading`); reads time out after 120 s, other tasks after 600 s.
 - The page never calls back into an entity it is updating: brain callbacks are deferred
   (`send_task`, `later`). GPUI panics on a nested update of the same entity.

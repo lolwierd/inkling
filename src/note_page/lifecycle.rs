@@ -6,7 +6,8 @@ use std::collections::VecDeque;
 #[derive(Default)]
 pub(super) struct Lifecycle {
     pub epoch: u64,
-    pub requests: HashMap<String, Rc<Cell<bool>>>,
+    // Removing a finished/cancelled request drops its timer and captured payload.
+    pub requests: HashMap<String, (Rc<Cell<bool>>, Task<()>)>,
     pub calls: HashMap<String, u64>,
     learning: bool,
     learn_queue: VecDeque<String>,

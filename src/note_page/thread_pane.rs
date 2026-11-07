@@ -50,6 +50,7 @@ impl NotePage {
     pub(super) fn interrupt_thread(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some((request, pending)) = self.pending.remove(id) else { return };
         self.cancel_request(&request, cx);
+        self.lifecycle.calls.remove(id);
         if let Pending::Streaming(text) = pending {
             if !text.trim().is_empty() {
                 let message = self.partial(id, format!("{}\n\n*Interrupted.*", text.trim_end()));

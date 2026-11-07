@@ -1734,13 +1734,13 @@ impl NotePage {
             })
         };
         *request.borrow_mut() = req.clone();
-        self.lifecycle.requests.insert(req.clone(), finished.clone());
         sending.set(false);
         // A brain that never answers would hold the read-along slot or a
         // thread's thinking dot forever: give up on the request after a while.
         let timeout = if heavy { TASK_TIMEOUT } else { READ_TIMEOUT };
         let req_id = req.clone();
-        cx.spawn(async move |this, cx| {
+        let request_finished = finished.clone();
+        let timer = cx.spawn(async move |this, cx| {
             cx.background_executor().timer(timeout).await;
             if finished.get() {
                 return;
@@ -1758,8 +1758,8 @@ impl NotePage {
                     });
                 }
             });
-        })
-        .detach();
+        });
+        self.lifecycle.requests.insert(req.clone(), (request_finished, timer));
         req
     }
 
@@ -1772,7 +1772,7 @@ impl NotePage {
     }
 
     fn cancel_request(&mut self, req: &str, cx: &mut Context<Self>) {
-        if let Some(finished) = self.lifecycle.requests.remove(req) { finished.set(true); }
+        if let Some((finished, _timer)) = self.lifecycle.requests.remove(req) { finished.set(true); }
         Brain::global(cx).update(cx, |b, cx| b.cancel(req, cx));
     }
 
@@ -2017,6 +2017,7 @@ impl NotePage {
     }
 
     fn push_message(&mut self, id: &str, role: Role, text: String, cx: &mut Context<Self>) {
+        self.answer_checks.clear();
         if role == Role::You {
             if let Some(conversation) = self.conversations.get(id) {
                 conversation.scroll.scroll_to_bottom();

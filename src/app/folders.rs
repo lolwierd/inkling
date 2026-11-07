@@ -76,7 +76,17 @@ impl AppView {
         let store = cx.global::<Store>();
         let folder = id.as_ref().and_then(|id| store.folders.iter().find(|f| &f.id == id)).cloned();
         let title = folder.as_ref().map_or("Unfiled".to_string(), |f| f.name.clone());
-        let notes: Vec<Note> = store.notes.iter().filter(|n| n.folder == id || (id.is_none() && n.folder.as_ref().is_some_and(|id| !store.folders.iter().any(|f| &f.id == id)))).cloned().collect();
+        struct Row { id: String, title: String, excerpt: Option<String>, updated_at: chrono::DateTime<chrono::Utc>, threads: usize }
+        let counts = crate::between::open_counts(&store.notes);
+        let folders: std::collections::HashSet<_> = store.folders.iter().map(|f| f.id.as_str()).collect();
+        let notes: Vec<Row> = store.notes.iter()
+            .filter(|n| n.folder == id || (id.is_none() && n.folder.as_ref().is_some_and(|id| !folders.contains(id.as_str()))))
+            .map(|n| Row {
+                id: n.id.clone(), title: n.title.clone(),
+                updated_at: n.updated_at,
+                excerpt: n.blocks.iter().skip(1).find(|b| !b.text.trim().is_empty()).map(|b| b.text.chars().take(160).collect()),
+                threads: counts.get(n.id.as_str()).copied().unwrap_or(0),
+            }).collect();
         let t = Theme::get(cx).clone();
         let p = t.p;
         let n = t.note_size.as_f32();
@@ -144,8 +154,8 @@ impl AppView {
             let (open_id, menu_id) = (note.id.clone(), note.id.clone());
             let group = SharedString::from(format!("folder-note-group-{}", note.id));
             let title = if note.title.trim().is_empty() { "Untitled".to_string() } else { note.title.clone() };
-            let excerpt = note.blocks.iter().skip(1).find(|b| !b.text.trim().is_empty()).map(|b| b.text.chars().take(160).collect::<String>());
-            let threads = crate::between::open_here(&cx.global::<Store>().notes, &note);
+            let excerpt = note.excerpt;
+            let threads = note.threads;
             list = list.child(div().id(SharedString::from(format!("folder-note-{}", note.id)))
                 .group(group.clone())
                 .py(px(14.)).border_b_1().border_color(p.rule).cursor_pointer().active(|s| s.opacity(0.7))

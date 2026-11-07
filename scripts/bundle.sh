@@ -31,7 +31,8 @@ if [ "$PORTABLE" = --portable ]; then
   mkdir "$BRAIN"
   cp -R brain/src "$BRAIN/"
   cp brain/package.json brain/bun.lock "$BRAIN/"
-  (cd "$BRAIN" && bun install --frozen-lockfile --production)
+  # The Agent SDK's optional platform package is a second copy of Claude Code.
+  (cd "$BRAIN" && bun install --frozen-lockfile --production --omit=optional)
   cp assets/fonts/OFL-*.txt "$APP/Contents/Resources/"
 else
   ln -s "$(pwd)/brain" "$APP/Contents/Resources/brain"

@@ -27,9 +27,12 @@ codesign --verify --strict "$app"
 test "$(lipo -archs "$app/Contents/MacOS/inkling")" = arm64
 brain="$app/Contents/Resources/brain"
 test ! -L "$brain"
-claude="$brain/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude"
-test -x "$claude"
-test "$(lipo -archs "$claude")" = arm64
+for package in "$brain"/node_modules/@anthropic-ai/claude-agent-sdk-*; do
+  if [ -e "$package" ]; then
+    echo "The ZIP should use the installed Claude Code, but includes $package" >&2
+    exit 1
+  fi
+done
 (
   cd "$brain"
   # Wait for the startup handshake without requesting account status or model output.

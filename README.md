@@ -44,7 +44,7 @@ Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](desi
 
 ### Download the app
 
-The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install [Bun](https://bun.com/docs/installation) and [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`.
+The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install [Bun](https://bun.com/docs/installation) and [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`. Inkling uses the Claude Code installation on your Mac, so future Claude Code updates also apply to Inkling. For a custom install location, launch Inkling with `INKLING_CLAUDE_PATH` set to the executable’s full path.
 
 1. Sign in to GitHub with access to this private repository. From [Releases](https://github.com/lolwierd/inkling/releases/latest), download `Inkling-<version>-macos-arm64.zip` and its matching `.zip.sha256` file.
 2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, replacing `<version>` with the version you downloaded. The ZIP should report `OK`.

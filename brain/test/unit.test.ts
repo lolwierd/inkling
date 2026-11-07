@@ -2,12 +2,13 @@
 // classification, the child environment, and the SDK drain against a fake SDK.
 // Run: bun test test/unit.test.ts
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 process.env.INKLING_DATA_DIR = join(tmpdir(), "inkling-brain-unit-test");
 
-const { accountStatus, childEnv, classify, runStructured, runText, setQueryForTests, ProviderError } = await import("../src/claude.ts");
+const { accountStatus, childEnv, classify, installedClaude, runStructured, runText, setQueryForTests, ProviderError } = await import("../src/claude.ts");
 const { cleanSvg, clip, findQuote, snapQuote } = await import("../src/output.ts");
 const { relatePrompt, replyPrompt, readPrompt } = await import("../src/prompts.ts");
 const { fakeQuery } = await import("./fake-sdk.ts");
@@ -15,6 +16,28 @@ setQueryForTests(fakeQuery as any);
 
 const settings = { model: "claude-opus-5-5", effort: "low" as const };
 const fake = (d: object) => `[[fake ${JSON.stringify(d)}]]`;
+
+test("finds a native Claude install without a shell PATH and keeps its update symlink", () => {
+  const home = mkdtempSync(join(tmpdir(), "inkling-claude-"));
+  try {
+    const shellBin = join(home, "bin");
+    const nativeBin = join(home, ".local", "bin");
+    mkdirSync(shellBin);
+    mkdirSync(nativeBin, { recursive: true });
+    const shellClaude = join(shellBin, "claude");
+    const nativeClaude = join(nativeBin, "claude");
+    writeFileSync(shellClaude, "#!/bin/sh\n", { mode: 0o755 });
+    symlinkSync(shellClaude, nativeClaude);
+    expect(installedClaude({ PATH: "/usr/bin:/bin" }, home)).toBe(nativeClaude);
+    expect(installedClaude({ INKLING_CLAUDE_PATH: shellClaude }, home)).toBe(shellClaude);
+
+    rmSync(nativeClaude);
+    symlinkSync(join(home, "missing"), nativeClaude);
+    expect(installedClaude({ PATH: shellBin }, home)).toBe(shellClaude);
+  } finally {
+    rmSync(home, { recursive: true });
+  }
+});
 
 describe("snapQuote", () => {
   const src = "We’ll keep one Redis counter per user and  reset it every minute.";

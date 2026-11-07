@@ -48,7 +48,7 @@ import { keepFoundLinks, verifySource, WEB_TASKS, type Found } from "./web.ts";
 import { lookedAt, verifyFile } from "./files.ts";
 import type { Opened } from "./claude.ts";
 
-const VERSION = "0.1.4";
+const VERSION = "0.1.5";
 const running = new Map<string, AbortController>();
 
 function emit(e: Event) {

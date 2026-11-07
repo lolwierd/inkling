@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.5
+
+- Added a first look at each paragraph while reading along. Claude's small model (Haiku) reads the paragraph and the text around it and decides whether it's worth a full read, so most paragraphs no longer cost a call to the model you picked. It's told what the mind and the note are for, it leans toward reading when unsure, and if it fails the full read happens as before.
+- Made Read it through read the draft in one call, up to 40 paragraphs at a time, instead of one call per paragraph. The needle still works down the page and threads still arrive as it goes.
+- Added corrections backed by a file of yours. When a mind opened a file that settles the point, the tag shows the quoted words under In your files, with the file's name and line; clicking it shows the file in the Finder. Inkling opens the file itself to make sure the words are there.
+- Added a line under each answer in an open tag that says what the mind looked at, such as "Looked at README.md, example.org".
+- Stopped reading along from failing on every pause once your Claude plan's limit is reached. Paragraphs wait, unread, until it resets and are read then. Asking still works.
+- Gave each task only the tools it uses. Comparing notes, settling, learning and sketches no longer get file tools, and a call that runs out of turns while looking things up now answers without them instead of showing an error.
+- Passed on every point you let stand whose words are still in the note, not only the newest 12, so an older point isn't raised again.
+- Reworked the prompts. Claude Code memories are described instead of read on every call, a mind set to speak often is no longer told to stay quiet, a Socratic mind asked directly leads you to the answer, answers don't narrate what they're looking up, and web answers link in the sentence instead of ending with a Sources list.
+- Kept Read it through's prompt cache when a thread lands, and added one line per request to brain.log with its time, tokens, cost, turns and tools.
+
 ## 0.1.4
 
 - Split the header above a note's title into two lines. The top one shows where the note is filed, which directories it's linked to, and Tell Inkling. The second reads as a sentence ("Inkling reads along"), with the open-thread count on the right, marked with the same knot as the gutter. A note with nothing linked no longer shows a bare Files button; use File > Link Files to This Note… instead.

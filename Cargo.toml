@@ -1,6 +1,6 @@
 [package]
 name = "inkling"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "A local notebook that thinks with you, in the margin."
 license = "Unlicense"

@@ -74,7 +74,7 @@ the craft words (tied off, snipped, the back) appear in status lines and tooltip
    - For a point let stand, your reason in your typeface and in quotation marks, or **No reason
      given.** in faint type.
    - Quiet actions in small type, as the tags have: **Show on the page** (open and tied-off
-     threads), **Add a reason** or **Change the reason** (let stand), **Reopen** (let stand and
+     threads), **Add a reason** or **Change the reason** (let stand), **Reopen** (tied off, let stand and
      snipped, while the words are still in the note). When the words are gone the entry says
      **Its words are no longer in the note.** instead of offering Reopen.
 5. **Add a reason** turns the reason line into a one-line box, *Why your words stand…*;

@@ -13,7 +13,7 @@ dump: back
 expect: d.turned === true && d.back.length === 2
 expect: d.back[0].ending === "TiedOff" && d.back[0].before.includes("5:30") && d.back[0].after.includes("4:55")
 expect: d.back[1].ending === "LetStand" && d.back[1].reason === null
-expect: d.back[0].acts.join() === "show" && d.back[1].acts.join() === "reason,reopen"
+expect: d.back[0].acts.join() === "show,reopen" && d.back[1].acts.join() === "reason,reopen"
 shot: back
 set: appearance=dark
 shot: back-dark

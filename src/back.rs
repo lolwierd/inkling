@@ -197,7 +197,7 @@ pub enum Act {
     Show,
     /// Add a reason, or Change the reason: points let stand.
     Reason,
-    /// Reopen: points let stand and snipped threads, while their words are in the note.
+    /// Reopen: ended threads, while their words are in the note.
     Reopen,
     /// Unfold the messages between the first and the last.
     More,
@@ -346,7 +346,7 @@ impl Entry {
         if self.ending == Ending::LetStand {
             out.push(Act::Reason);
         }
-        if matches!(self.ending, Ending::LetStand | Ending::Snipped) && self.words_found {
+        if matches!(self.ending, Ending::TiedOff | Ending::LetStand | Ending::Snipped) && self.words_found {
             out.push(Act::Reopen);
         }
         out
@@ -1097,7 +1097,7 @@ mod tests {
         let e = |kind, status, found: &str| Entry::of(&thread("x", "the words", kind, status, at(6, 9), &["?"]), found).acts();
         use ThoughtKind::*;
         assert_eq!(e(Question, ThreadStatus::Open, "the words"), [Act::Show]);
-        assert_eq!(e(Correction, ThreadStatus::Resolved, "the words"), [Act::Show]);
+        assert_eq!(e(Correction, ThreadStatus::Resolved, "the words"), [Act::Show, Act::Reopen]);
         assert_eq!(e(Question, ThreadStatus::Dismissed, "the words"), [Act::Reason, Act::Reopen]);
         assert_eq!(e(Sketch, ThreadStatus::Dismissed, "the words"), [Act::Reopen]);
         // once the words are gone, nothing to show or open them on; a reason can still be given

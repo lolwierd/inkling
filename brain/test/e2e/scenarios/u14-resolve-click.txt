@@ -16,4 +16,10 @@ wait: 2200
 dump: resolved
 expect: d.active === null && d.threads[0].status === "Resolved" && !d.anchors[0].open
 expect: !d.tabs.t1 && !d.panels.t1 && d.focus === "note"
+turn
+wait: 500
+back-reopen: 1
+wait: 750
+dump: direct-reopen
+expect: d.threads[0].status === "Open" && d.active === "t1" && d.unfolded.includes("t1") && d.anchors[0].open
 quit

@@ -1266,18 +1266,21 @@ impl State {
     fn mouse_up(&mut self, hide_anchors: bool) -> Fx {
         let Some(drag) = self.drag.take() else { return Fx::default() };
         if matches!(drag, Drag::Char) && self.selected.is_empty() && !hide_anchors {
-            let at = self.selected.start;
-            let hit = self
-                .anchors
-                .iter()
-                .filter(|a| a.open && a.range.start < at && at < a.range.end)
-                .min_by_key(|a| a.range.len())
-                .map(|a| a.id.clone());
-            if let Some(id) = hit {
+            if let Some(id) = self.open_anchor_at(self.selected.start) {
                 return Fx { anchor: Some(id), ..Fx::default() };
             }
         }
         Fx { settled: true, ..Fx::default() }
+    }
+
+    /// The open thread whose words a click at `at` lands in: the innermost, when threads
+    /// overlap. A click on a word's first edge is still before it.
+    fn open_anchor_at(&self, at: usize) -> Option<String> {
+        self.anchors
+            .iter()
+            .filter(|a| a.open && a.range.start < at && at < a.range.end)
+            .min_by_key(|a| a.range.len())
+            .map(|a| a.id.clone())
     }
 
     // ----- input method (UTF-16 offsets) --------------------------------------
@@ -2436,6 +2439,22 @@ impl NoteEditor {
     fn hit(&self, p: Point<Pixels>) -> Option<(usize, bool)> {
         let layout = self.layout.as_ref()?;
         Some(layout.hit(p - layout.origin))
+    }
+
+    /// The open thread whose words are under a window point: a click there opens or
+    /// closes that thread (on the button's release), so the page leaves the press to it.
+    pub fn open_anchor_under(&self, p: Point<Pixels>) -> Option<String> {
+        if self.hide_anchors {
+            return None;
+        }
+        let id = self.st.open_anchor_at(self.hit(p)?.0)?;
+        self.anchor_window_rects(&id).iter().any(|r| r.contains(&p)).then_some(id)
+    }
+
+    /// Where an anchor's words are in the window, line by line, at the last layout.
+    pub fn anchor_window_rects(&self, id: &str) -> Vec<Bounds<Pixels>> {
+        let Some(layout) = self.layout.as_ref() else { return vec![] };
+        self.anchor_rects(id).into_iter().map(|r| Bounds::new(layout.origin + r.origin, r.size)).collect()
     }
 
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {

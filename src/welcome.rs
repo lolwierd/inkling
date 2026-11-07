@@ -127,7 +127,7 @@ pub fn first_run_note(mode: Mode) -> Note {
     let blocks: Vec<(BlockKind, &str)> = vec![
         (Title, "Start here"),
         (P, "Inkling is a notebook that asks. You write, and it reads along. When a line doesn\u{2019}t add up, it pulls a thread from those words into the margin: a question, or a correction. It never writes your notes for you. The thinking stays yours."),
-        (P, "Everything on this page works. Point at a tag in the margin to read it, click it to answer, and drag it anywhere you like."),
+        (P, "Everything on this page works. Point at a tag in the margin to read it, click it to answer, click again or anywhere else to fold it away, and drag it anywhere you like."),
         (H2, "Threads"),
         (P, image),
         (P, faster),

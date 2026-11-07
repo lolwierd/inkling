@@ -1,0 +1,66 @@
+# A thread opened by a click closes again by hand: a click on its tab (the open panel's top
+# row, which covers it), on its words, or anywhere outside it (the note, the cloth); a press
+# in its own panel keeps it. Closed from its tab, it stays folded while the pointer is still
+# there, though a rest there drops a tag open, and a rest opens it again once the pointer
+# has left and come back. Starts on the running plan: t1's tab at (1005, 287), 54 by 26,
+# its open panel from there to (1260, 517); its words from (515, 290) along that line.
+# fixture: running-plan
+wait: 1500
+dump: before
+expect: d.active === null && d.words.t1[0][1] === 290 && d.tabs.t1[0] === 1005
+# the tab: a click opens it, a second closes it, the pointer still on it
+click: 1032, 300
+wait: 600
+dump: tab-open
+expect: d.active === "t1" && d.unfolded.includes("t1")
+click: 1032, 300
+wait: 1500
+dump: tab-closed
+expect: d.active === null && !d.unfolded.includes("t1")
+# a rest on the tab, the pointer not having left it, keeps it folded (a test window takes
+# its hover only from `hover:` steps)
+hover: 1
+wait: 1500
+dump: tab-held
+expect: d.active === null && !d.unfolded.includes("t1")
+# off it (the window hears the pointer go) and back: a rest drops it open again, as a look
+point: 700, 650
+hover: 0
+wait: 400
+hover: 1
+wait: 1500
+dump: rest-opens
+expect: d.active === null && d.unfolded.includes("t1")
+hover: 0
+wait: 1200
+# its words: a click opens it, a second click on them closes it
+click: 700, 304
+wait: 600
+dump: words-open
+expect: d.active === "t1"
+click: 700, 304
+wait: 900
+dump: words-closed
+expect: d.active === null && !d.unfolded.includes("t1")
+# a press in its own panel keeps it open
+click: 1032, 300
+wait: 600
+click: 1253, 400
+wait: 600
+dump: panel-press
+expect: d.active === "t1"
+# the note, away from any thread's words, closes it; the caret goes where you clicked
+click: 420, 450
+wait: 900
+dump: note-closed
+expect: d.active === null && !d.unfolded.includes("t1") && d.editor_focused
+# the cloth past the paper closes it too
+click: 700, 304
+wait: 600
+dump: open-again
+expect: d.active === "t1"
+click: 1300, 600
+wait: 900
+dump: cloth-closed
+expect: d.active === null && !d.unfolded.includes("t1")
+quit

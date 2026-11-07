@@ -698,6 +698,12 @@ pub struct NotePage {
     /// Each unfolded tag's bounds at the last paint, and the column of your words, for
     /// the dump: no tag you have not dragged may cover the column.
     panel_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// Each Marks-only mark's bounds at the last paint: a press on an open thread's mark
+    /// is the mark's to toggle, not a press outside the thread.
+    mark_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// A tag closed by hand while the pointer was on it: it stays folded, though the
+    /// pointer rests there, until the pointer has left its tab and its folding panel.
+    hand_closed: Option<String>,
     column_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     viewport: Size<Pixels>,
     last_frame: Option<std::time::Instant>,
@@ -811,6 +817,8 @@ impl NotePage {
             panel_sides: HashMap::new(),
             sheet_bounds: Rc::new(Cell::new(None)),
             panel_bounds: Rc::new(RefCell::new(HashMap::new())),
+            mark_bounds: Rc::new(RefCell::new(HashMap::new())),
+            hand_closed: None,
             column_bounds: Rc::new(Cell::new(None)),
             viewport: size(px(1200.), px(800.)),
             last_frame: None,
@@ -935,6 +943,8 @@ impl NotePage {
         self.panel_heights.borrow_mut().clear();
         self.tab_bounds.borrow_mut().clear();
         self.panel_bounds.borrow_mut().clear();
+        self.mark_bounds.borrow_mut().clear();
+        self.hand_closed = None;
         self.menu_closed = None;
         self.pending_room.clear();
         self.load_into_editor(cx);
@@ -1047,6 +1057,11 @@ impl NotePage {
             EditorEvent::AnchorClicked(id) => {
                 let id = id.clone();
                 self.show_toolbar = false;
+                // the open thread's own words close it again
+                if self.active.as_deref() == Some(id.as_str()) {
+                    self.close_by_hand(window, cx);
+                    return;
+                }
                 self.activate(Some(id.clone()), window, cx);
                 if let Some(input) = self.replies.get(&id).cloned() {
                     input.update(cx, |i, cx| i.focus(window, cx));
@@ -1086,7 +1101,7 @@ impl NotePage {
         let closed = if self.enlarged.take().is_some() || self.menu.take().is_some() || self.asking.take().is_some() || self.brief_input.take().is_some() {
             true
         } else if self.active.is_some() || !self.marks_open.is_empty() {
-            self.close_thread(cx);
+            self.close_by_hand(window, cx);
             true
         } else if self.show_toolbar {
             self.show_toolbar = false;
@@ -1114,6 +1129,107 @@ impl NotePage {
         self.marks_open.clear();
         self.editor.update(cx, |e, _| e.active_anchor = None);
         cx.notify();
+    }
+
+    /// Close the open thread by hand: its tab, its words, its mark, Escape, or a press
+    /// outside it. The pointer may still be on the tag, and a rest there drops a tag open,
+    /// so the tag is held folded until the pointer has left it; back on it, a rest opens
+    /// it as usual.
+    fn close_by_hand(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if let Some(id) = self.active.clone() {
+            if let Some(t) = self.tags.get_mut(&id) {
+                t.hover = Hover::Away;
+            }
+            if self.pointer_on_tag(&id, window.mouse_position()) {
+                self.hand_closed = Some(id);
+            }
+        }
+        self.close_thread(cx);
+    }
+
+    /// Whether a window point is on a tag: its tab, or its panel while one is drawn.
+    fn pointer_on_tag(&self, id: &str, at: Point<Pixels>) -> bool {
+        let on = |bounds: &Rc<RefCell<HashMap<String, Bounds<Pixels>>>>| bounds.borrow().get(id).is_some_and(|b| b.contains(&at));
+        on(&self.tab_bounds) || on(&self.panel_bounds)
+    }
+
+    /// The pointer moved after a tag was closed under it: once it is off the tag, the
+    /// hold ends, and the tag's rest starts from nothing.
+    fn pointer_after_close(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(id) = self.hand_closed.clone() else { return };
+        if self.pointer_on_tag(&id, at) {
+            return;
+        }
+        self.hand_closed = None;
+        if let Some(t) = self.tags.get_mut(&id) {
+            t.hover = Hover::Away;
+        }
+        cx.notify();
+    }
+
+    /// While a thread is open, a press anywhere outside it folds it away: outside its tab,
+    /// its panel, its mark and its words (those toggle it themselves). The page hears the
+    /// press from the window before anything under it does, as a drag hears the pointer:
+    /// the note, the cloth and the chrome each take presses for their own, and the press
+    /// still goes on to them (a press on another tag opens that one).
+    /// It also hears the pointer while a tag is held folded ([`Self::pointer_after_close`]):
+    /// the tab sits under its folding panel, so the tab's own hover cannot say when the
+    /// pointer has left.
+    fn press_listener(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let pressing = (self.active.is_some() || !self.marks_open.is_empty()) && self.enlarged.is_none() && !self.back.shown;
+        let held = self.hand_closed.is_some();
+        if !pressing && !held {
+            return None;
+        }
+        let this = cx.entity().downgrade();
+        Some(
+            canvas(
+                |_, _, _| (),
+                move |_, _, window, _| {
+                    if pressing {
+                        let page = this.clone();
+                        window.on_mouse_event(move |ev: &MouseDownEvent, phase, window, cx| {
+                            if phase == DispatchPhase::Capture && ev.button == MouseButton::Left {
+                                let _ = page.update(cx, |p, cx| p.press_outside(ev.position, window, cx));
+                            }
+                        });
+                    }
+                    if held {
+                        let page = this.clone();
+                        window.on_mouse_event(move |ev: &MouseMoveEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Bubble {
+                                let _ = page.update(cx, |p, cx| p.pointer_after_close(ev.position, cx));
+                            }
+                        });
+                    }
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .into_any_element(),
+        )
+    }
+
+    fn press_outside(&mut self, at: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let shown: Vec<String> = self.active.iter().chain(self.marks_open.iter()).cloned().collect();
+        let on = |bounds: &Rc<RefCell<HashMap<String, Bounds<Pixels>>>>| {
+            let b = bounds.borrow();
+            shown.iter().any(|id| b.get(id).is_some_and(|b| b.contains(&at)))
+        };
+        if on(&self.tab_bounds) || on(&self.panel_bounds) || on(&self.mark_bounds) {
+            return;
+        }
+        if self.editor.read(cx).open_anchor_under(at).is_some_and(|id| shown.contains(&id)) {
+            return;
+        }
+        // the reply box that had the keyboard folds away with its tag
+        let replying = self.replies.values().any(|i| i.read(cx).focus_handle(cx).is_focused(window));
+        self.close_by_hand(window, cx);
+        if replying {
+            self.editor.update(cx, |e, cx| e.focus(window, cx));
+        }
     }
 
     /// Hide threads (or show them again). Hidden, nothing of Inkling's stays open: no
@@ -2247,6 +2363,9 @@ impl NotePage {
     // ----- threads ------------------------------------------------------------
 
     fn activate(&mut self, id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        if id.is_some() {
+            self.hand_closed = None;
+        }
         self.active = id.clone();
         self.menu = None;
         self.editor.update(cx, |e, _| e.active_anchor = id.clone());
@@ -2461,8 +2580,7 @@ impl NotePage {
 
     /// The "?" after a quote in Marks-only placement: show or hide its card.
     fn toggle_mark(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.marks_open.contains(id) {
-            self.marks_open.remove(id);
+        if self.marks_open.remove(id) || self.active.as_deref() == Some(id) {
             self.activate(None, window, cx);
         } else {
             self.marks_open.insert(id.to_string());
@@ -3092,6 +3210,12 @@ impl NotePage {
                 .map(|(id, b)| (short(id), json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()])))
                 .collect(),
         );
+        // each thread's words in the window, line by line: where a click on them lands
+        state["words"] = {
+            let ed = self.editor.read(cx);
+            let px4 = |b: &Bounds<Pixels>| json!([b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32()]);
+            Value::Object(ed.anchors().iter().map(|a| (short(&a.id), json!(ed.anchor_window_rects(&a.id).iter().map(px4).collect::<Vec<_>>()))).collect())
+        };
         // threads between notes: each one's far end as its tag shows it, and following
         state["ends"] = self.ends_state(window, cx);
         self.dump_write_in(&mut state, cx);
@@ -4193,8 +4317,9 @@ impl NotePage {
     fn set_tag_hover(&mut self, id: &str, part: &str, hovered: bool, cx: &mut Context<Self>) {
         let now = Instant::now();
         let last_typed = self.last_typed;
+        let held = self.hand_closed.as_deref() == Some(id);
         let tag = self.tags.entry(id.to_string()).or_default();
-        let open = tag.hover.rested(now, last_typed);
+        let open = !held && tag.hover.rested(now, last_typed);
         tag.hover = tag.hover.part(part == "tab", hovered, now, open);
         cx.notify();
     }
@@ -4202,7 +4327,7 @@ impl NotePage {
     /// Click a tab: open it (and its reply box), or close it if it is the open one.
     fn toggle_tag(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.active.as_deref() == Some(id) {
-            self.activate(None, window, cx);
+            self.close_by_hand(window, cx);
             return;
         }
         self.activate(Some(id.to_string()), window, cx);
@@ -4312,7 +4437,7 @@ impl NotePage {
         if self.active.as_deref() == Some(id) || self.drag.as_ref().is_some_and(|d| d.id == id && d.moved) {
             return 1.;
         }
-        if th.status == ThreadStatus::Resolved {
+        if th.status == ThreadStatus::Resolved || self.hand_closed.as_deref() == Some(id) {
             return 0.;
         }
         let now = Instant::now();
@@ -5041,6 +5166,7 @@ impl Render for NotePage {
         // tabs and panels drawn this frame put their bounds back as they paint
         self.tab_bounds.borrow_mut().retain(|id, _| !jmw && slots.iter().any(|s| &s.id == id));
         self.panel_bounds.borrow_mut().retain(|id, _| !jmw && self.tags.get(id).is_some_and(|t| t.unfold > 0.01));
+        self.mark_bounds.borrow_mut().retain(|id, _| !jmw && placement == Placement::Marks && threads.iter().any(|t| &t.id == id));
         // a pointer resting on a tag, or one that just left, changes it without an event
         if self.tags.values().any(|t| t.hover.settling(now)) {
             unfolding = true;
@@ -5104,6 +5230,10 @@ impl Render for NotePage {
                         .cursor_pointer()
                         .hover(move |s| s.bg(p.hover))
                         .child(glyph)
+                        .child({
+                            let (marks, id) = (self.mark_bounds.clone(), id.clone());
+                            canvas(move |b, _, _| marks.borrow_mut().insert(id, b), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+                        })
                         .on_click(cx.listener(move |this, _, window, cx| this.toggle_mark(&id, window, cx)))
                         .into_any_element(),
                 );
@@ -5317,12 +5447,14 @@ impl Render for NotePage {
         });
 
         let dragging = self.drag_listener(cx);
+        let pressing = self.press_listener(cx);
         let root = div()
             .size_full()
             .flex()
             .flex_row()
             .bg(p.cloth)
             .children(dragging)
+            .children(pressing)
             .child(
                 div()
                     .relative()

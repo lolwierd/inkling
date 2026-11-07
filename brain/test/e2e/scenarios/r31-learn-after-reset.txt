@@ -1,0 +1,14 @@
+# A stale result must drop pre-reset work but keep messages submitted after consent changes.
+note: Learning after reset
+chat: I work in the old role. [[learn>delay:6000]] [[learn>learn:Old role]]
+wait: 500
+chat: I prefer the old project. [[learn>delay:200]] [[learn>learn:Old project]]
+set: learn=off
+set: learn=on
+chat: I work in the new role. [[learn>delay:200]] [[learn>learn:New role]]
+wait: 7500
+dump: after-new-message
+expect: requests.filter(r => r.input.task === "learn").length === 2
+expect: requests.filter(r => r.input.task === "learn")[1].input.message.includes("new role")
+expect: settings.about_me === "New role"
+quit

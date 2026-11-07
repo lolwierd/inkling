@@ -1125,7 +1125,7 @@ pub struct Store {
     dir: PathBuf,
     profile: std::cell::RefCell<(bool, String, u64)>,
     failed: std::cell::RefCell<BTreeMap<PathBuf, Vec<u8>>>,
-    problems: std::cell::RefCell<Vec<String>>,
+    problems: std::cell::RefCell<BTreeMap<PathBuf, String>>,
     pub notes: Vec<Note>,
     pub folders: Vec<Folder>,
     pub minds: Vec<Mind>,
@@ -1334,7 +1334,7 @@ impl Store {
                 let first = self.failed.borrow_mut().insert(path.clone(), bytes).is_none();
                 if first {
                     let name = path.file_name().unwrap_or_default().to_string_lossy();
-                    self.problems.borrow_mut().push(format!("Changes to {name} aren’t saved yet. Inkling will retry: {e:#}"));
+                    self.problems.borrow_mut().insert(path.clone(), format!("Changes to {name} aren’t saved yet. Inkling will retry: {e:#}"));
                     log::error!("could not save {}: {e:#}", path.display());
                 }
                 Err(e)
@@ -1347,7 +1347,9 @@ impl Store {
     }
 
     pub fn take_save_problems(&self) -> Vec<String> {
-        std::mem::take(&mut *self.problems.borrow_mut())
+        let failed = self.failed.borrow();
+        std::mem::take(&mut *self.problems.borrow_mut()).into_iter()
+            .filter_map(|(path, message)| failed.contains_key(&path).then_some(message)).collect()
     }
 
     pub fn delete_note(&mut self, id: &str) -> Result<()> {

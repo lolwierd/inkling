@@ -10,10 +10,16 @@ pub(super) struct Lifecycle {
     pub requests: HashMap<String, (Rc<Cell<bool>>, Task<()>)>,
     pub calls: HashMap<String, u64>,
     learning: bool,
-    learn_queue: VecDeque<String>,
+    learn_queue: VecDeque<(u64, String)>,
 }
 
 impl NotePage {
+    pub(super) fn paragraph_in_flight(&self, hash: u64) -> bool {
+        self.reading.as_ref().is_some_and(|r| r.hash == hash)
+            || self.rechecking.values().any(|h| *h == hash)
+            || self.lifecycle.calls.values().any(|h| *h == hash)
+    }
+
     pub(super) fn quote_is_current(&self, id: &str, words: &str, cx: &App) -> bool {
         let ed = self.editor.read(cx);
         self.note.threads.iter().any(|t| t.id == id && t.status == ThreadStatus::Open)
@@ -45,7 +51,8 @@ impl NotePage {
         let personal = [" i ", " i'm ", " im ", " i am ", " my ", " i've ", " i'd ", " me ", " i work", " i study", " i prefer"]
             .iter().any(|k| lower.contains(k));
         if !personal || message.split_whitespace().count() < 4 { return; }
-        self.lifecycle.learn_queue.push_back(message.to_string());
+        let revision = cx.global::<Store>().profile_revision();
+        self.lifecycle.learn_queue.push_back((revision, message.to_string()));
         self.next_learning(cx);
     }
 
@@ -56,8 +63,9 @@ impl NotePage {
             self.lifecycle.learn_queue.clear();
             return;
         }
-        let Some(message) = self.lifecycle.learn_queue.pop_front() else { return };
         let revision = store.profile_revision();
+        self.lifecycle.learn_queue.retain(|(queued, _)| *queued == revision);
+        let Some((_, message)) = self.lifecycle.learn_queue.pop_front() else { return };
         let about = &store.settings.about_me;
         let input = json!({"task": "learn", "aboutMe": if about.trim().is_empty() { Value::Null } else { json!(about) }, "message": message});
         self.lifecycle.learning = true;
@@ -65,23 +73,24 @@ impl NotePage {
             if matches!(msg, BrainMsg::Delta(_)) { return; }
             page.lifecycle.learning = false;
             let store = cx.global_mut::<Store>();
-            if !store.settings.learns_about_me || store.profile_revision() != revision {
-                // Consent or manual edits changed while we were learning. Queued work
-                // predating that decision must not undo it either.
-                page.lifecycle.learn_queue.clear();
-                return;
-            }
             if let BrainMsg::Done(v) = msg {
-                if v["update"].as_bool() == Some(true) {
+                if store.settings.learns_about_me && store.profile_revision() == revision && v["update"].as_bool() == Some(true) {
                     let text = v["aboutMe"].as_str().unwrap_or("").trim();
                     if !text.is_empty() {
                         store.settings.about_me = text.to_string();
                         store.save_settings();
+                        // Our own fold is not a manual reset: queued messages still
+                        // belong together and must build on the learned profile.
+                        let next_revision = store.profile_revision();
+                        for (queued, _) in &mut page.lifecycle.learn_queue {
+                            if *queued == revision { *queued = next_revision; }
+                        }
                         cx.emit(PageEvent::Learned);
                     }
                 }
             }
-            // Learning belongs to the application, so it survives a note switch.
+            // Continue even after a stale result: messages submitted after a manual
+            // change are still valid. Learning also survives a note switch.
             let this = cx.entity().downgrade();
             cx.defer(move |cx| { if let Some(this) = this.upgrade() { this.update(cx, |page, cx| page.next_learning(cx)); } });
         });

@@ -28,6 +28,13 @@ In-flight read and recheck hashes are reservations, separate from saved completi
 hashes. The waiting queue must not contain a second copy of the same active read.
 A completed recheck records the paragraph hash captured when it started, never a
 newer paragraph that happened to exist when its answer arrived.
+Read it through uses the same in-flight reservations as reading along, including
+calls by name and edit rechecks. Starting another pass cannot duplicate that work.
+
+Queued learning messages carry the profile revision under which they were submitted.
+A stale result discards only older queued work; messages submitted after the reset
+still run. A successful learning fold advances its queued messages to the resulting
+profile revision so ordinary serial accumulation is preserved.
 
 ## Saving and resource limits
 
@@ -37,6 +44,8 @@ saves retry even when the in-memory thread already matches. The window checks
 the retry ledger every five seconds and surfaces the first failure for each file.
 The ledger is in memory: it is not a second on-disk journal, and cannot preserve
 unsaved data through a forced process termination or a persistently unwritable disk.
+Pending failure notifications are keyed by file and checked against that ledger when
+shown, so a recovered save or completed deletion does not show a stale unsaved warning.
 
 Import writes remain explicit: a failed note is counted as unsaved and can be
 imported again. It is not inserted into the in-memory notebook or counted as a
@@ -123,7 +132,7 @@ ordering reproducible; it cannot make model answers deterministic.
 ## Reproduce validation
 
 Use `scripts/dev check`, then `scripts/dev e2e` for the complete app suite. The new
-race scenarios are `r18` through `r29`; `u33` also exercises the concurrently added
+race scenarios are `r18` through `r32`; `u33` also exercises the concurrently added
 folder/menu functionality. `cargo test robustness_tests -- --test-threads=1 --nocapture`
 runs the persistence/layout/pipe tests and prints the algorithm measurements.
 

@@ -1,0 +1,26 @@
+# Reading a draft must share the reading loop's reservations for calls by name.
+note: Calls in flight
+mode: ask
+type: Inkling, what about the cache under load [[answer>delay:5000]]?
+read-through
+dump: first-call
+expect: d.pending.length === 1 && d.threads.length === 1
+read-through
+settle: 20000
+dump: completed-call
+expect: d.threads.length === 1 && d.read_hashes === 1
+# The second answer belongs to this separate note, started by the normal pause.
+note: Called while writing
+mode: ask
+type: Inkling, why is the cache still cold [[answer>delay:5000]]?
+wait: 2800
+dump: answering
+expect: d.pending.length === 1 && d.threads.length === 1
+read-through
+settle: 20000
+dump: completed-pause
+expect: d.threads.length === 1 && d.read_hashes === 1
+expect: tasks.filter(t => t === "answer").length === 2
+expect: requests.filter(r => r.input.task === "answer" && r.input.target.includes("under load")).length === 1
+expect: requests.filter(r => r.input.task === "answer" && r.input.target.includes("still cold")).length === 1
+quit

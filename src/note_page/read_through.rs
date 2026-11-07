@@ -147,7 +147,7 @@ impl NotePage {
         cx.notify();
     }
 
-    /// The units of the note from line `from` down, as the reading loop sees them.
+    /// The units from line `from` down, excluding paragraphs already in flight.
     fn units_from(&self, from: usize, cx: &App) -> Vec<Unit> {
         let ed = self.editor.read(cx);
         let count = ed.line_count();
@@ -159,6 +159,7 @@ impl NotePage {
             let u = ed.unit_of(line);
             let end = u.end.max(line + 1);
             let text = ed.lines_text(u.clone()).trim().to_string();
+            if self.paragraph_in_flight(hash_text(&text)) { line = end; continue; }
             let code_alone = ed.line_kind(u.start).is_code()
                 && u.clone().map(|l| ed.line_text(l)).filter(|t| !t.trim().is_empty()).all(|t| self.note.left_alone.contains(&hash_text(&t)));
             let calls = self.calls_mind(&text);

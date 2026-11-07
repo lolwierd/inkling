@@ -1585,9 +1585,7 @@ impl NotePage {
         for (line, text, writing_code, alone) in candidates {
             let hash = hash_text(&text);
             let already = alone || self.note.read_hashes.contains(&hash) || self.note.left_alone.contains(&hash)
-                || self.reading.as_ref().is_some_and(|r| r.hash == hash)
-                || self.rechecking.values().any(|h| *h == hash)
-                || self.lifecycle.calls.values().any(|h| *h == hash) || (waits && self.answer_checks.contains(&hash));
+                || self.paragraph_in_flight(hash) || (waits && self.answer_checks.contains(&hash));
             let verdict = if writing_code && !already {
                 Verdict::Later
             } else {
@@ -1926,8 +1924,9 @@ impl NotePage {
     }
 
     fn answer_call(&mut self, line: usize, text: String, cx: &mut Context<Self>) {
+        let hash = hash_text(&text);
+        if self.note.read_hashes.contains(&hash) || self.paragraph_in_flight(hash) { return; }
         let Some(id) = self.add_thought(line, &text, &text, ThoughtKind::Answer, None, cx) else { return };
-        self.lifecycle.calls.insert(id.clone(), hash_text(&text));
         let input = json!({"task": "answer", "ctx": self.context(cx), "target": text});
         self.stream_into(id, input, cx);
     }
@@ -2091,6 +2090,7 @@ impl NotePage {
         let tid = thread.clone();
         let again = input.clone();
         let read_hash = (input["task"] == "answer").then(|| hash_text(input["target"].as_str().unwrap_or_default()));
+        if let Some(hash) = read_hash { self.lifecycle.calls.insert(thread.clone(), hash); }
         self.unanswered.remove(&thread);
         let req = self.run(input, true, cx, move |page, msg, cx| match msg {
             BrainMsg::Delta(d) => {

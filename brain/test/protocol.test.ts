@@ -398,6 +398,18 @@ describe("what each task sends back", () => {
       expect(b.stderr.match(/from the pass's one call/g)?.length).toBe(2);
     });
 
+    test("a mind, brief or note that changed during the pass gets a new call", async () => {
+      const b = brain();
+      const notes = [{ paragraph: 2, kind: "question", quote: "around 90 percent", text: "From the first mind", sketch: false, repeats: 0 }];
+      b.send(run("a", { task: "read", ctx: ctx(), target: `${first} ${fake({ structured: { notes } })}`, through: true, pass: "p3", ahead: [second, third] }));
+      await b.end("a");
+      // the mind changed: the stored note is not used, and a new call reads the rest
+      const other = { name: "Skeptic", description: "", howItThinks: "", voice: "blunt", frequency: "often" };
+      const again = [{ paragraph: 1, kind: "question", quote: "around 90 percent", text: "From the second mind", sketch: false, repeats: 0 }];
+      b.send(run("b", { task: "read", ctx: ctx("", { mind: other }), target: second, through: true, pass: "p3", ahead: [`${third} ${fake({ structured: { notes: again } })}`] }));
+      expect((await b.end("b")).data).toMatchObject({ speak: true, text: "From the second mind" });
+    });
+
     test("answers are tied to their threads when the call comes back", async () => {
       const b = brain();
       const threads = [{ id: "t1", quote: "the cache", messages: [{ role: "mind", text: "How long does it live?" }], resolved: false }];

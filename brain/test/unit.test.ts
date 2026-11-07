@@ -524,17 +524,26 @@ describe("a point let stand, on the same words", () => {
       { quote: "I run four days a week", kind: "question" },
       { quote: "always", kind: "correction" },
     ];
-    expect(sameWordsAs("four days a week", "question", points)).toBe(1); // inside the point's words
-    expect(sameWordsAs("I run four days a week, mostly easy", "question", points)).toBe(1); // around them
-    expect(sameWordsAs("Always", "correction", points)).toBe(2); // a one-word point, the same word
-    expect(sameWordsAs("four days a week", "correction", points)).toBe(0); // another kind
-    expect(sameWordsAs("a week", "question", points)).toBe(0); // too few words to say
-    expect(sameWordsAs("the long run on Sunday", "question", points)).toBe(0);
-    expect(sameWordsAs("", "question", points)).toBe(0);
+    const para = "I run four days a week, mostly easy, and I always stretch.";
+    expect(sameWordsAs("four days a week", "question", points, para)).toBe(1); // inside the point's words
+    expect(sameWordsAs("I run four days a week, mostly easy", "question", points, para)).toBe(1); // around them
+    expect(sameWordsAs("Always", "correction", points, para)).toBe(2); // a one-word point, the same word
+    expect(sameWordsAs("four days a week", "correction", points, para)).toBe(0); // another kind
+    expect(sameWordsAs("a week", "question", points, para)).toBe(0); // too few words to say
+    expect(sameWordsAs("mostly easy", "question", points, para)).toBe(0);
+    expect(sameWordsAs("", "question", points, para)).toBe(0);
     // whole words only: a number or a word inside another is not the same words
-    expect(sameWordsAs("10", "correction", [{ quote: "100", kind: "correction" }])).toBe(0);
-    expect(sameWordsAs("war", "question", [{ quote: "software", kind: "question" }])).toBe(0);
-    expect(sameWordsAs("100", "correction", [{ quote: "100", kind: "correction" }])).toBe(1);
+    expect(sameWordsAs("10", "correction", [{ quote: "100", kind: "correction" }], "It is 10.")).toBe(0);
+    expect(sameWordsAs("war", "question", [{ quote: "software", kind: "question" }], "war")).toBe(0);
+    expect(sameWordsAs("100", "correction", [{ quote: "100", kind: "correction" }], "It is 100.")).toBe(1);
+    // words that changed are a new claim, however much they overlap
+    const backups = [{ quote: "keep backups for 10 days", kind: "correction" }];
+    expect(sameWordsAs("keep backups for 100 days", "correction", backups, "We keep backups for 100 days.")).toBe(0);
+    expect(sameWordsAs("keep backups for 10 days", "correction", backups, "We keep backups for 10 days.")).toBe(1);
+    const crypt = [{ quote: "enable encryption at rest", kind: "correction" }];
+    expect(sameWordsAs("disable encryption at rest", "correction", crypt, "We disable encryption at rest.")).toBe(0);
+    // the point's words gone from the paragraph: nothing to hold back
+    expect(sameWordsAs("four days a week", "question", points, "Four days a week is too many.")).toBe(0);
   });
 });
 
@@ -572,7 +581,13 @@ describe("the first look's prompt", () => {
     const p = gatePrompt({ noteTitle: "Plan", noteText: "I run four days a week.", brief: null, mind, aboutMe: null, threads, now: "", letStand: [] }, "I run four days a week.");
     expect(p).toContain("- «four days»: Why four?");
     expect(p).not.toContain("Tied off.");
-    expect(p).toContain("The full reader speaks by this rule: Speak only when something is clearly wrong");
+    expect(p).toContain("It speaks by this rule: Speak only when something is clearly wrong");
+    // a mind of your own, and the note's brief, are part of what the first look judges by
+    const custom = { ...mind, name: "Copy editor", description: "Flags passive voice.", howItThinks: "Every passive construction hides who acted." };
+    const q = gatePrompt({ noteTitle: "Plan", noteText: "x", brief: "A release note; tell me who did what.", mind: custom, aboutMe: null, threads: [], now: "", letStand: [] }, "The release was approved by the team.");
+    expect(q).toContain("The full reader is Copy editor.");
+    expect(q).toContain("How it thinks: Every passive construction hides who acted.");
+    expect(q).toContain("What this note is for, in the writer's words: A release note; tell me who did what.");
     expect(p).toContain("When unsure, set it to true");
   });
 });

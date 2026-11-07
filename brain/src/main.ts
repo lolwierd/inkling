@@ -4,6 +4,7 @@
 // `done` or `error` event; after a cancel it is never `done`.
 
 import { createInterface } from "node:readline";
+import { createHash } from "node:crypto";
 import { accountStatus, addUsage, ProviderError, runStructured, runText, TurnsSpent, usageLine, type Access, type LimitInfo } from "./claude.ts";
 import { cleanSvg, clip, findQuote, pickAnswers, sameWordsAs, snapQuote } from "./output.ts";
 import {
@@ -312,7 +313,15 @@ function looked(opened: Opened): { looked?: string[] } {
 
 /** What the one call of a Read it through pass said about each paragraph it read, by the
  * paragraph's words, until the pass reaches it; dropped half an hour after the call. */
-const passes = new Map<string, { at: number; opened: Opened; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
+const passes = new Map<string, { at: number; made: string; opened: Opened; by: Map<string, { d: Json; answers: { thread: string; quote: string }[] }> }>();
+
+/** What a pass's one call was made from, apart from the margin (which the pass itself
+ * changes): the note's words, the mind, the brief, the profile and the model. A read whose
+ * request differs gets a new call. */
+function madeFrom(ctx: Context, settings: RunSettings): string {
+  const { mind, brief, aboutMe, noteTitle, noteText } = ctx;
+  return createHash("sha256").update(JSON.stringify({ mind, brief, aboutMe, noteTitle, noteText, model: settings.model, effort: settings.effort })).digest("hex");
+}
 const PASS_KEEP_MS = 30 * 60 * 1000;
 
 /**
@@ -334,8 +343,9 @@ async function throughRead(
   const now = Date.now();
   for (const [k, p] of passes) if (now - p.at > PASS_KEEP_MS) passes.delete(k);
   const key = input.target.trim();
+  const made = madeFrom(input.ctx, settings);
   const pass = passes.get(input.pass);
-  const known = pass?.by.get(key);
+  const known = pass?.made === made ? pass.by.get(key) : undefined;
   if (pass && known) {
     pass.by.delete(key);
     log(`read ${id}: from the pass's one call`);
@@ -371,7 +381,7 @@ async function throughRead(
   log(`read ${id}: read it through in one call, ${batch.length} paragraph(s), ${notes.length} note(s)`);
   const mine = by.get(key) ?? { d: { speak: false }, answers: [] };
   by.delete(key);
-  passes.set(input.pass, { at: now, opened, by });
+  passes.set(input.pass, { at: now, made, opened, by });
   return { ...mine, usage, opened };
 }
 
@@ -466,7 +476,7 @@ async function runOnce(id: string, settings: RunSettings, input: Task, signal: A
       // A point the writer let stand is not raised again, in any words: the model says
       // which one its note repeats, or it is on the same words, and then it is held back.
       const kind = d.kind === "correction" ? "correction" : "question";
-      const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), kind, input.ctx.letStand);
+      const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), kind, input.ctx.letStand, input.target);
       if (repeats > 0) {
         log(`${input.task} ${id} held back: it makes let-stand point ${repeats} again`);
         return { data: { speak: false, repeats, ...answered }, usage };
@@ -550,7 +560,7 @@ async function relate(
   const { data, usage } = await runStructured<unknown>(sys, prompt, RELATE_SCHEMA, settings, signal, onLimit);
   const d = structured(data);
   // A point the writer let stand is not raised again here either.
-  const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), "question", input.ctx.letStand);
+  const repeats = repeated(d.repeats, input.ctx.letStand.length) || sameWordsAs(snapQuote(text(d.quote), input.target), "question", input.ctx.letStand, input.target);
   if (repeats > 0) {
     log(`relate held back: it makes let-stand point ${repeats} again`);
     return { data: { speak: false, repeats }, usage };

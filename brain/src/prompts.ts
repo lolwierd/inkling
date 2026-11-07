@@ -189,8 +189,12 @@ export function gatePrompt(ctx: Context, target: string): string {
     "The writer just finished this paragraph:",
     `<paragraph>${inside("paragraph", target)}</paragraph>`,
     "",
-    `The full reader speaks by this rule: ${FREQUENCY[ctx.mind.frequency]}`,
-    "Set look to true when the paragraph may deserve a margin note by that rule (a claim that looks wrong or unsupported, numbers that may not add up, a step that may not follow, an assumption the rest leans on, the writer saying they are stuck), or when it may answer one of the open questions. Set it to false for ordinary writing the rule would leave alone. When unsure, set it to true: a paragraph you turn away is never read.",
+    `The full reader is ${ctx.mind.name}.`,
+    ...(ctx.mind.description ? [`In a sentence: ${ctx.mind.description}`] : []),
+    ...(ctx.mind.howItThinks ? [`How it thinks: ${ctx.mind.howItThinks}`] : []),
+    ...(ctx.brief ? [`What this note is for, in the writer's words: ${ctx.brief}`] : []),
+    `It speaks by this rule: ${FREQUENCY[ctx.mind.frequency]}`,
+    "Set look to true when the paragraph may deserve a margin note from this reader (what it looks for, what the note is for, and the rule above: a claim that looks wrong or unsupported, numbers that may not add up, a step that may not follow, an assumption the rest leans on, the writer saying they are stuck), or when it may answer one of the open questions. Set it to false for ordinary writing this reader would leave alone. When unsure, set it to true: a paragraph you turn away is never read.",
   ].join("\n");
 }
 

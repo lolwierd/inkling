@@ -18,3 +18,9 @@ Keep the notebook's paper, ink, lettering and stitched edge. Markdown introduces
 reading structure: short headings, small paragraph gaps, code on paper, real links.
 The card grows naturally for short conversations, stops below 560 pixels, and gets
 shorter with the window. Sending during an answer always steers; there is no mode menu.
+
+The first scrollbar was the toolkit's: a grey bar always drawn over the right edge of
+the words, the one stock part on a stitched card. Where you are in a long thread is now
+a length of the thread itself, 2 px in the thread's colour, laid in the gap between the
+words and the card's stitched edge (4 px under the pointer, to grab). Words that run on
+past the top or bottom fade into the card, so a cut-off line reads as more to come.

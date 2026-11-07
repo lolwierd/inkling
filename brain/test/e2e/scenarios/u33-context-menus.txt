@@ -1,0 +1,81 @@
+# Right-click menus on notes and folders. A note's: Open, Move To, Delete Note (Undo brings
+# it back). A folder's: New Note, Open, Rename…, Delete Folder (its notes go to Unfiled; Undo
+# puts the folder and them back). File > Delete This Note deletes the open note. A test
+# window keeps the menu instead of showing it; `menu: Context > …` picks an item. Sidebar
+# rows: Work 164, Project notes 195, Personal 227, Unfiled 283, Draft 315.
+# fixture: folders
+# timeout: 90
+wait: 1500
+open: sidebar
+wait: 400
+shot: sidebar
+right-click: 120, 315
+dump: note-menu
+expect: d.context_menu.join("|") === "Open|Move To > Unfiled|Move To > Work|Move To > Personal|Delete Note"
+menu: Context > Move To > Personal
+wait: 300
+dump: moved
+expect: d.note_folders.Draft === "personal" && d.folder === "personal"
+# Work: renamed in place, Return keeps the name
+right-click: 120, 164
+dump: folder-menu
+expect: d.context_menu.join("|") === "New Note|Open|Rename…|Delete Folder"
+menu: Context > Rename…
+wait: 300
+dump: renaming
+expect: d.renaming === "work" && d.sidebar.open
+shot: renaming
+key: j o b s enter
+wait: 300
+dump: renamed
+expect: d.renaming === null && d.folders.join() === "jobs,Personal"
+# deleted, its note goes to Unfiled; Undo puts both back
+right-click: 120, 164
+menu: Context > Delete Folder
+wait: 300
+dump: folder-deleted
+expect: d.folders.join() === "Personal" && d.note_folders["Project notes"] === null
+shot: folder-deleted
+undo-delete-folder
+wait: 300
+dump: folder-back
+expect: d.folders.join() === "jobs,Personal" && d.note_folders["Project notes"] === "work"
+# Unfiled has a menu of its own, with no Rename or Delete
+right-click: 120, 290
+dump: unfiled-menu
+expect: d.context_menu.join("|") === "New Note|Open"
+# Draft, now in Personal (258): deleted, and Undo brings it back
+right-click: 120, 258
+menu: Context > Delete Note
+wait: 300
+dump: note-deleted
+expect: !d.note_titles.includes("Draft")
+undo-delete
+wait: 300
+dump: note-back
+expect: d.note_titles.includes("Draft") && d.note_folders.Draft === "personal"
+# a folder's page: its rows have the note's menu; deleting there keeps you on the page,
+# and Undo opens the note that came back (Draft's row: 351..969 x 198..271)
+open: folder:Personal
+wait: 500
+shot: folder-page
+set: appearance=dark
+shot: folder-page-dark
+set: appearance=light
+right-click: 500, 230
+dump: page-menu
+expect: d.context_menu.join("|") === "Open|Move To > Unfiled|Move To > jobs|Move To > Personal|Delete Note"
+menu: Context > Delete Note
+wait: 300
+dump: page-delete
+expect: d.folder_page === "personal" && !d.note_titles.includes("Draft")
+undo-delete
+wait: 300
+dump: page-undo
+expect: d.folder_page === null && d.note_titles.includes("Draft") && d.folder === "personal"
+# File > Delete This Note: the open note
+menu: File > Delete This Note
+wait: 300
+dump: file-delete
+expect: !d.note_titles.includes("Draft")
+quit

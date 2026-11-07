@@ -43,7 +43,7 @@ feature changes. The shortcuts below are the default bindings.
 | Move a tag | drag it by the tab or the top row; it keeps its place |
 | Numbered questions | open questions numbered in reading order, with a knot in the gutter |
 | Reply in the tag | the mind answers in the same thread |
-| Long threads | the conversation scrolls inside a bounded tag; its header, reply box and actions stay visible; messages render Markdown, including links, lists, emphasis and code |
+| Long threads | the conversation scrolls inside a bounded tag; its header, reply box and actions stay visible; where you are is a thin length of the thread's colour beside the words, and words running on past an edge fade into the card; messages render Markdown, including links, lists, emphasis and code |
 | Steer an answer | send another message while the mind is answering to redirect it immediately; the interrupted words stay in the history and the replacement uses your new direction |
 | Threads of your own | Add to it: a line for you, sent nowhere; Ask Inkling on the tag, or a line that starts with a mind's name, calls that mind in for one answer; only you tie it off or cut it, and editing its words starts no reread; the minds see it as yours and do not ask it back |
 | Write it in | when your reply ties a thread off, its tag offers to put the reply, word for word, under the paragraph it is about, for you to rework; it becomes the thread's answer, with its knot; Undo in the toast, or ⌘Z |
@@ -84,7 +84,9 @@ feature changes. The shortcuts below are the default bindings.
 
 | Capability | How |
 |---|---|
-| Notes and folders | the sidebar (⌘\\): new note, new folder; folder names open a page of their notes, disclosure arrows fold the list; drag notes onto folders or Unfiled to move them; notes link back to their folder; a dot on notes with open threads |
+| Notes and folders | the sidebar (⌘\\): new note, new folder; folder names open a page of their notes, disclosure arrows fold the list (Unfiled's too); drag notes onto folders or Unfiled to move them; notes in a folder show its name above their tools; a dot on notes with open threads |
+| Right-click menus | a note (sidebar or a folder's page): Open, Move To, Delete Note; a folder: New Note, Open, Rename… (typed in place), Delete Folder (its notes go to Unfiled); Unfiled: New Note, Open; deletes have Undo in their toast; macOS's own menus, so ⌃-click works too |
+| Delete a note | right-click it, File > Delete This Note, or ⌘⌫ on it in ⌘K; Undo in the toast |
 | Find or start a note | ⌘K |
 | Copy a note | ⇧⌘C |
 | Export | ⇧⌘E: Markdown, HTML or Word, with the threads or without; checklists, callouts and code come along (`- [ ]`, `> [!note]`, fenced code in Markdown) |
@@ -101,4 +103,4 @@ feature changes. The shortcuts below are the default bindings.
 | Everything from the keyboard | Tab and ⇧Tab move between controls, a running-stitch ring shows where you are, Return or Space presses; the note keeps Tab for lists, so ⌃Tab leaves it; ↑ ↓ in the mind and mode menus |
 | Messages in passing | one stack of small stitched labels at the bottom: Undo for a deleted note or a snipped thread, problems in ochre with a close control; the pointer holds a label |
 
-Local files: Files on a note chooses local directories. Notes inherit directories chosen on their folder page, until the note overrides them. Use folder setting restores inheritance. Unlink on the folder page removes its mapping. The sidebar shows notebook folders and notes only. Full local paths appear beneath the folder’s note list; a note’s Files control names its directory, with full paths and inheritance in its tooltip. Notes show a folder breadcrumb above their tools. Dragging uses whole folder sections as targets, a compact pointer-aligned preview, edge scrolling, and Escape to cancel. Claude Code user instructions load for every call, and Read, Glob and Grep can consult existing project memories and local files. Web lookup retains its separate setting.
+Local files: Files on a note chooses local directories. Notes inherit directories chosen on their folder page, until the note overrides them. Use folder setting restores inheritance. Unlink on the folder page removes its mapping. The sidebar shows notebook folders and notes only. A folder's page has a Files control in its header row, as a note does: it names the first directory, with the full paths in its tooltip; a note's Files tooltip also says whether it inherits. A folder's page lies on a note's own sheet, its title and column where a note's are. Dragging uses whole folder sections as targets, a compact pointer-aligned preview, edge scrolling, and Escape to cancel. Claude Code user instructions load for every call, and Read, Glob and Grep can consult existing project memories and local files. Web lookup retains its separate setting.

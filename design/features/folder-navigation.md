@@ -31,3 +31,20 @@ The surface follows Inkling's existing paper, serif note titles, sans-serif cont
 and one accent for action. The work here is hierarchy and interaction, not another
 palette. Light, dark and narrow-window renders are checked alongside scripted
 navigation and drag scenarios.
+
+## Second pass, 7 Nov
+
+Three things read as unfinished and are changed. The folder page sat on a narrower
+card of its own, with no shadow and no stitched edge, so moving between a folder and a
+note moved the column and the title. It now lies on the note's own sheet
+(`note_page::sheet_page`), with the note's header row in the note's place: the count,
+New note, and the folder's Files control, which works as a note's does, its full paths
+in the tooltip. The rows line up with the column on both sides, with no hidden arrow
+holding the date away from the edge.
+
+In the sidebar Unfiled was drawn unlike the folders around it (a folder icon where they
+have a fold arrow, its name out of line with theirs); it now folds like them. Deleting and
+renaming were missing or hidden: a hover × deleted a folder in one click with no Undo.
+Both now live in right-click menus, macOS's own, with Undo for every delete.
+
+A note's folder line lost its trailing ›, which pointed at nothing.

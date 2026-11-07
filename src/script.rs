@@ -197,6 +197,9 @@ pub enum Step {
     Key(Vec<String>),
     /// A left click at a point in the window.
     Click(f32, f32),
+    /// A right click at a point in the window (`right-click: x, y`); a test window keeps
+    /// the menu it opens for `menu: Context > Item`.
+    RightClick(f32, f32),
     /// The pointer moves to a point in the window (dragging, after `press`).
     Pointer(f32, f32),
     /// Scroll at a point by a vertical pixel delta.
@@ -223,6 +226,8 @@ pub enum Step {
     Delete(String),
     /// Bring back the note deleted last, as the toast's Undo does.
     UndoDelete,
+    /// The Undo on the folder-deleted toast: the folder and its notes come back.
+    UndoDeleteFolder,
     /// Read it through, as ⇧⌘R does: start a pass over the note, or stop the one running.
     ReadThrough,
     /// Ask yourself on the selection, as Return in its box does: a thread of your own.
@@ -382,8 +387,9 @@ pub fn parse(src: &str) -> Vec<Step> {
                 }
                 "back-reopen" => Step::BackReopen(n()),
                 "back-show" => Step::BackShow(n()),
-                "click" | "point" | "press" => match point_arg(&arg) {
+                "click" | "right-click" | "point" | "press" => match point_arg(&arg) {
                     Some((x, y)) if cmd == "click" => Step::Click(x, y),
+                    Some((x, y)) if cmd == "right-click" => Step::RightClick(x, y),
                     Some((x, y)) if cmd == "press" => Step::Press(x, y),
                     Some((x, y)) => Step::Pointer(x, y),
                     None => {
@@ -402,6 +408,7 @@ pub fn parse(src: &str) -> Vec<Step> {
                 "follow" => Step::Follow(n()),
                 "delete" => Step::Delete(arg),
                 "undo-delete" => Step::UndoDelete,
+                "undo-delete-folder" => Step::UndoDeleteFolder,
                 "release" => Step::Release,
                 _ => {
                     log::warn!("script: unknown step {l:?}");

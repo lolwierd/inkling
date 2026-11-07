@@ -20,7 +20,9 @@ use crate::ui::{self, Keyed, icon};
 
 mod goto;
 mod folders;
+mod menus;
 use folders::DraggedNote;
+use menus::{DeleteFolderAt, DeleteNoteAt, MoveNoteTo, NewNoteIn, OpenFolderAt, OpenNoteAt, RenameFolder};
 
 gpui_kit::actions!(
     app,
@@ -35,6 +37,7 @@ gpui_kit::actions!(
         JustMyWords,
         CopyNote,
         ExportNote,
+        DeleteNote,
         FindLooseThread,
         NextThread,
         PrevThread,
@@ -187,6 +190,7 @@ pub fn init(cx: &mut App) {
                 MenuItem::separator(),
                 MenuItem::action("Copy This Note", CopyNote),
                 MenuItem::action("Export This Note…", ExportNote),
+                MenuItem::action("Delete This Note", DeleteNote),
                 MenuItem::separator(),
                 MenuItem::action("Import from Obsidian…", ImportObsidian),
             ],
@@ -275,12 +279,21 @@ pub struct AppView {
     folder_page: Option<Option<String>>,
     sidebar_open: bool,
     sidebar_scroll: ScrollHandle,
+    folder_scroll: ScrollHandle,
     drag_scroll_frame: Option<Instant>,
     sidebar_motion: SidebarMotion,
     palette: Option<Entity<Palette>>,
     settings: Option<Entity<SettingsView>>,
     export: Option<(ExportStage, Format, bool)>,
     new_folder: Option<Entity<gpui_kit::component::input::InputState>>,
+    /// The folder being renamed in the sidebar, and its name field.
+    renaming: Option<(String, Entity<gpui_kit::component::input::InputState>)>,
+    rename_sub: Option<Subscription>,
+    /// The right-click menu shown last, item by item (`menus.rs`).
+    context_menu: Vec<(String, Box<dyn Action>)>,
+    /// The folder deleted last, where it sat, and the notes that were in it: Undo puts
+    /// it back while its toast shows.
+    deleted_folder: Option<(Folder, usize, Vec<String>)>,
     /// The note deleted last and where it sat in the list: Undo puts it back while its
     /// toast shows.
     deleted: Option<(Note, usize)>,
@@ -480,6 +493,13 @@ fn window_step(step: &crate::script::Step, window: &mut Window, cx: &mut App) {
             let (button, click_count) = (MouseButton::Left, 1);
             window.dispatch_event(PlatformInput::MouseDown(MouseDownEvent { button, position, modifiers: none, click_count, first_mouse: false }), cx);
             window.dispatch_event(PlatformInput::MouseUp(MouseUpEvent { button, position, modifiers: none, click_count }), cx);
+        }
+        Step::RightClick(x, y) => {
+            let position = point(px(*x), px(*y));
+            window.dispatch_event(move_to(position), cx);
+            let button = MouseButton::Right;
+            window.dispatch_event(PlatformInput::MouseDown(MouseDownEvent { button, position, modifiers: none, click_count: 1, first_mouse: false }), cx);
+            window.dispatch_event(PlatformInput::MouseUp(MouseUpEvent { button, position, modifiers: none, click_count: 1 }), cx);
         }
         Step::Pointer(x, y) => {
             window.dispatch_event(move_to(point(px(*x), px(*y))), cx);
@@ -702,6 +722,7 @@ impl AppView {
             folder_page: None,
             sidebar_open: false,
             sidebar_scroll: ScrollHandle::new(),
+            folder_scroll: ScrollHandle::new(),
             drag_scroll_frame: None,
             sidebar_motion: SidebarMotion::closed(Instant::now()),
             chrome,
@@ -711,6 +732,10 @@ impl AppView {
             settings: None,
             export: None,
             new_folder: None,
+            renaming: None,
+            rename_sub: None,
+            context_menu: vec![],
+            deleted_folder: None,
             deleted: None,
             stand_in: None,
             speech,
@@ -800,7 +825,7 @@ impl AppView {
                     }
                     // Input goes to the window as the platform would send it, outside any
                     // view's update, so the views it reaches can update themselves.
-                    Step::Key(_) | Step::Click(..) | Step::Pointer(..) | Step::Wheel(..) | Step::Press(..) | Step::Release => {
+                    Step::Key(_) | Step::Click(..) | Step::RightClick(..) | Step::Pointer(..) | Step::Wheel(..) | Step::Press(..) | Step::Release => {
                         cx.update(|window, cx| window_step(&step, window, cx)).is_ok()
                     }
                     _ => this.update_in(cx, |app, window, cx| app.script_step(step, window, cx)).is_ok(),
@@ -852,12 +877,17 @@ impl AppView {
                 state["dragging"] = serde_json::json!(cx.has_active_drag());
                 state["folder_page"] = serde_json::json!(self.folder_page.as_ref().map(|id| id.as_deref().unwrap_or("unfiled")));
                 state["note_folders"] = serde_json::json!(cx.global::<Store>().notes.iter().map(|n| (&n.title, &n.folder)).collect::<std::collections::BTreeMap<_, _>>());
+                state["folders"] = serde_json::json!(cx.global::<Store>().folders.iter().map(|f| &f.name).collect::<Vec<_>>());
+                state["note_titles"] = serde_json::json!(cx.global::<Store>().notes.iter().map(|n| &n.title).collect::<Vec<_>>());
+                state["context_menu"] = serde_json::json!(self.context_menu.iter().map(|(l, _)| l).collect::<Vec<_>>());
+                state["renaming"] = serde_json::json!(self.renaming.as_ref().map(|(id, _)| id));
                 log::info!("script dump {label}: {state}");
             }
             Step::Quit => cx.quit(),
             Step::Import(dir) => self.import_vault(crate::script::path(dir), cx),
             Step::Size(w, h) => script_resize(window, *w, *h),
             // as the menu bar does: off (nothing takes it) is left alone, on is dispatched
+            Step::Menu(menu, item) if menu == "Context" => self.pick_context_item(&item, window, cx),
             Step::Menu(menu, item) => {
                 let found = cx.get_menus().into_iter().flatten().filter(|m| m.name.as_ref() == menu.as_str()).flat_map(|m| m.items).find_map(|i| match i {
                     OwnedMenuItem::Action { name, action, .. } if name.as_str() == item.as_str() => Some(action),
@@ -874,6 +904,7 @@ impl AppView {
                 None => log::warn!("script: no note titled {title:?}"),
             },
             Step::UndoDelete => self.undo_delete(window, cx),
+            Step::UndoDeleteFolder => self.undo_delete_folder(cx),
             Step::Set(..) => {
                 self.page.update(cx, |p, cx| p.script_step(&step, window, cx));
                 // Appearance, text size and threads change the theme.
@@ -980,6 +1011,8 @@ impl AppView {
             return false;
         } else if self.sidebar_open && self.new_folder.is_some() {
             self.finish_new_folder(false, window, cx);
+        } else if self.sidebar_open && self.renaming.is_some() {
+            self.finish_rename(false, window, cx);
         } else if self.sidebar_open {
             self.sidebar_open = false;
             cx.notify();
@@ -1139,7 +1172,7 @@ impl AppView {
     fn on_page_event(&mut self, _: &Entity<NotePage>, ev: &PageEvent, window: &mut Window, cx: &mut Context<Self>) {
         match ev {
             PageEvent::NotesChanged => cx.notify(),
-            PageEvent::OpenFolder(id) => self.open_folder(Some(id.clone()), window, cx),
+            PageEvent::OpenFolder(id) => self.open_folder(id.clone(), window, cx),
             PageEvent::OpenNote(id) => self.open_note(id.clone(), window, cx),
             PageEvent::OpenSettings(tab) => self.open_settings(*tab, window, cx),
             PageEvent::Learned => self.toast("Inkling noted something about you (Settings › About you)", cx),
@@ -1240,15 +1273,22 @@ impl AppView {
         // Move the page off the note first: switching notes saves the one being
         // left, so deleting before the switch would write it straight back.
         self.stand_in = None;
+        // deleted from a folder's page, the page stays (the note behind it changes)
+        let folder_page = self.folder_page.clone();
         if self.page.read(cx).note_id() == id {
             let next = cx.global::<Store>().notes.iter().find(|n| n.id != id).map(|n| n.id.clone());
             match next {
                 Some(n) => self.open_note(n, window, cx),
                 None => {
+                    self.folder_page = None;
                     self.create_note("", None, window, cx);
                     self.stand_in = Some(self.page.read(cx).note_id().to_string());
                 }
             }
+        }
+        if folder_page.is_some() && self.folder_page.is_none() {
+            self.folder_page = folder_page;
+            self.focus.focus(window, cx);
         }
         // ⌘⌫ in the palette is one keystroke away from clearing the search box, so a
         // deleted note can come back for a few seconds.
@@ -1561,11 +1601,16 @@ impl AppView {
         } else { self.drag_scroll_frame = None; }
         let note_row = |n: &Note, indent: f32, cx: &mut Context<Self>| {
             let id = n.id.clone();
+            let menu_id = n.id.clone();
             let on = self.folder_page.is_none() && n.id == current;
             // its own open threads and those from other notes that also quote it
             let open = crate::between::open_here(&cx.global::<Store>().notes, n);
             row(SharedString::from(format!("note-{}", n.id)), on)
                 .on_drag(DraggedNote { id: n.id.clone(), title: if n.title.is_empty() { "Untitled".into() } else { n.title.clone() } }, |drag, offset, _, cx| drag.preview(offset, cx))
+                .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    this.note_menu(menu_id.clone(), ev.position, window, cx);
+                }))
                 .pl(px(8. + indent))
                 .child(icon("file-text", 13., p.faint))
                 .child(
@@ -1592,69 +1637,90 @@ impl AppView {
                 })
                 .keyed_as(format!("sidebar:note-{}", n.id), 6., ring, cx, move |this, window, cx| this.open_note(id.clone(), window, cx))
         };
+        // A folder's row, Unfiled's included: the fold arrow, the name (or the field
+        // renaming it), and how many notes a folded folder holds. A right click has its menu.
+        let renaming = self.renaming.clone();
+        let folder_row = |folder: Option<&Folder>, count: usize, collapsed: bool, cx: &mut Context<Self>| {
+            let fid = folder.map(|f| f.id.clone());
+            let key = fid.clone().unwrap_or_else(|| "unfiled".into());
+            let name = folder.map_or("Unfiled".to_string(), |f| f.name.clone());
+            let field = renaming.as_ref().filter(|(id, _)| Some(id) == fid.as_ref()).map(|(_, input)| input.clone());
+            let (toggle, menu, open) = (fid.clone(), fid.clone(), fid.clone());
+            row(SharedString::from(format!("folder-{key}")), self.folder_page.as_ref() == Some(&fid))
+                .text_color(p.graphite)
+                .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    this.folder_menu(menu.clone(), ev.position, window, cx);
+                }))
+                .child(
+                    ui::icon_button(SharedString::from(format!("folder-toggle-{key}")), if collapsed { "chevron-right" } else { "chevron-down" }, 12., &t)
+                        .keyed_as(format!("sidebar:toggle-{key}"), 4., ring, cx, move |_, _, cx| {
+                            cx.stop_propagation();
+                            let store = cx.global_mut::<Store>();
+                            match &toggle {
+                                Some(id) => {
+                                    if let Some(f) = store.folders.iter_mut().find(|f| &f.id == id) { f.collapsed = !f.collapsed; }
+                                    store.save_folders();
+                                }
+                                None => {
+                                    store.settings.unfiled_collapsed = !store.settings.unfiled_collapsed;
+                                    store.save_settings();
+                                }
+                            }
+                            cx.notify();
+                        }),
+                )
+                .child(match field.clone() {
+                    // the New folder field's paper box, its words where the name's were, and the
+                    // row's height kept (the field's own is taller), so nothing below moves
+                    Some(input) => div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .h(px(21.))
+                        .ml(px(-5.))
+                        .px(px(4.))
+                        .rounded(px(4.))
+                        .border_1()
+                        .border_color(p.faint)
+                        .bg(p.paper)
+                        .flex()
+                        .items_center()
+                        .overflow_hidden()
+                        .text_color(p.ink)
+                        .child(gpui_kit::component::input::Input::new(&input).appearance(false).px_0().py_0().text_size(px(ts::UI)))
+                        .into_any_element(),
+                    None => div().flex_1().min_w(px(0.)).truncate().child(name).into_any_element(),
+                })
+                // a folded folder's count lines up with the notes' counts
+                .when(collapsed && count > 0, |d| d.child(ui::key_hint(count.to_string(), &t)))
+                // while its name is being typed, Return and Space are the field's, not the row's
+                .map(|d| if field.is_some() { d } else { d.keyed_as(format!("sidebar:folder-{key}"), 6., ring, cx, move |this, window, cx| this.open_folder(open.clone(), window, cx)) })
+        };
 
         let mut list = div().flex().flex_col().gap(px(1.));
-        for f in &folders {
-            let fid = f.id.clone();
-            let collapsed = f.collapsed;
-            let inside: Vec<&Note> = notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect();
-            let group = SharedString::from(format!("folder-row-{}", f.id));
-            let target = fid.clone();
-            let drop_id = fid.clone();
-            let mut section = div().id(SharedString::from(format!("folder-drop-{}", f.id)))
+        // Unfiled last, under the folders, as the notes no folder has taken
+        let unfiled_notes: Vec<&Note> = notes.iter().filter(|n| n.folder.as_ref().is_none_or(|f| !folders.iter().any(|x| &x.id == f))).collect();
+        let sections: Vec<(Option<&Folder>, Vec<&Note>, bool)> = folders
+            .iter()
+            .map(|f| (Some(f), notes.iter().filter(|n| n.folder.as_deref() == Some(f.id.as_str())).collect(), f.collapsed))
+            .chain(std::iter::once((None, unfiled_notes, cx.global::<Store>().settings.unfiled_collapsed)))
+            .collect();
+        for (folder, inside, collapsed) in sections {
+            let fid = folder.map(|f| f.id.clone());
+            let key = fid.clone().unwrap_or_else(|| "unfiled".into());
+            let (target, drop_id) = (fid.clone(), fid.clone());
+            let mut section = div().id(SharedString::from(format!("folder-drop-{key}")))
                 .rounded(px(6.)).border_l_2().border_color(ring.opacity(0.))
-                .can_drop(move |value, _, cx| value.downcast_ref::<DraggedNote>().is_some_and(|drag| cx.global::<Store>().note(&drag.id).is_some_and(|n| n.folder.as_ref() != Some(&target))))
-                .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(ring.opacity(0.08)).border_color(ring.opacity(0.65)))
-                .on_drop(cx.listener(move |this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, Some(drop_id.clone()), cx)))
-                .child(
-                row(SharedString::from(format!("folder-{}", f.id)), self.folder_page.as_ref() == Some(&Some(f.id.clone())))
-                    .group(group.clone())
-                    .text_color(p.graphite)
-                    .child({
-                        let id = fid.clone();
-                        ui::icon_button(SharedString::from(format!("folder-toggle-{}", f.id)), if collapsed { "chevron-right" } else { "chevron-down" }, 12., &t)
-                            .keyed_as(format!("sidebar:toggle-{}", f.id), 4., ring, cx, move |_, _, cx| {
-                                cx.stop_propagation();
-                                let store = cx.global_mut::<Store>();
-                                if let Some(f) = store.folders.iter_mut().find(|f| f.id == id) { f.collapsed = !f.collapsed; }
-                                store.save_folders();
-                                cx.notify();
-                            })
+                .can_drop(move |value, _, cx| value.downcast_ref::<DraggedNote>().is_some_and(|drag| {
+                    let store = cx.global::<Store>();
+                    store.note(&drag.id).is_some_and(|n| {
+                        let here = n.folder.clone().filter(|f| store.folders.iter().any(|x| &x.id == f));
+                        here != target
                     })
-                    .child(div().flex_1().min_w(px(0.)).truncate().child(f.name.clone()))
-                    // a folded folder's count lines up with the notes' counts; under the
-                    // pointer the remove × takes its place
-                    .when(collapsed && !inside.is_empty(), |d| d.child(ui::key_hint(inside.len().to_string(), &t).group_hover(group.clone(), |s| s.invisible())))
-                    .when(!dragging, |d| d.child({
-                        // Remove the folder; its notes stay, at the top level.
-                        let fid = fid.clone();
-                        div()
-                            .id(SharedString::from(format!("folder-remove-{}", f.id)))
-                            .absolute()
-                            .top_0()
-                            .bottom_0()
-                            .right(px(6.))
-                            .flex()
-                            .items_center()
-                            .invisible()
-                            .group_hover(group, |s| s.visible())
-                            .child(div().p(px(2.)).rounded(px(4.)).hover(move |s| s.bg(p.hover)).child(icon("x", 11., p.faint)))
-                            .tooltip(|window, cx| gpui_kit::component::tooltip::Tooltip::new("Remove folder (its notes stay)").build(window, cx))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                cx.global_mut::<Store>().delete_folder(&fid);
-                                if this.folder_page.as_ref() == Some(&Some(fid.clone())) { this.folder_page = Some(None); }
-                                // The open note may have been in it: it is at the top level now.
-                                this.page.update(cx, |page, _| {
-                                    if page.note.folder.as_deref() == Some(fid.as_str()) {
-                                        page.note.folder = None;
-                                    }
-                                });
-                                this.toast("Folder removed; its notes are still here", cx);
-                            }))
-                    }))
-                    .keyed_as(format!("sidebar:folder-{}", f.id), 6., ring, cx, move |this, window, cx| this.open_folder(Some(fid.clone()), window, cx)),
-            );
+                }))
+                .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(ring.opacity(0.08)).border_color(ring.opacity(0.65)))
+                .on_drop(cx.listener(move |this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, drop_id.clone(), cx)))
+                .child(folder_row(folder, inside.len(), collapsed, cx));
             if !collapsed {
                 if inside.is_empty() {
                     section = section.child(div().pl(px(49.)).py(px(3.)).text_size(px(ts::META)).text_color(p.faint).child("No notes in here yet"));
@@ -1665,17 +1731,6 @@ impl AppView {
             }
             list = list.child(section);
         }
-        let mut unfiled = div().id("unfiled-drop").rounded(px(6.)).border_l_2().border_color(ring.opacity(0.))
-            .can_drop(|value, _, cx| value.downcast_ref::<DraggedNote>().is_some_and(|drag| cx.global::<Store>().note(&drag.id).is_some_and(|n| n.folder.is_some())))
-            .drag_over::<DraggedNote>(move |s, _, _, _| s.bg(ring.opacity(0.08)).border_color(ring.opacity(0.65)))
-            .on_drop(cx.listener(|this, drag: &DraggedNote, _, cx| this.move_note(&drag.id, None, cx)))
-            .child(row("unfiled".into(), self.folder_page == Some(None))
-            .child(icon("folder", 13., p.faint)).child("Unfiled")
-            .keyed_as("sidebar:unfiled", 4., ring, cx, |this, window, cx| this.open_folder(None, window, cx)));
-        for n in notes.iter().filter(|n| n.folder.as_ref().is_none_or(|f| !folders.iter().any(|x| &x.id == f))) {
-            unfiled = unfiled.child(note_row(n, 14., cx));
-        }
-        list = list.child(unfiled);
 
         // the keys each row shows are the ones bound now (Settings > Shortcuts)
         let keys_of = |name: &str| crate::shortcuts::keys_for(name, cx).unwrap_or_default();
@@ -2040,7 +2095,7 @@ impl Render for AppView {
         // other chrome leaves the keyboard where it was (in the note) instead of taking
         // it to the window, where typing goes nowhere.
         let showing_note = self.folder_page.is_none();
-        let content = if showing_note { self.page.clone().into_any_element() } else { self.folder_view(cx) };
+        let content = if showing_note { self.page.clone().into_any_element() } else { self.folder_view(window, cx) };
         let root = div().id("app");
         // the Edit menu's items, to the note or the field the keyboard is in
         edit_menu(root, showing_note.then_some(&note), window, cx)
@@ -2072,6 +2127,23 @@ impl Render for AppView {
             .on_action(cx.listener(|this, _: &DismissThread, _, cx| this.page.update(cx, |p, cx| p.dismiss_active(cx))))
             .on_action(cx.listener(|this, _: &UndoDismiss, _, cx| this.page.update(cx, |p, cx| p.undo_dismiss(cx))))
             .on_action(cx.listener(|this, _: &FollowThread, _, cx| this.page.update(cx, |p, cx| p.follow_active(cx)))))
+            .when(showing_note, |d| d.on_action(cx.listener(|this, _: &DeleteNote, window, cx| {
+                let id = this.page.read(cx).note_id().to_string();
+                this.delete_note(id, window, cx);
+            })))
+            // the right-click menus' items (`menus.rs`)
+            .on_action(cx.listener(|this, a: &OpenNoteAt, window, cx| this.open_note(a.id.clone(), window, cx)))
+            .on_action(cx.listener(|this, a: &MoveNoteTo, _, cx| this.move_note(&a.id, a.folder.clone(), cx)))
+            .on_action(cx.listener(|this, a: &DeleteNoteAt, window, cx| this.delete_note(a.id.clone(), window, cx)))
+            .on_action(cx.listener(|this, a: &NewNoteIn, window, cx| {
+                let name = a.folder.as_ref().and_then(|id| cx.global::<Store>().folders.iter().find(|f| &f.id == id)).map(|f| f.name.clone());
+                // Unfiled's New Note is unfiled, even from a folder's page
+                this.folder_page = None;
+                this.create_note("", name, window, cx);
+            }))
+            .on_action(cx.listener(|this, a: &OpenFolderAt, window, cx| this.open_folder(a.folder.clone(), window, cx)))
+            .on_action(cx.listener(|this, a: &RenameFolder, window, cx| this.start_rename(a.id.clone(), window, cx)))
+            .on_action(cx.listener(|this, a: &DeleteFolderAt, _, cx| this.delete_folder(a.id.clone(), cx)))
             .on_action(cx.listener(|this, _: &ShowWelcome, window, cx| this.show_welcome(window, cx)))
             .on_action(cx.listener(|this, _: &ImportObsidian, _, cx| this.choose_vault(cx)))
             .when(showing_note, |d| d.on_action(cx.listener(|this, _: &TurnOver, window, cx| this.page.update(cx, |p, cx| p.turn_over(window, cx))))
@@ -2092,6 +2164,7 @@ impl Render for AppView {
                 let chat = if self.page.read(cx).chat_open { crate::note_page::CHAT_WIDTH } else { 0. };
                 crate::toast::stack(px(chat), window, cx, |this, kind, window, cx| match kind {
                     Kind::NoteDeleted => this.undo_delete(window, cx),
+                    Kind::FolderDeleted => this.undo_delete_folder(cx),
                     Kind::ThreadDismissed => this.page.update(cx, |p, cx| p.undo_dismiss(cx)),
                     Kind::WrittenIn => {
                         this.page.update(cx, |p, cx| p.undo_write_in(cx));

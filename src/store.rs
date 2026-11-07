@@ -1092,6 +1092,8 @@ pub struct Settings {
     pub shortcuts: BTreeMap<String, Vec<String>>,
     /// Look things up on the web: the minds may search, and a correction may cite a page.
     pub look_up: bool,
+    /// Unfiled folded in the sidebar, as a folder's `collapsed` is.
+    pub unfiled_collapsed: bool,
 }
 
 impl Default for Settings {
@@ -1114,6 +1116,7 @@ impl Default for Settings {
             models: vec![],
             shortcuts: BTreeMap::new(),
             look_up: true,
+            unfiled_collapsed: false,
         }
     }
 }
@@ -1704,6 +1707,7 @@ mod tests {
             ],
             shortcuts: BTreeMap::from([("app::NewNote".to_string(), vec!["alt-cmd-n".to_string()]), ("app::Quit".to_string(), vec![])]),
             look_up: false,
+            unfiled_collapsed: true,
         };
         store.save_settings();
         let reopened = Store::open_at(tmp.0.clone()).unwrap();

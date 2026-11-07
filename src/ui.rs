@@ -94,7 +94,12 @@ pub fn keyed<V: 'static>(
     // undo a control's own `.absolute()`)
     el.track_focus(focus)
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| press(this, window, cx)))
+        // a left click, a tap or a key: a right (or ⌃-) click is for a row's menu, as on a Mac
+        .on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
+            if ev.standard_click() {
+                press(this, window, cx)
+            }
+        }))
         .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
             if is_press(&ev.keystroke) {
                 cx.stop_propagation();

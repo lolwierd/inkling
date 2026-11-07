@@ -36,6 +36,8 @@ pub enum Kind {
     Done,
     /// "Note deleted", with Undo.
     NoteDeleted,
+    /// "Folder deleted; its notes are in Unfiled", with Undo.
+    FolderDeleted,
     /// "Thread dismissed", with Undo and its keys (⌥⌘Z).
     ThreadDismissed,
     /// Something went wrong: an ochre thread, and a close control.
@@ -49,20 +51,21 @@ impl Kind {
     pub fn life(self) -> Duration {
         match self {
             Kind::Done => Duration::from_secs(3),
-            Kind::NoteDeleted | Kind::ThreadDismissed => Duration::from_secs(8),
+            Kind::NoteDeleted | Kind::FolderDeleted | Kind::ThreadDismissed => Duration::from_secs(8),
             Kind::Problem => Duration::from_secs(12),
             Kind::WrittenIn => Duration::from_secs(8),
         }
     }
 
     fn undo(self) -> bool {
-        matches!(self, Kind::NoteDeleted | Kind::ThreadDismissed | Kind::WrittenIn)
+        matches!(self, Kind::NoteDeleted | Kind::FolderDeleted | Kind::ThreadDismissed | Kind::WrittenIn)
     }
 
     fn name(self) -> &'static str {
         match self {
             Kind::Done => "done",
             Kind::NoteDeleted => "note_deleted",
+            Kind::FolderDeleted => "folder_deleted",
             Kind::ThreadDismissed => "thread_dismissed",
             Kind::Problem => "problem",
             Kind::WrittenIn => "written_in",

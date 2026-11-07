@@ -544,7 +544,8 @@ pub enum PageEvent {
     /// Something listed in the sidebar changed (title, a new note).
     NotesChanged,
     OpenNote(String),
-    OpenFolder(String),
+    /// A folder's page; None is Unfiled.
+    OpenFolder(Option<String>),
     OpenSettings(crate::settings::Tab),
     /// The about-you paragraph picked up something new.
     Learned,
@@ -3285,6 +3286,114 @@ impl NotePage {
 
 // ----- rendering ---------------------------------------------------------------
 
+/// The linen around the page: the only place the weave shows.
+fn weave(p: &crate::theme::Palette) -> impl IntoElement {
+    let weave_color = p.weave;
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            let step = px(3.);
+            let mut y = bounds.origin.y;
+            while y < bounds.origin.y + bounds.size.height {
+                window.paint_quad(fill(Bounds::new(point(bounds.origin.x, y), size(bounds.size.width, px(1.))), weave_color));
+                y += step;
+            }
+            let mut x = bounds.origin.x;
+            while x < bounds.origin.x + bounds.size.width {
+                window.paint_quad(fill(Bounds::new(point(x, bounds.origin.y), size(px(1.), bounds.size.height)), weave_color));
+                x += step;
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+/// The sheet lies on the cloth: a close shadow and a long soft one.
+fn sheet_shadow(p: &crate::theme::Palette) -> Vec<BoxShadow> {
+    vec![
+        BoxShadow { color: p.shadow, offset: point(px(0.), px(1.)), blur_radius: px(2.), spread_radius: px(0.), inset: false },
+        BoxShadow { color: p.shadow.opacity(0.6), offset: point(px(0.), px(12.)), blur_radius: px(32.), spread_radius: px(-12.), inset: false },
+    ]
+}
+
+/// A page that is not a note (a folder's contents) on a note's own sheet: the same width,
+/// margins, cloth band, running stitch along the top and shadow, so going between a
+/// folder and its notes moves nothing but the words. `page(left, column, width)` builds
+/// what lies on it, as `back::view` does for the back of a note.
+pub(crate) fn sheet_page(window: &Window, scroll: &ScrollHandle, p: &crate::theme::Palette, page: impl FnOnce(f32, f32, f32) -> AnyElement) -> AnyElement {
+    let viewport = window.viewport_size();
+    let width = viewport.width.as_f32();
+    let m = Metrics::for_width(width - 2. * (SHEET_PAD + 14.));
+    let sheet_w = m.page() + 2. * SHEET_PAD;
+    let fits = sheet_w <= width - 16.;
+    let sheet_x = if fits { (width - sheet_w) / 2. } else { 12. };
+    let border_line = p.faint.opacity(0.42);
+    let border = canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            let y = bounds.origin.y + px(24.);
+            stitch::running_stitch(window, bounds.origin.x + px(SHEET_PAD), bounds.origin.x + bounds.size.width - px(SHEET_PAD), y, border_line, 7, false);
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .w_full()
+    .h(px(44.));
+    let sheet = div()
+        .relative()
+        .w(px(sheet_w))
+        .min_h(viewport.height - px(SHEET_TOP + SHEET_BOTTOM))
+        .px(px(SHEET_PAD))
+        .pt(px(50.))
+        .bg(p.paper)
+        .rounded(px(4.))
+        .shadow(sheet_shadow(p))
+        .child(border)
+        .child(page(m.column_left(), m.column, m.page()));
+    let scrolled = (-scroll.offset().y.as_f32() / 24.).clamp(0., 1.);
+    let hem = (scrolled > 0.).then(|| {
+        div()
+            .absolute()
+            .top(px(CHROME_H))
+            .left(px(sheet_x))
+            .w(px(sheet_w))
+            .h(px(10.))
+            .opacity(scrolled)
+            .bg(linear_gradient(180., linear_color_stop(p.shadow, 0.), linear_color_stop(p.shadow.opacity(0.), 1.)))
+    });
+    div()
+        .relative()
+        .size_full()
+        .bg(p.cloth)
+        .child(weave(p))
+        .child(
+            div()
+                .id("sheet-page-scroll")
+                .absolute()
+                .top(px(CHROME_H))
+                .left_0()
+                .right_0()
+                .bottom_0()
+                .overflow_y_scroll()
+                .track_scroll(scroll)
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .pt(px(SHEET_TOP - CHROME_H))
+                        .pb(px(SHEET_BOTTOM))
+                        .map(|d| if fits { d.justify_center() } else { d.justify_start().pl(px(12.)) })
+                        .child(sheet),
+                ),
+        )
+        .children(hem)
+        .into_any_element()
+}
+
 impl NotePage {
     fn choose_local_directories(&mut self, cx: &mut Context<Self>) {
         let note_id = self.note.id.clone();
@@ -3434,14 +3543,15 @@ impl NotePage {
                     }),
             )
             .into_any_element();
-        // Location belongs above the tools, like a breadcrumb back to the containing folder.
-        div().flex().flex_col().gap(px(12.))
-            .when_some(folder, |d, folder| d.child(div().id("note-folder").flex().items_center().gap(px(6.)).text_size(px(ts::SMALL))
+        // Where the note is filed, above its tools: its folder's name, a way back to the
+        // folder's page. It fades while you write, as the tools do.
+        div().flex().flex_col().gap(px(10.))
+            .when_some(folder, |d, folder| d.child(div().flex().child(div().id("note-folder").flex().items_center().gap(px(6.)).h(px(18.)).text_size(px(ts::SMALL))
                 .text_color(p.graphite).cursor_pointer().hover(move |s| s.text_color(p.ink)).active(|s| s.opacity(0.7))
-                .child(icon("folder", 12., p.graphite))
+                .opacity(self.chrome.get())
+                .child(icon("folder", 12., p.faint))
                 .child(div().max_w(px(240.)).truncate().child(folder.name))
-                .child(icon("chevron-right", 10., p.faint))
-                .keyed_as("header:folder", 4., t.voice_ink, cx, move |_, _, cx| cx.emit(PageEvent::OpenFolder(folder.id.clone())))))
+                .keyed_as("header:folder", 4., t.voice_ink, cx, move |_, _, cx| cx.emit(PageEvent::OpenFolder(Some(folder.id.clone())))))))
             .child(header).into_any_element()
     }
 
@@ -4227,13 +4337,45 @@ impl NotePage {
             .max_h(px(panel_limit))
             .overflow_y_scroll()
             .track_scroll(&conversation_scroll)
-            .child(body.pr(px(5.)));
-        let conversation = div().relative().flex().flex_col().min_h(px(0.)).child(conversation).child(
+            .child(body.pr(px(12.)));
+        // Where you are in a long thread is a length of the thread itself, laid in the
+        // gap between the words and the tag's stitched edge (the box reaches 9 px into the
+        // tag's padding for it, its words held back by as much): thin, in the thread's
+        // colour, a little thicker under the pointer. Where words run on past an edge,
+        // they fade into the card.
+        let fade_scroll = conversation_scroll.clone();
+        let card = p.card;
+        let fades = canvas(
+            |_, _, _| (),
+            move |bounds, _, window, _| {
+                let off = -fade_scroll.offset().y.as_f32();
+                let max = fade_scroll.max_offset().y.as_f32();
+                let band = 18.;
+                let (above, below) = ((off / band).clamp(0., 1.), ((max - off) / band).clamp(0., 1.));
+                let h = px(band).min(bounds.size.height / 2.);
+                if above > 0. {
+                    window.paint_quad(fill(Bounds::new(bounds.origin, size(bounds.size.width, h)), linear_gradient(180., linear_color_stop(card.opacity(above), 0.), linear_color_stop(card.opacity(0.), 1.))));
+                }
+                if below > 0. {
+                    let top = bounds.origin.y + bounds.size.height - h;
+                    window.paint_quad(fill(Bounds::new(point(bounds.origin.x, top), size(bounds.size.width, h)), linear_gradient(0., linear_color_stop(card.opacity(below), 0.), linear_color_stop(card.opacity(0.), 1.))));
+                }
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
+        let conversation = div().relative().mr(px(-9.)).flex().flex_col().min_h(px(0.)).child(conversation).child(fades).child(
             gpui_kit::component::scroll::Scrollbar::vertical(&conversation_scroll)
                 .mode(gpui_kit::component::scroll::ScrollbarMode::Always)
                 .styles(move |styles| styles
-                    .track(|style| style.bg(gpui_kit::transparent_black()))
-                    .thumb(move |style| style.bg(p.faint.opacity(0.35))))
+                    .track(|style| style.bg(gpui_kit::transparent_black()).width(px(10.)))
+                    .track_hover(|style| style.bg(gpui_kit::transparent_black()).width(px(10.)))
+                    .track_active(|style| style.bg(gpui_kit::transparent_black()).width(px(10.)))
+                    .thumb(move |style| style.bg(thread_color.opacity(0.45)).width(px(2.)).inset(px(2.)).radius(px(1.)).min_length(px(24.)))
+                    .thumb_hover(move |style| style.bg(thread_color.opacity(0.7)).width(px(4.)).inset(px(1.)).radius(px(2.)).min_length(px(24.)))
+                    .thumb_active(move |style| style.bg(thread_color.opacity(0.85)).width(px(4.)).inset(px(1.)).radius(px(2.)).min_length(px(24.))))
         );
         let mut body = header.max_h(px(panel_limit - 22.)).child(conversation);
         if is_active {
@@ -5459,28 +5601,7 @@ impl Render for NotePage {
         .w_full()
         .h(px(44.));
 
-        // The linen around the page: the only place the weave shows.
-        let weave_color = p.weave;
-        let weave = canvas(
-            |_, _, _| (),
-            move |bounds, _, window, _| {
-                let step = px(3.);
-                let mut y = bounds.origin.y;
-                while y < bounds.origin.y + bounds.size.height {
-                    window.paint_quad(fill(Bounds::new(point(bounds.origin.x, y), size(bounds.size.width, px(1.))), weave_color));
-                    y += step;
-                }
-                let mut x = bounds.origin.x;
-                while x < bounds.origin.x + bounds.size.width {
-                    window.paint_quad(fill(Bounds::new(point(x, bounds.origin.y), size(px(1.), bounds.size.height)), weave_color));
-                    x += step;
-                }
-            },
-        )
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full();
+        let weave = weave(&p);
 
         let header = self.header(cx);
         let brief = self.brief_line(cx);
@@ -5532,10 +5653,7 @@ impl Render for NotePage {
             .pt(px(50.))
             .bg(p.paper)
             .rounded(px(4.))
-            .shadow(vec![
-                BoxShadow { color: p.shadow, offset: point(px(0.), px(1.)), blur_radius: px(2.), spread_radius: px(0.), inset: false },
-                BoxShadow { color: p.shadow.opacity(0.6), offset: point(px(0.), px(12.)), blur_radius: px(32.), spread_radius: px(-12.), inset: false },
-            ])
+            .shadow(sheet_shadow(&p))
             .child(border)
             .child(page)
             .children(turn.fold.map(|at| crate::back::fold_shadow(at, m.page() + 2. * SHEET_PAD, &p)))

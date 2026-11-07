@@ -83,7 +83,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | File | Owns | Look here for |
 |---|---|---|
 | `src/main.rs` | logging, the notebook guard, the one window | `INKLING_LOG_JSON`, window options |
-| `src/app/folders.rs` | folder pages, shared note drag, saving moves between folders | `open_folder`, `move_note`, `folder_view` |
+| `src/app/folders.rs` | folder pages (on a note's sheet, `note_page::sheet_page`), shared note drag, saving moves between folders | `open_folder`, `move_note`, `folder_view` |
+| `src/app/menus.rs` | right-click menus on notes and folders (macOS's own; a test window keeps the items for `menu: Context > …`), deleting a folder with Undo, renaming one in place | `note_menu`, `folder_menu`, `delete_folder`, `start_rename` |
 | `src/app.rs` | the window: no title bar (traffic lights, sidebar toggle and Chat sit on the cloth above the sheet and fade while you type), the sidebar with the wordmark, ⌘K palette and export overlays, opening Settings, hold-⌥ dictation, the script runner (`run_script`) and window-level steps | actions and menus (`init`), `chrome_layer`, `INKLING_OPEN`, `INKLING_JIGGLE` |
 | `src/shortcuts.rs` | every shortcut: the table (app actions here, the editor's from `editor::bindings()`), your keys from `settings.json` `shortcuts`, clashes, the keymap rebuild and menu refresh when a key changes | `table`, `apply`, `clashes`, `take` (what recording accepts) |
 | `src/note_page.rs` | one note: header row, editor, the margin's tags (folded to a tab until pointed at or opened; draggable, `Thread.tag_offset`), threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |

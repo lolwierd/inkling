@@ -163,7 +163,7 @@ pub fn first_run_note(mode: Mode) -> Note {
         (P, "The name above the title is the note\u{2019}s mind. Inkling comes with Staff engineer, Editor, Skeptic, Socratic tutor and Investor. In Settings, under Minds, you can make your own: say what it is for and how it thinks, give it a voice (plain, warm, blunt or Socratic), and choose how often it speaks. Each mind keeps its own thread colour, so you can see who asked what."),
         (P, "Settings, under About you, holds what Inkling knows about you. Turn on Inkling learns about you, and it keeps what matters from your replies."),
         (H2, "Your notebook"),
-        (P, "\u{2318}\\ opens your notes and folders; a dot marks notes with open threads. \u{2318}K finds a note or starts one. \u{21e7}\u{2318}C copies a note, and \u{21e7}\u{2318}E exports it as Markdown, HTML or Word, with its threads or without. Help > Welcome Guide brings this page back."),
+        (P, "\u{2318}\\ opens your notes and folders; a dot marks notes with open threads. Right-click a note or a folder to move, rename or delete it (Undo brings it back). \u{2318}K finds a note or starts one. \u{21e7}\u{2318}C copies a note, and \u{21e7}\u{2318}E exports it as Markdown, HTML or Word, with its threads or without. Help > Welcome Guide brings this page back."),
         (P, "\u{21e7}\u{2318}K shows your loose ends: every open thread in the notebook, oldest first. Type to narrow the list, and Return opens the note at those words."),
         (P, "Coming from Obsidian? File > Import from Obsidian brings a vault in with its folders. Inkling leaves the imported words alone, so it reads only what you write afterwards, until you have a note read through."),
         (H2, "Make it yours"),

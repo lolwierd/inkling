@@ -18,8 +18,7 @@ pub const DISPLAY: &str = "Fraunces Display";
 /// Code blocks: Spline Sans Mono, whose weight on the page matches Fraunces Text, so a
 /// block of code is neither a grey hole nor a dark slab.
 pub const MONO: &str = "Spline Sans Mono";
-/// Inline code: the same face drawn at 0.86 of the size it is set at
-/// (`design/tools/fetch-app-fonts.py`), because a line of text has one size.
+/// Inline code: the same face drawn at 0.86 of its set size, because a line of text has one size.
 pub const MONO_INLINE: &str = "Spline Sans Mono Inline";
 
 /// The interface's type scale, in Figtree: five sizes, so labels, rows and hints line up

@@ -3,8 +3,7 @@
 //! not stitching: they are sewn in your ink, in tacking thread, or in the thread of
 //! their kind, and never in madder or rose, which are only ever Inkling's.
 //!
-//! The geometry is pure (and tested); the painting takes a window. The sizes follow
-//! the explorations board (`design/explorations/index.html`, "04 Other blocks").
+//! The geometry is pure (and tested); the painting takes a window.
 
 use gpui_kit::*;
 use std::time::{Duration, Instant};

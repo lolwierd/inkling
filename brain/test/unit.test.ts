@@ -205,7 +205,7 @@ describe("classify", () => {
     ['API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', "overloaded"],
     ["Repeated 529 Overloaded errors", "overloaded"],
     // Request ids and other digits must not look like status codes.
-    ["API Error: 500 Internal server error (request_id req_0114013b4290)", "other"],
+    ["API Error: 500 Internal server error (request_id req_test123)", "other"],
     ["The author of this note is not here", "other"],
     ["Claude Code process exited with code 1", "other"],
     ["Claude Code process aborted by user", "other"],

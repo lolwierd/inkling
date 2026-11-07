@@ -2,8 +2,5 @@ target/
 brain/node_modules/
 brain/dist/
 .DS_Store
-design/tools/fonts/
 .worktrees/
-design/video/*.mp4
 __pycache__/
-design/video/audio/*.wav

@@ -1,6 +1,7 @@
 {
   "name": "inkling-brain",
   "private": true,
+  "license": "Unlicense",
   "type": "module",
   "version": "0.1.2",
   "description": "Inkling's model sidecar: speaks JSON lines on stdio, talks to Claude through the Agent SDK.",

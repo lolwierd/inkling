@@ -3,6 +3,7 @@ name = "inkling"
 version = "0.1.2"
 edition = "2024"
 description = "A local notebook that thinks with you, in the margin."
+license = "Unlicense"
 publish = false
 
 [dependencies]

@@ -1,7 +1,6 @@
 //! Threads between notes, the page's half of the reading loop: once a paragraph has been
 //! read, look for its subject in other notes, and when the model finds that a passage
-//! disagrees with it, open one thread that quotes both
-//! (`design/features/threads-between-notes.md`). The index, the gate and the far ends
+//! disagrees with it, open one thread that quotes both. The index, the gate and the far ends
 //! themselves are in `crate::between`.
 
 use gpui_kit::*;

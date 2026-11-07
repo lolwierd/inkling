@@ -2,8 +2,7 @@
 //! shows the words a thread hangs from and never what Inkling said, because Inkling speaks
 //! only in the margin of the page you are on. Choosing a row goes to those words with the
 //! tag open (`NotePage::go_to_thread`). The list is built from the notes already in memory,
-//! the open note from the page's own copy; there is no index. The design and its reasons:
-//! `design/features/loose-ends.md`.
+//! the open note from the page's own copy; there is no index.
 
 use std::collections::HashMap;
 use std::ops::Range;

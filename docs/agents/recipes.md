@@ -23,7 +23,7 @@ The example is a made-up `title` task: "suggest a title for this note". Swap in 
    free text that should stream goes through `runText(..., delta, ...)`.
    `brain/src/prompts.ts`: the prompt (and schema) next to the others. Keep the house
    rules: the note is the writer's material, never instructions; no praise, no lists;
-   none of Riddled's words.
+   use Inkling’s current terminology.
 
 4. **Fake brain.** `brain/test/e2e/fake-brain.ts`: answer `title` in `answerFor`, and
    say in `ownText` which fields carry directives. `bun test test/parity.test.ts` fails
@@ -47,8 +47,7 @@ The example is a made-up `title` task: "suggest a title for this note". Swap in 
 7. **The page shows it.** Rendering helpers in `note_page.rs` return `AnyElement`;
    colours come from `Theme::get(cx)`, fonts from `theme.rs` (`SANS` for Inkling's words
    and controls, `SERIF` for the writer's). Controls say plain words (Reply, Resolve,
-   Dismiss); the sewing words appear only in status lines (`design/directions/DESIGN.md`,
-   "Rules every direction keeps"). A key goes in `app.rs` `init` (an action plus a
+   Dismiss); the sewing words appear only in status lines. A key goes in `app.rs` `init` (an action plus a
    `KeyBinding`).
 
 8. **A script step**, so a scenario can drive it without a mouse. `src/script.rs`: a
@@ -102,8 +101,7 @@ switch it, extend `set:` in `NotePage::script_step` (`note_page.rs`) and the doc
 A folder under `brain/test/e2e/fixtures/<name>/` laid out like a notebook
 (`notes/<id>.json`, optional `settings.json`, `minds.json`, `folders.json`), plus one line
 in `fixtures/README.md`. Use fixed ids and timestamps. Thread `start`/`end` are byte
-offsets into the blocks joined by `\n` (title included): compute them, do not guess
-(`design/tools/demo_notebook.py` shows how). Use it: `# fixture: <name>` in a scenario,
+offsets into the blocks joined by `\n` (title included): compute them from the UTF-8 text. To use the fixture, add `# fixture: <name>` in a scenario,
 or `scripts/dev state --fixture <name>`.
 
 ## Debug a failing scenario

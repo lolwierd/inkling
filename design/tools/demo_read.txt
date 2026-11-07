@@ -1,9 +1,0 @@
-# mark paragraphs 1 and 4 read (the fake brain stays silent), then stay open for screenshots
-wait: 1200
-edit: 56:40 => 56:40
-caret: end
-wait: 2600
-edit: calves and hips => calves and hips
-caret: end
-wait: 2600
-dump: shown

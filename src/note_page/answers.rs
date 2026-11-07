@@ -1,4 +1,4 @@
-//! The page's side of answers in the note (`design/features/answer-in-the-note.md`): a
+//! The page's side of answers in the note: a
 //! thread tied off by words you wrote in the note keeps them as its answer, follows them
 //! through your edits, and its knot sits after them. Pointing at the knot washes the
 //! answer; clicking it opens the thread at its question, whose tag says "Answered in your

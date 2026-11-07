@@ -1,5 +1,4 @@
-// The owner's rule (design/directions/DESIGN.md, "Words"): none of Riddled's verbs or
-// names anywhere in the app or around it. This checks every string literal in the app
+// Check Inkling’s terminology in every string literal in the app
 // (src/) and the brain (brain/src/), which is where words reach the screen or the
 // model, plus README.md. Identifiers and comments are not checked; old stored values
 // that must keep their spelling are listed in ALLOWED with the reason.
@@ -192,7 +191,7 @@ export function runLint(json: boolean): number {
     return ok ? 0 : 1;
   }
   for (const f of found) console.log(`${relative(REPO, join(REPO, f.file))}:${f.line}: "${f.word}" in ${JSON.stringify(f.text)} -> say: ${f.use}`);
-  if (found.length) console.log(`  The rule: design/directions/DESIGN.md, "Words". A spelling that must stay goes in ALLOWED in scripts/lib/lint.ts, with the reason.`);
+  if (found.length) console.log(`  Use the terminology in AGENTS.md. A spelling that must stay goes in ALLOWED in scripts/lib/lint.ts, with the reason.`);
   for (const m of [...map, ...scenarios]) console.log(m);
   console.log(ok ? "lint: words, map and scenarios ok" : `lint: ${found.length} banned word(s), ${map.length} map problem(s), ${scenarios.length} scenario problem(s)`);
   return ok ? 0 : 1;

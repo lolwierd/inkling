@@ -1,5 +1,5 @@
 # A new notebook opens on the tour ("Start here"); the first sentence you write is always asked about.
-# The sentence is the walkthrough film's (design/video): the guide's own example, a plan for faster VM cold starts.
+# The sentence follows the guide's example, a plan for faster VM cold starts.
 wait: 1500
 dump: fresh
 expect: d.first_run && d.note.title === "Start here" && d.left_alone > 0 && d.reading === null   // the tour, its own words left alone

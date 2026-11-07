@@ -17,11 +17,9 @@ reasoning (`README.md`), recipes (`recipes.md`) and the test layers (`testing.md
 3. **Never take focus.** The app opens in the background (`INKLING_BACKGROUND=1`) with
    the window titled `Inkling Agents`. Do not drive it with clicks or keystrokes; use a
    script.
-4. **None of Riddled's words**, in any string a person or the model can see: no riddle,
-   riddled, riddler, visualize, and not the old labels "Thinks with you", "When you ask",
-   "Just my words". Say Find a loose thread, Sketch it, Reads along, Waits to be asked,
-   Hide threads, mind.
-   `scripts/dev lint` checks it. (`docs/spec.md` describes Riddled on purpose.)
+4. Use Inkling’s labels in user-facing text and prompts. Say Find a loose thread,
+   Sketch it, Reads along, Waits to be asked, Hide threads, and mind.
+   `scripts/dev lint` checks the wording.
 5. **Other agents work in this repo at the same time.** Work in your own worktree under
    `.worktrees/`, commit early (an uncommitted worktree has been lost before), keep
    diffs in `src/note_page.rs` and `src/app.rs` small, and never reformat a file:
@@ -90,18 +88,18 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `src/note_page.rs` | one note: header row, editor, the margin's tags (folded to a tab until pointed at or opened; draggable, `Thread.tag_offset`), threads, selection toolbar, Ask / Ask the room / Sketch it, chat, the reading loop, every brain request the page makes, page-level script steps, `debug_state` (the `dump:` JSON) | `judge` (when a paragraph is read), `on_pause`, `read_line`, `send_task` (timeouts), `report` (error words), `recheck` (fix the words) |
 | `src/note_page/ends.rs` | threads between notes on the page: the tab's second loop, the other end inside the tag (Go there, `· deleted`), following (Go there, ⌥⌘→ `FollowThread`, `follow:`), a far end's side on its first show, replies and second looks by the thread's mind with the other end, Copy's far line, the dump's `ends` | `far_end_block`, `follow`, `arrive`, `between_reply` |
 | `src/note_page/read_through.rs` | Read it through: one pass down the note's unread paragraphs by the reading loop's own rule (`judge`), the pill in the window's top band, the mode menu's last item | `step_through`, `next_for`, `Pass` |
-| `src/note_page/own.rs` | threads of your own: Ask yourself, the box with nobody seated, lines you add, calling a mind in (`ask` with `history`), your tag's lines and Ask button | `hang_own`, `add_to_own`, `call_into_own`, `called_mind`; `design/features/threads-of-your-own.md` |
+| `src/note_page/own.rs` | threads of your own: Ask yourself, the box with nobody seated, lines you add, calling a mind in (`ask` with `history`), your tag's lines and Ask button | `hang_own`, `add_to_own`, `call_into_own`, `called_mind` |
 | `src/note_page/write_in.rs` | Write it in: an open tag whose thread your reply tied off offers the reply, word for word, as a paragraph under the thread's (`NoteEditor::insert_paragraph_after`), which becomes its answer; the toast's Undo | `reply_to_write_in`, `write_in_offer`, `write_in`, `undo_write_in` |
 | `src/editor.rs` | the document as one string with `\n` between blocks; block kinds, marks, undo, IME, layout, painting; `Anchor`s (thread ranges) that follow edits; gutter marks; checklists, callouts and code blocks (typing them, Return, the box's click, Copy) | `State` (pure, tested headless), `map_anchor`, `NoteEditor` API, `shortcut_kind`, `layout_doc` |
 | `src/code.rs` | code blocks' languages, a small lexer per language (a comment or string carries across lines), each token's thread, the contrast test on the code ground | `lex_block`, `color` |
 | `src/sewn.rs` | your blocks, sewn: the checklist box and its cross-stitch (and its timing), a callout's patch, a quote's seam, the block geometry the editor lays out and hit-tests | `patch`, `check_box`, `cross_at`, `lay_along` |
-| `src/answers.rs`, `src/note_page/answers.rs` | answers in the note (`design/features/answer-in-the-note.md`): a tied-off thread's `answer` (an editor anchor `<id>#answer` that follows edits), its knot after your words, the tag's "Answered in your note", `tied_by`; the rules the app checks itself before a paragraph may tie a thread off | `answerable`, `copies_mind`, `answer_knots`, `before_status`, `sync_answers` |
+| `src/answers.rs`, `src/note_page/answers.rs` | answers in the note: a tied-off thread's `answer` (an editor anchor `<id>#answer` that follows edits), its knot after your words, the tag's "Answered in your note", `tied_by`; the rules the app checks itself before a paragraph may tie a thread off | `answerable`, `copies_mind`, `answer_knots`, `before_status`, `sync_answers` |
 | `src/margin.rs` | where tags go without overlapping (`place`), and the `Measured` wrapper that reports their heights | |
 | `src/working.rs`, `src/note_page/show_working.rs` | Show its working: a correction's check (a sum from your numbers, or your words) off the wire, in words for Copy, exports and the minds, and drawn under its correction in the tag with Disagree | `from_wire`, `parts`, `place`; `working_block`, `dispute_message` |
 | `src/stitch.rs` | the rope (Verlet), running stitch, knots, needle, border | `Rope` |
 | `src/dock.rs` | the Dock icon follows the system's light or dark appearance while the app is open, when the bundle has only the `.icns` (no Xcode at bundle time, or the bare binary); it stands down when `Info.plist` names a compiled icon (`CFBundleIconName`) | `follow` |
 | `src/drawing.rs` | parses the model's SVG into steps and plays them like ink | `parse`, `Playback` |
-| `src/between.rs` | threads between notes, the data side: an in-memory index of every searchable paragraph and the gate that picks at most three passages for `relate`; a thread's far end (`Note.elsewhere`) shown in the other note as a visiting end (`add_visitors`) and sent home on save (`save_visitors_home`); the wire shapes. The page's half is `src/note_page/between.rs` (`look_elsewhere`, after a read). Design: `design/features/threads-between-notes.md` | `Index::passages`, `searchable`, `send_home` |
+| `src/between.rs` | threads between notes, the data side: an in-memory index of every searchable paragraph and the gate that picks at most three passages for `relate`; a thread's far end (`Note.elsewhere`) shown in the other note as a visiting end (`add_visitors`) and sent home on save (`save_visitors_home`); the wire shapes. The page's half is `src/note_page/between.rs` (`look_elsewhere`, after a read). | `Index::passages`, `searchable`, `send_home` |
 | `src/brain.rs` | spawns and restarts the sidecar, ids, callbacks (`Pending`), parses events | `Brain::run`, `Launch` (`INKLING_BRAIN_ENTRY`, `INKLING_BUN`) |
 | `src/store.rs` | the data model and its JSON files; tolerant loading (unknown fields ignored, bad entries dropped, an unknown block kind reads as a paragraph); notes as Markdown | `Note`, `Thread`, `Elsewhere` (a thread's far end in another note), `Settings`, `BlockKind` (`Check`, `Callout`, `Code(Lang)`), `markdown_blocks` |
 | `src/script.rs` | the `INKLING_SCRIPT` language (its doc comment lists every step) | `parse` |
@@ -118,8 +116,8 @@ app (Rust, GPUI)                                brain (Bun, brain/src)
 | `brain/test/` | `unit.test.ts`, `protocol.test.ts` (real brain, fake SDK), `parity.test.ts` (task lists agree), `working.test.ts` (a correction's check), `web.test.ts` (sources from the web), `live.ts` (real model, by hand) | |
 | `brain/test/e2e/` | `fake-brain.ts` (directives like `[[silent]]` in typed text pick its answer), `scenarios/*.txt`, `fixtures/` | `fake-brain.ts` header |
 | `scripts/` | `dev` (the command door), `lib/` (its parts), `bundle.sh` | |
-| `assets/` | the app icon: `Inkling.icon` (the Initial in layers, for light, dark, clear and tinted; `icon-layers.py` remakes the layers from `design/logo/03-initial/`, `scripts/bundle.sh` compiles it when Xcode is installed), `Inkling.icns` (the fallback), the Dock's images, fonts | `Inkling.icon/icon.json` |
-| `design/` | the brand, the three directions, the video; `design/directions/DESIGN.md` is the design record; `design/capabilities.md` lists every user-facing capability, which the welcome tour and the film must cover | |
+| `assets/` | the app icon: `Inkling.icon` (the Initial in layers, for light, dark, clear and tinted; `icon-layers.py` remakes the layers from `assets/icon.svg` and `assets/icon-dark.svg`, `scripts/bundle.sh` compiles it when Xcode is installed), `Inkling.icns` (the fallback), the Dock's images, fonts | `Inkling.icon/icon.json` |
+| `design/` | the product manifesto and capability list. Keep the list in sync with the welcome guide | |
 
 ## How a question gets to the margin
 

@@ -1,6 +1,6 @@
 // Read it through's prompts: a read made by a pass is today's read with the note moved to
 // the end of the system prompt (so the runtime can serve it from its cache for every read
-// after the first) and two lines changed. design/features/read-it-through.md
+// after the first) and two lines changed.
 // Run: bun test test/read-through.test.ts
 import { describe, expect, test } from "bun:test";
 import { readPrompt, systemPrompt, throughSystemPrompt } from "../src/prompts.ts";

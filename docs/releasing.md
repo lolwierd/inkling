@@ -20,6 +20,6 @@ The release helper embeds [Bun 1.4.2](https://github.com/oven-sh/bun/tree/bun-v1
    git push origin v0.1.0
    ```
 
-[Release](../.github/workflows/release.yml) checks that the tag points to a commit on `master` and matches both Cargo and a nonempty changelog section. It runs the same checks and package build as CI. After verifying the artifact’s checksum, it uploads the ZIP and checksum to a draft GitHub Release, then publishes the draft with the notes from the changelog. The release page and downloads require access to the private repo. The app uses an ad hoc signature and ships without Apple notarization.
+[Release](../.github/workflows/release.yml) checks that the tag points to a commit on `master` and matches both Cargo and a nonempty changelog section. It runs the same checks and package build as CI. After verifying the artifact’s checksum, it uploads the ZIP and checksum to a draft GitHub Release, then publishes the draft with the notes from the changelog. The app uses an ad hoc signature and ships without Apple notarization.
 
 If upload or publication fails, rerun the failed job to finish the draft. If the tagged source itself needs a fix, merge it and cut a new version. Published tags identify the exact source used for each ZIP.

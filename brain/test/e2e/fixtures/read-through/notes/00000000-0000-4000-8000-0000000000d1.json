@@ -1,35 +1,35 @@
 {
  "id": "00000000-0000-4000-8000-0000000000d1",
- "title": "Build cache: NFS to object storage",
+ "title": "Community seed swap",
  "folder": null,
  "blocks": [
   {
    "kind": "title",
-   "text": "Build cache: NFS to object storage"
+   "text": "Community seed swap"
   },
   {
    "kind": "paragraph",
-   "text": "We are moving the build cache from the NFS share to object storage. The share fills up every two weeks and someone clears it by hand."
+   "text": "We will hold a seed swap in the library courtyard on Saturday. Anyone can bring seeds or take a packet home."
   },
   {
    "kind": "paragraph",
-   "text": "The rollout goes region by region over five days, smallest first. If error rates rise we roll that region back and stop."
+   "text": "Set up three tables, one for vegetables, one for herbs, and one for flowers. Put a tray of labels beside each."
   },
   {
    "kind": "paragraph",
-   "text": "Each runner keeps a 50 GB disk cache in front of the bucket, so hot layers never leave the machine."
+   "text": "Ask each grower to write the variety and the harvest year on their packets. Add sowing instructions when available."
   },
   {
    "kind": "paragraph",
-   "text": "Writes are billed per request, about 40 a build. At 0.5 cents a thousand, a thousand builds a day is 20 cents, which rounds to nothing next to the disks we stop buying."
+   "text": "We have 40 empty envelopes and expect 20 visitors. That should be enough for everyone to take two packets."
   },
   {
    "kind": "paragraph",
-   "text": "Rollback triggers when the 5xx rate passes 2% for five minutes in a region, or median build time grows by more than 20%."
+   "text": "If it rains, move the tables to the lobby. Leave the walkway between the door and the desk clear."
   },
   {
    "kind": "paragraph",
-   "text": "Eviction is still open: thirty days since last access seems right, but I have not checked our hit rates by age."
+   "text": "Ask for a volunteer to take the leftover seeds to the community garden on Monday."
   },
   {
    "kind": "paragraph",
@@ -45,9 +45,9 @@
  "threads": [
   {
    "id": "d1",
-   "start": 507,
-   "end": 557,
-   "quote": "rounds to nothing next to the disks we stop buying",
+   "start": 407,
+   "end": 462,
+   "quote": "That should be enough for everyone to take two packets.",
    "kind": "question",
    "status": "open",
    "side": "right",
@@ -56,7 +56,7 @@
    "messages": [
     {
      "role": "mind",
-     "text": "The 20 cents checks out, but it only counts writes. The bucket also bills for stored GB per month, and it has no size limit until eviction is settled. What does a month of stored layers cost?",
+     "text": "Are any envelopes reserved for people who bring loose seeds?",
      "at": "2026-11-07T09:00:00Z"
     }
    ]

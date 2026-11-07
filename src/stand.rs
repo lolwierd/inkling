@@ -1,5 +1,5 @@
 //! Let it stand: a mind's point you let stand is remembered, and every mind that reads
-//! the note is told it, so none raises it again (design/features/let-it-stand.md).
+//! the note is told it, so none raises it again.
 //!
 //! The thread itself keeps the decision (`Thread::reason`, `ended_at`, stored as
 //! Dismissed); this module decides what the minds are told and what the page says.

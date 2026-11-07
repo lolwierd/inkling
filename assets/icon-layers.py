@@ -4,7 +4,7 @@ macOS 26 draws in light, dark, clear and tinted.
 
     python3 assets/icon-layers.py
 
-Reads `design/logo/03-initial/icon.svg` and `icon-dark.svg` and writes, for each
+Reads `assets/icon.svg` and `assets/icon-dark.svg` and writes, for each
 drawing, one SVG per layer into `assets/Inkling.icon/Assets/`, back to front:
 
     border        the hemstitched border: its two drawn threads and the stitches across
@@ -37,8 +37,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-LOGO = REPO / "design/logo/03-initial"
-ICON = REPO / "assets/Inkling.icon"
+LOGO = REPO / "assets"
+ICON = LOGO / "Inkling.icon"
 SVG = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG)
 FRAME = f"scale({1024 / 824:.7f}) translate(-100 -100)"

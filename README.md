@@ -10,12 +10,6 @@ It runs on your own Claude subscription, through the Claude Code login already o
 
 [Install Inkling](#install-and-run) · [Changelog](CHANGELOG.md)
 
-## Watch it first
-
-<a href="design/video/page/film.mp4"><img src="design/video/page/preview.gif" alt="A line that doesn't add up gets a thread from its words, and the correction shows its working from your own numbers" width="100%"></a>
-
-Sixteen seconds of the film, without sound: a line that doesn't add up gets a thread from those words, and the correction shows its working from your own numbers. GitHub doesn't play a video kept in the repo, so the whole film (1:13, with sound) is a file: click the picture, or open [`design/video/page/film.mp4`](design/video/page/film.mp4). It follows one note from its first sentence to a thread tied off, and every word from Inkling in it is real model output. What it shows, moment by moment, is in [`design/video/coverage.md`](design/video/coverage.md).
-
 ## What it's like to use
 
 **You write, and it reads along.** When you pause, Inkling reads the paragraph you just finished. Most of the time it says nothing: a small stitch in the gutter shows it has read the paragraph and found nothing to ask. When something doesn't hold up, it sews a running stitch under the exact words and hangs a thread out to a tag in the margin, with a ? for a question or a × for a correction. A question that arrives while you are mid-sentence waits until you stop.
@@ -46,9 +40,9 @@ Inkling holds a few beliefs, written out in full in [`design/manifesto.md`](desi
 
 The release ZIP is for Apple Silicon Macs running macOS 13 or later. Install a current version of [Claude Code](https://code.claude.com/docs/en/setup). For personal use, run `claude` in Terminal and sign in with `/login`. Inkling uses the Claude Code installation on your Mac and picks up its updates. The downloaded app includes the runtime for its helper, so you can install it without Bun.
 
-1. Sign in to GitHub with access to this private repository. From [Releases](https://github.com/lolwierd/inkling/releases/latest), download `Inkling-<version>-macos-arm64.zip` and its matching `.zip.sha256` file.
+1. If a ZIP is available on the repository’s Releases page, download it and its matching `.zip.sha256` file. Otherwise, build from source below.
 2. In the download folder, run `shasum -a 256 -c Inkling-<version>-macos-arm64.zip.sha256`, replacing `<version>` with the version you downloaded. The ZIP should report `OK`.
-3. Unzip it, move `Inkling.app` to Applications, and open it. Private builds use an ad hoc signature. If macOS blocks a verified download, follow [Apple’s instructions for opening a trusted app](https://support.apple.com/en-us/102445).
+3. Unzip it, move `Inkling.app` to Applications, and open it. Release builds use an ad hoc signature. If macOS blocks a verified download, follow [Apple’s instructions for opening a trusted app](https://support.apple.com/en-us/102445).
 
 To update, quit Inkling and replace the app in Applications with the new one. Your notebook lives separately in `~/Library/Application Support/Inkling/`.
 
@@ -63,8 +57,7 @@ INKLING_CLAUDE_PATH="/absolute/path/to/claude" /Applications/Inkling.app/Content
 Install [Rust via rustup](https://rustup.rs), [Bun](https://bun.com/docs/installation) and Claude Code. On a Mac without Xcode, install Apple’s Command Line Tools with `xcode-select --install` first.
 
 ```bash
-git clone https://github.com/lolwierd/inkling.git
-cd inkling
+# From the root of your Inkling checkout
 (cd brain && bun install --frozen-lockfile)
 ./scripts/bundle.sh release
 open target/Inkling.app
@@ -86,8 +79,6 @@ For what you ask it (Find a loose thread, a question about a selection, a mind c
 
 The design is called Loose Threads, after embroidery: running stitches under your words, a thread that hangs with real rope physics, fabric tags, a knot when a thread is tied off, and a sampler border that grows as you work. The logo, Initial, marks the app the way linen was always marked as someone's own: a satin-stitched i, dotted with a French knot, inside a hemstitched border. The wordmark in the app carries the same i, in your thread colour. The type is Fraunces for writing and Figtree for the controls.
 
-How the design was chosen, and the two directions it was chosen over, is in [`design/directions/DESIGN.md`](design/directions/DESIGN.md). The motion, the stitched diagrams and code blocks are explored in [`design/explorations/`](design/explorations/), and the logo rounds are in [`design/logo/`](design/logo/).
-
 ## Working on Inkling
 
 Start with [`AGENTS.md`](AGENTS.md). It maps the code, lists the rules, and explains the one command that matters: `scripts/dev check` runs every check in about fifteen seconds. `scripts/dev e2e` drives the real app through scripted scenarios against a fake brain, so it makes no model calls, and `scripts/dev shot` takes a screenshot of the app without touching your screen.
@@ -107,6 +98,8 @@ GitHub Actions checks pull requests and pushes to `master`. See the [release run
 
 ## A note on the Claude login
 
-Anthropic's terms don't allow offering a claude.ai login inside products you ship to other people. Inkling is a personal tool that runs on your own machine with your own login, and it should stay that way. To share it, switch the brain to an API key: `INKLING_USE_API_KEY=1` keeps `ANTHROPIC_API_KEY` in its environment.
+Inkling launches Claude Code locally and uses your existing sign-in. To use an API key instead, set `INKLING_USE_API_KEY=1` and `ANTHROPIC_API_KEY`. See [Anthropic’s Agent SDK terms](https://code.claude.com/docs/en/agent-sdk/overview#license-and-terms).
 
-Fraunces and Figtree are used under the SIL Open Font License; the licence texts are in [`assets/fonts/`](assets/fonts/).
+## License
+
+Inkling’s own code is released under [the Unlicense](UNLICENSE). Third-party components retain their own licenses, including the [bundled fonts](assets/fonts/) and [Bun](assets/licenses/Bun.md).

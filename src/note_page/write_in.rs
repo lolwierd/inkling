@@ -1,4 +1,4 @@
-//! Write it in (`design/features/answer-in-the-note.md`): when your reply in the margin
+//! Write it in: when your reply in the margin
 //! ties a thread off, its open tag offers to put that reply, word for word, under the
 //! paragraph the thread is about, for you to rework in your own words. The new paragraph
 //! is the thread's answer in the note (`answers.rs`), so its knot points there, and it is

@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: inkling-macos-arm64
+      - name: Publish verified ZIP and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          archive="Inkling-${TAG#v}-macos-arm64.zip"
+          sha256sum --strict -c "$archive.sha256"
+          test -s release-notes.md
+
+          # Leave the release in draft if an upload fails so the job can be retried.
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft); then
+            if [ "$draft" != true ]; then
+              echo "Release $TAG is already published" >&2
+              exit 1
+            fi
+          else
+            gh release create "$TAG" --verify-tag --draft --title "Inkling $TAG" --notes-file release-notes.md
+          fi
+          gh release upload "$TAG" "$archive" "$archive.sha256" --clobber
+          gh release edit "$TAG" --notes-file release-notes.md --draft=false
